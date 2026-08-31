@@ -17,6 +17,7 @@ import { IntegrationsPage } from "@/pages/Integrations";
 import { AdminUsersPage } from "@/components/admin/AdminUsersPage";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 import { ChecklistsManager } from "@/components/checklists/ChecklistsManager";
+import { GuidePage } from "@/components/guide/GuidePage";
 import Sales from "@/pages/Sales";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -27,12 +28,13 @@ const Index = () => {
   const renderContent = () => {
     switch (activeTab) {
       case "dashboard": return <div className="space-y-6"><div><h1 className="font-serif text-3xl font-bold text-foreground">Bem-vindo, {profile?.full_name?.split(" ")[0] || "Advogado"}!</h1><p className="text-muted-foreground mt-1">Seu assistente jurídico inteligente</p></div><StatsCards /><QuickActions onTabChange={setActiveTab} /><div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><RecentDocuments /><UpcomingDeadlines /></div></div>;
-      case "assistant": return <AIChat />;
-      case "pdf-reader": return <PDFReader />;
+      case "assistant": return <AIChat onOpenGuide={() => setActiveTab("guide")} />;
+      case "pdf-reader": return <PDFReader onOpenGuide={() => setActiveTab("guide")} />;
       case "document-creator": return <DocumentCreator />;
       case "documents": return <DocumentsPage />;
       case "cases": return <CasesManager />;
       case "checklists": return <ChecklistsManager />;
+      case "guide": return <GuidePage />;
       case "calendar": return <CalendarView />;
       case "profile": return <ProfilePage />;
       case "feature-request": return <FeatureRequestForm />;

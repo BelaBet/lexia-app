@@ -13,6 +13,7 @@ const items = [
   ["checklists", "Checklists"],
   ["pdf-reader", "Leitor PDF"],
   ["document-creator", "Criar Documento"],
+  ["guide", "Guia de Uso"],
   ["profile", "Meu Perfil"],
   ["settings", "Configurações"],
 ] as const;

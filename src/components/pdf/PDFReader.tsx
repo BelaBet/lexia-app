@@ -1,9 +1,14 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import { Upload, FileText, X, Sparkles, Copy, Download, CheckCircle, Send, MessageSquare, ScanText } from "lucide-react";
+import { Upload, FileText, X, Sparkles, Copy, Download, CheckCircle, Send, MessageSquare, ScanText, BookOpen, ChevronDown } from "lucide-react";
 import { toast } from "sonner";
 import * as pdfjsLib from "pdfjs-dist";
 import { supabase } from "@/integrations/supabase/client";
 import { PDFSaveOptions } from "./PDFSaveOptions";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { FlowExampleStages } from "@/components/guide/FlowExampleStages";
+import { GUIDE_FLOWS } from "@/lib/guideExamples";
+
+const PDF_READER_FLOW = GUIDE_FLOWS.find((flow) => flow.id === "pdf-reader")!;
 
 // Narrow an unknown catch value down to the fields we actually read (name/message),
 // without resorting to `any`.
@@ -76,7 +81,13 @@ interface ChatMessage {
   content: string;
 }
 
-export function PDFReader() {
+interface PDFReaderProps {
+  /** Navigate to the full in-app guide page. Omit to hide the "see full guide" link. */
+  onOpenGuide?: () => void;
+}
+
+export function PDFReader({ onOpenGuide }: PDFReaderProps = {}) {
+  const [showExamples, setShowExamples] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<UploadedFile | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [summary, setSummary] = useState<string>("");
@@ -762,6 +773,26 @@ ${extractedText.substring(0, 30000)}${extractedText.length > 30000 ? "\n\n[... t
           </div>
         </div>
       </div>
+
+      <Collapsible open={showExamples} onOpenChange={setShowExamples}>
+        <CollapsibleTrigger asChild>
+          <button className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <BookOpen className="w-4 h-4" />
+            Como funciona: exemplo de entrada, resumo, documento e revisão
+            <ChevronDown className={`w-4 h-4 transition-transform ${showExamples ? "rotate-180" : ""}`} />
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-3">
+          <div className="legal-card !p-4 space-y-3">
+            <FlowExampleStages flow={PDF_READER_FLOW} compact />
+            {onOpenGuide && (
+              <button onClick={onOpenGuide} className="text-sm text-primary hover:underline font-medium">
+                Ver guia completo →
+              </button>
+            )}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Upload Area */}

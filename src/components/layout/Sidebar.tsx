@@ -20,7 +20,8 @@ import {
   Bell,
   CreditCard,
   ShoppingBag,
-  ListChecks
+  ListChecks,
+  BookOpen
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -54,6 +55,7 @@ const navItems = [
   { id: "pdf-reader", label: "Leitor PDF", icon: Upload },
   { id: "cases", label: "Casos", icon: FolderOpen },
   { id: "calendar", label: "Agenda", icon: Calendar },
+  { id: "guide", label: "Guia de Uso", icon: BookOpen },
 ];
 
 const settingsSubItems = [

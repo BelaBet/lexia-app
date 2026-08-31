@@ -1,9 +1,14 @@
 import { useState, useRef, useEffect } from "react";
-import { Send, Sparkles, FileText, BookOpen, Lightbulb, Scale, Paperclip, X, Image, File, LayoutGrid } from "lucide-react";
+import { Send, Sparkles, FileText, BookOpen, Lightbulb, Scale, Paperclip, X, Image, File, LayoutGrid, ChevronDown } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import DOMPurify from "dompurify";
 import { supabase } from "@/integrations/supabase/client";
 import { PromptTemplateGallery } from "./PromptTemplateGallery";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+import { FlowExampleStages } from "@/components/guide/FlowExampleStages";
+import { GUIDE_FLOWS } from "@/lib/guideExamples";
+
+const CHAT_FLOW = GUIDE_FLOWS.find((flow) => flow.id === "chat")!;
 
 interface Attachment {
   id: string;
@@ -30,8 +35,14 @@ const CHAT_URL = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/legal-chat`;
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
 const MAX_ATTACHMENTS = 5;
 
-export function AIChat() {
+interface AIChatProps {
+  /** Navigate to the full in-app guide page. Omit to hide the "see full guide" link. */
+  onOpenGuide?: () => void;
+}
+
+export function AIChat({ onOpenGuide }: AIChatProps = {}) {
   const { toast } = useToast();
+  const [showExamples, setShowExamples] = useState(false);
   const [messages, setMessages] = useState<Message[]>([
     {
       id: "1",
@@ -254,6 +265,27 @@ export function AIChat() {
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
       <div className="legal-card mb-4"><div className="flex items-center gap-3"><div className="w-12 h-12 rounded-xl bg-gradient-to-br from-gold-warm to-gold-dark flex items-center justify-center"><Scale className="w-6 h-6 text-primary-foreground" /></div><div className="flex-1"><h2 className="font-serif text-2xl font-semibold">Assistente Jurídico IA</h2><p className="text-muted-foreground">Especializado em legislação e jurisprudência brasileira</p></div><div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted px-3 py-1.5 rounded-full"><Sparkles className="w-3 h-3 text-gold-warm" />IA Ativa</div></div></div>
+
+      <Collapsible open={showExamples} onOpenChange={setShowExamples} className="mb-4">
+        <CollapsibleTrigger asChild>
+          <button className="flex items-center gap-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors">
+            <BookOpen className="w-4 h-4" />
+            Como funciona: exemplo de entrada, resumo, documento e revisão
+            <ChevronDown className={`w-4 h-4 transition-transform ${showExamples ? "rotate-180" : ""}`} />
+          </button>
+        </CollapsibleTrigger>
+        <CollapsibleContent className="mt-3">
+          <div className="legal-card !p-4 max-h-[50vh] overflow-y-auto space-y-3">
+            <FlowExampleStages flow={CHAT_FLOW} compact />
+            {onOpenGuide && (
+              <button onClick={onOpenGuide} className="text-sm text-gold-warm hover:underline font-medium">
+                Ver guia completo →
+              </button>
+            )}
+          </div>
+        </CollapsibleContent>
+      </Collapsible>
+
       <div className="flex-1 overflow-y-auto space-y-4 mb-4 pr-2">
         {messages.map((message) => <div key={message.id} className={`ai-message ${message.role} fade-in`}>
           {message.attachments && message.attachments.length > 0 && <div className="flex flex-wrap gap-2 mb-2">{message.attachments.map((att) => <div key={att.id} className="relative">{att.type === "image" && att.preview ? <img src={att.preview} alt={att.file.name} className="w-20 h-20 object-cover rounded-lg border border-border" /> : <div className="flex items-center gap-2 px-3 py-2 bg-muted rounded-lg">{getAttachmentIcon(att.type)}<span className="text-xs truncate max-w-[100px]">{att.file.name}</span></div>}</div>)}</div>}
