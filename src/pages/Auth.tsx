@@ -10,15 +10,17 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Scale, Loader2 } from "lucide-react";
 import { toast } from "sonner";
-
+import { useWhiteLabelSettings, DEFAULT_BRANDING } from "@/hooks/useWhiteLabelSettings";
 export default function Auth() {
   const { user, signIn, signUp, loading } = useAuth();
+  const { data: branding } = useWhiteLabelSettings();
+  const brandName = branding?.brand_name || DEFAULT_BRANDING.brand_name;
+  const brandTagline = branding?.tagline || DEFAULT_BRANDING.tagline;
+  const brandLogo = branding?.logo_url;
   const [isLoading, setIsLoading] = useState(false);
-
   // Login form state
   const [loginEmail, setLoginEmail] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
-
   // Register form state
   const [registerName, setRegisterName] = useState("");
   const [registerEmail, setRegisterEmail] = useState("");
@@ -26,7 +28,6 @@ export default function Auth() {
   const [registerConfirmPassword, setRegisterConfirmPassword] = useState("");
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
@@ -34,17 +35,13 @@ export default function Auth() {
       </div>
     );
   }
-
   if (user) {
     return <Navigate to="/" replace />;
   }
-
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-
     const { error } = await signIn(loginEmail, loginPassword);
-
     if (error) {
       toast.error("Erro ao entrar", {
         description: error.message,
@@ -52,27 +49,20 @@ export default function Auth() {
     } else {
       toast.success("Bem-vindo de volta!");
     }
-
     setIsLoading(false);
   };
-
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (registerPassword !== registerConfirmPassword) {
       toast.error("As senhas não coincidem");
       return;
     }
-
     if (registerPassword.length < 6) {
       toast.error("A senha deve ter pelo menos 6 caracteres");
       return;
     }
-
     setIsLoading(true);
-
     const { error } = await signUp(registerEmail, registerPassword, registerName);
-
     if (error) {
       toast.error("Erro ao criar conta", {
         description: error.message,
@@ -82,18 +72,14 @@ export default function Auth() {
         description: "Você já pode acessar o sistema.",
       });
     }
-
     setIsLoading(false);
   };
-
   const handleForgotPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     setForgotLoading(true);
-
     const { error } = await supabase.auth.resetPasswordForEmail(forgotEmail, {
       redirectTo: `${window.location.origin}/reset-password`,
     });
-
     if (error) {
       toast.error("Erro ao enviar e-mail", { description: error.message });
     } else {
@@ -103,19 +89,21 @@ export default function Auth() {
     }
     setForgotLoading(false);
   };
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30 p-4">
       <div className="w-full max-w-md">
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mb-4">
-            <Scale className="w-9 h-9 text-primary-foreground" />
+          <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mb-4 overflow-hidden">
+            {brandLogo ? (
+              <img src={brandLogo} alt={brandName} className="w-full h-full object-contain p-1" />
+            ) : (
+              <Scale className="w-9 h-9 text-primary-foreground" />
+            )}
           </div>
-          <h1 className="font-serif text-3xl font-bold text-foreground">LexIA</h1>
-          <p className="text-muted-foreground mt-1">Assistente Jurídico Inteligente</p>
+          <h1 className="font-serif text-3xl font-bold text-foreground">{brandName}</h1>
+          <p className="text-muted-foreground mt-1">{brandTagline}</p>
         </div>
-
         <Card className="border-border/50 shadow-xl">
           <Tabs defaultValue="login" className="w-full">
             <CardHeader className="pb-4">
@@ -125,7 +113,6 @@ export default function Auth() {
                 <TabsTrigger value="forgot">Recuperar</TabsTrigger>
               </TabsList>
             </CardHeader>
-
             <CardContent>
               <TabsContent value="login" className="mt-0">
                 <form onSubmit={handleLogin} className="space-y-4">
@@ -162,7 +149,6 @@ export default function Auth() {
                   </Button>
                 </form>
               </TabsContent>
-
               <TabsContent value="register" className="mt-0">
                 <form onSubmit={handleRegister} className="space-y-4">
                   <div className="space-y-2">
@@ -219,7 +205,6 @@ export default function Auth() {
                   </Button>
                 </form>
               </TabsContent>
-
               <TabsContent value="forgot" className="mt-0">
                 <form onSubmit={handleForgotPassword} className="space-y-4">
                   <CardDescription>
@@ -251,7 +236,6 @@ export default function Auth() {
             </CardContent>
           </Tabs>
         </Card>
-
         <p className="text-center text-sm text-muted-foreground mt-6">
           Ao continuar, você concorda com nossos Termos de Serviço e Política de Privacidade.
         </p>

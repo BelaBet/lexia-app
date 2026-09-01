@@ -1,6 +1,9 @@
 -- Integração automática de publicações (JusBrasil, WebJur) via webhook,
 -- e notificações in-app quando uma nova publicação é importada automaticamente.
 
+-- Necessário para gen_random_bytes() usado no segredo do webhook abaixo
+
+
 ALTER TYPE public.publication_source ADD VALUE IF NOT EXISTS 'webjur';
 
 -- Colunas de apoio à importação automática
@@ -22,7 +25,7 @@ CREATE TABLE public.publication_integrations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID NOT NULL,
   source public.publication_source NOT NULL,
-  webhook_secret TEXT NOT NULL DEFAULT encode(gen_random_bytes(24), 'hex'),
+  webhook_secret TEXT NOT NULL DEFAULT (concat(replace(gen_random_uuid()::text, '-', ''), replace(gen_random_uuid()::text, '-', ''))),
   api_key TEXT,
   is_active BOOLEAN NOT NULL DEFAULT true,
   last_received_at TIMESTAMP WITH TIME ZONE,

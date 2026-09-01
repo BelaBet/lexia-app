@@ -8,46 +8,41 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Scale, Loader2, CheckCircle } from "lucide-react";
 import { toast } from "sonner";
-
+import { useWhiteLabelSettings, DEFAULT_BRANDING } from "@/hooks/useWhiteLabelSettings";
 export default function ResetPassword() {
   const navigate = useNavigate();
+  const { data: branding } = useWhiteLabelSettings();
+  const brandLogo = branding?.logo_url;
+  const brandName = branding?.brand_name || DEFAULT_BRANDING.brand_name;
   const [password, setPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [isRecovery, setIsRecovery] = useState(false);
   const [success, setSuccess] = useState(false);
-
   useEffect(() => {
     const hashParams = new URLSearchParams(window.location.hash.substring(1));
     if (hashParams.get("type") === "recovery") {
       setIsRecovery(true);
     }
-
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event) => {
       if (event === "PASSWORD_RECOVERY") {
         setIsRecovery(true);
       }
     });
-
     return () => subscription.unsubscribe();
   }, []);
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-
     if (password !== confirmPassword) {
       toast.error("As senhas não coincidem");
       return;
     }
-
     if (password.length < 6) {
       toast.error("A senha deve ter pelo menos 6 caracteres");
       return;
     }
-
     setIsLoading(true);
     const { error } = await supabase.auth.updateUser({ password });
-
     if (error) {
       toast.error("Erro ao redefinir senha", { description: error.message });
     } else {
@@ -57,7 +52,6 @@ export default function ResetPassword() {
     }
     setIsLoading(false);
   };
-
   if (!isRecovery && !success) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30 p-4">
@@ -77,7 +71,6 @@ export default function ResetPassword() {
       </div>
     );
   }
-
   if (success) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30 p-4">
@@ -91,18 +84,20 @@ export default function ResetPassword() {
       </div>
     );
   }
-
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30 p-4">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mb-4">
-            <Scale className="w-9 h-9 text-primary-foreground" />
+          <div className="w-16 h-16 rounded-2xl bg-primary flex items-center justify-center mb-4 overflow-hidden">
+            {brandLogo ? (
+              <img src={brandLogo} alt={brandName} className="w-full h-full object-contain p-1" />
+            ) : (
+              <Scale className="w-9 h-9 text-primary-foreground" />
+            )}
           </div>
           <h1 className="font-serif text-3xl font-bold text-foreground">Redefinir Senha</h1>
           <p className="text-muted-foreground mt-1">Digite sua nova senha</p>
         </div>
-
         <Card className="border-border/50 shadow-xl">
           <CardContent className="pt-6">
             <form onSubmit={handleSubmit} className="space-y-4">

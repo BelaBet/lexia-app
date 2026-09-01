@@ -22,13 +22,15 @@ import {
   ShoppingBag,
   ListChecks,
   BookOpen,
-  FileSearch
+  FileSearch,
+  Palette
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
 import { NotificationBell } from "@/components/layout/NotificationBell";
+import { useWhiteLabelSettings, DEFAULT_BRANDING } from "@/hooks/useWhiteLabelSettings";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -63,15 +65,21 @@ const settingsSubItems = [
   { id: "integrations", label: "Integrações", icon: Link2, premium: true },
   { id: "notifications", label: "Notificações", icon: Bell },
   { id: "billing", label: "Planos e Pagamentos", icon: CreditCard },
+  { id: "branding", label: "Marca da Plataforma", icon: Palette, adminOnly: true },
   { id: "feature-request", label: "Solicitar Funcionalidade", icon: Lightbulb, highlight: true },
 ];
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const { user, profile, signOut, hasRole } = useAuth();
   const isSupremo = hasRole("supremo");
   const isAdmin = hasRole("admin");
-  const settingsTabs = ["settings", "integrations", "notifications", "billing", "feature-request"];
+  const { data: branding } = useWhiteLabelSettings();
+  const brandName = branding?.brand_name || DEFAULT_BRANDING.brand_name;
+  const brandTagline = branding?.tagline || DEFAULT_BRANDING.tagline;
+  const brandLogo = branding?.logo_url;
+  const settingsTabs = ["settings", "integrations", "notifications", "billing", "branding", "feature-request"];
   const isSettingsTab = settingsTabs.includes(activeTab);
   const [settingsOpen, setSettingsOpen] = useState(isSettingsTab);
+  const visibleSettingsSubItems = settingsSubItems.filter((item) => !item.adminOnly || isAdmin);
   const getInitials = (name: string | null | undefined) => {
     if (!name) return user?.email?.charAt(0).toUpperCase() || "U";
     return name
@@ -86,12 +94,16 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       {/* Logo */}
       <div className="p-6 border-b border-sidebar-border">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-lg bg-sidebar-primary flex items-center justify-center">
-            <Scale className="w-6 h-6 text-sidebar-primary-foreground" />
+          <div className="w-10 h-10 rounded-lg bg-sidebar-primary flex items-center justify-center overflow-hidden shrink-0">
+            {brandLogo ? (
+              <img src={brandLogo} alt={brandName} className="w-full h-full object-contain p-0.5" />
+            ) : (
+              <Scale className="w-6 h-6 text-sidebar-primary-foreground" />
+            )}
           </div>
           <div>
-            <h1 className="font-serif text-xl font-bold text-sidebar-foreground">LexIA</h1>
-            <p className="text-xs text-sidebar-foreground/60">Assistente Jurídico</p>
+            <h1 className="font-serif text-xl font-bold text-sidebar-foreground">{brandName}</h1>
+            <p className="text-xs text-sidebar-foreground/60">{brandTagline}</p>
           </div>
           <div className="ml-auto">
             <NotificationBell onTabChange={onTabChange} className="text-sidebar-foreground hover:bg-sidebar-accent" />
@@ -144,7 +156,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
             </button>
           </CollapsibleTrigger>
           <CollapsibleContent className="pl-4 space-y-1 mt-1">
-            {settingsSubItems.map((item) => (
+            {visibleSettingsSubItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => onTabChange(item.id)}
