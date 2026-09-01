@@ -53,9 +53,10 @@ serve(async (req) => {
 
     console.log(`[pdf-ocr] Processing ${images.length} page(s) from: ${fileName}`);
 
-    const LOVABLE_API_KEY = Deno.env.get("LOVABLE_API_KEY");
-    if (!LOVABLE_API_KEY) {
-      console.error("[pdf-ocr] LOVABLE_API_KEY not configured");
+    const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
+    const model = Deno.env.get("OPENAI_OCR_MODEL") || Deno.env.get("OPENAI_MODEL") || "gpt-4.1-mini";
+    if (!openaiApiKey) {
+      console.error("[pdf-ocr] OPENAI_API_KEY not configured");
       return new Response(JSON.stringify({ error: "AI service not configured" }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -70,14 +71,14 @@ serve(async (req) => {
       },
     }));
 
-    const response = await fetch("https://ai.gateway.lovable.dev/v1/chat/completions", {
+    const response = await fetch("https://api.openai.com/v1/chat/completions", {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${LOVABLE_API_KEY}`,
+        Authorization: `Bearer ${openaiApiKey}`,
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "google/gemini-2.5-flash",
+        model,
         messages: [
           {
             role: "system",
@@ -111,7 +112,7 @@ Instruções:
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`[pdf-ocr] AI gateway error: ${response.status}`, errorText);
+      console.error(`[pdf-ocr] OpenAI error: ${response.status}`, errorText);
 
       if (response.status === 429) {
         return new Response(JSON.stringify({ error: "Rate limit exceeded. Please wait a moment." }), {
