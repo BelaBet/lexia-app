@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { Settings, CheckCircle, Link2, Trash2, Loader2, ExternalLink } from "lucide-react";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import {
@@ -149,14 +150,14 @@ export function ClickUpSettings() {
         <div className="space-y-2">
           <Label htmlFor="api-token">API Token</Label>
           <div className="flex gap-2">
-            <Input
+            <PasswordInput
               id="api-token"
-              type="password"
+              className="flex-1"
               value={apiToken}
               onChange={(e) => setApiToken(e.target.value)}
               placeholder="pk_..."
             />
-            <Button 
+            <Button
               variant="outline" 
               onClick={handleFetchWorkspaces}
               disabled={!apiToken || loadingWorkspaces}

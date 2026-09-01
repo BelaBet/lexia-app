@@ -349,13 +349,8 @@ export function CalendarView() {
                           {dayEvents.slice(0, 2).map((event, i) => (
                             <div
                               key={`event-${i}`}
-                              className={`w-1.5 h-1.5 rounded-full ${
-                                event.type === "hearing"
-                                  ? "bg-primary"
-                                  : event.type === "deadline"
-                                  ? "bg-destructive"
-                                  : "bg-success"
-                              }`}
+                              className="w-1.5 h-1.5 rounded-full bg-warning"
+                              title={eventTypeConfig[event.type as keyof typeof eventTypeConfig]?.label}
                             />
                           ))}
                           {dayChecklists.slice(0, 2).map((_, i) => (

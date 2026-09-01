@@ -1,5 +1,6 @@
 import { Crown, ArrowRight, CheckCircle } from "lucide-react";
 import { ClickUpSettings } from "@/components/integrations/ClickUpSettings";
+import { PublicationIntegrationsSettings } from "@/components/publications/PublicationIntegrationsSettings";
 import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 
@@ -50,6 +51,9 @@ export function IntegrationsPage() {
           premium
         />
       </div>
+
+      {/* Rastreamento automático de Publicações */}
+      <PublicationIntegrationsSettings />
 
       {/* ClickUp Integration */}
       <ClickUpSettings />

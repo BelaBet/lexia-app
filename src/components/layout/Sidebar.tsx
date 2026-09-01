@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { 
-  LayoutDashboard, 
+import {
+  LayoutDashboard,
   FileText,
   FilePlus,
-  MessageSquare, 
-  Upload, 
-  Calendar, 
+  MessageSquare,
+  Upload,
+  Calendar,
   FolderOpen,
   Settings,
   Scale,
@@ -21,12 +21,14 @@ import {
   CreditCard,
   ShoppingBag,
   ListChecks,
-  BookOpen
+  BookOpen,
+  FileSearch
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Separator } from "@/components/ui/separator";
+import { NotificationBell } from "@/components/layout/NotificationBell";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,12 +42,10 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
-
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
 }
-
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "documents", label: "Meus Documentos", icon: FileText },
@@ -56,8 +56,8 @@ const navItems = [
   { id: "cases", label: "Casos", icon: FolderOpen },
   { id: "calendar", label: "Agenda", icon: Calendar },
   { id: "guide", label: "Guia de Uso", icon: BookOpen },
+  { id: "publications", label: "Publicações", icon: FileSearch },
 ];
-
 const settingsSubItems = [
   { id: "settings", label: "Preferências", icon: Settings },
   { id: "integrations", label: "Integrações", icon: Link2, premium: true },
@@ -65,16 +65,13 @@ const settingsSubItems = [
   { id: "billing", label: "Planos e Pagamentos", icon: CreditCard },
   { id: "feature-request", label: "Solicitar Funcionalidade", icon: Lightbulb, highlight: true },
 ];
-
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const { user, profile, signOut, hasRole } = useAuth();
   const isSupremo = hasRole("supremo");
   const isAdmin = hasRole("admin");
-  
   const settingsTabs = ["settings", "integrations", "notifications", "billing", "feature-request"];
   const isSettingsTab = settingsTabs.includes(activeTab);
   const [settingsOpen, setSettingsOpen] = useState(isSettingsTab);
-
   const getInitials = (name: string | null | undefined) => {
     if (!name) return user?.email?.charAt(0).toUpperCase() || "U";
     return name
@@ -84,7 +81,6 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       .toUpperCase()
       .slice(0, 2);
   };
-
   return (
     <aside className="w-64 h-screen bg-sidebar fixed left-0 top-0 flex flex-col">
       {/* Logo */}
@@ -97,9 +93,11 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
             <h1 className="font-serif text-xl font-bold text-sidebar-foreground">LexIA</h1>
             <p className="text-xs text-sidebar-foreground/60">Assistente Jurídico</p>
           </div>
+          <div className="ml-auto">
+            <NotificationBell onTabChange={onTabChange} className="text-sidebar-foreground hover:bg-sidebar-accent" />
+          </div>
         </div>
       </div>
-
       {/* Navigation */}
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {navItems.map((item) => (
@@ -115,9 +113,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
             <span className="font-medium">{item.label}</span>
           </button>
         ))}
-
         <Separator className="my-4 bg-sidebar-border" />
-
         {/* Sales Page - visible to all */}
         <button
           onClick={() => onTabChange("sales")}
@@ -129,7 +125,6 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           <ShoppingBag className="w-5 h-5" />
           <span className="font-medium">Planos</span>
         </button>
-
         {/* Settings with submenu */}
         <Collapsible open={settingsOpen} onOpenChange={setSettingsOpen}>
           <CollapsibleTrigger asChild>
@@ -169,7 +164,6 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
             ))}
           </CollapsibleContent>
         </Collapsible>
-
         {/* Admin link - only for admins */}
         {isAdmin && (
           <button
@@ -184,7 +178,6 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           </button>
         )}
       </nav>
-
       {/* User Profile */}
       <div className="p-4 border-t border-sidebar-border space-y-2">
         <button
@@ -197,9 +190,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
           <User className="w-5 h-5" />
           <span className="font-medium">Meu Perfil</span>
         </button>
-
         <Separator className="my-2 bg-sidebar-border" />
-
         {/* User Info */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

@@ -371,6 +371,205 @@ export type Database = {
           },
         ]
       }
+      publications: {
+        Row: {
+          case_id: string | null
+          content: string
+          created_at: string
+          external_deadline: string | null
+          external_id: string | null
+          external_responsible_name: string | null
+          external_responsible_role:
+            | Database["public"]["Enums"]["publication_responsible_role"]
+            | null
+          id: string
+          imported_automatically: boolean
+          internal_deadline: string | null
+          internal_responsible_name: string | null
+          internal_responsible_role:
+            | Database["public"]["Enums"]["publication_responsible_role"]
+            | null
+          process_number: string | null
+          published_date: string
+          raw_payload: Json | null
+          source: Database["public"]["Enums"]["publication_source"]
+          status: Database["public"]["Enums"]["publication_status"]
+          tese: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          case_id?: string | null
+          content: string
+          created_at?: string
+          external_deadline?: string | null
+          external_id?: string | null
+          external_responsible_name?: string | null
+          external_responsible_role?:
+            | Database["public"]["Enums"]["publication_responsible_role"]
+            | null
+          id?: string
+          imported_automatically?: boolean
+          internal_deadline?: string | null
+          internal_responsible_name?: string | null
+          internal_responsible_role?:
+            | Database["public"]["Enums"]["publication_responsible_role"]
+            | null
+          process_number?: string | null
+          published_date: string
+          raw_payload?: Json | null
+          source?: Database["public"]["Enums"]["publication_source"]
+          status?: Database["public"]["Enums"]["publication_status"]
+          tese?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          case_id?: string | null
+          content?: string
+          created_at?: string
+          external_deadline?: string | null
+          external_id?: string | null
+          external_responsible_name?: string | null
+          external_responsible_role?:
+            | Database["public"]["Enums"]["publication_responsible_role"]
+            | null
+          id?: string
+          imported_automatically?: boolean
+          internal_deadline?: string | null
+          internal_responsible_name?: string | null
+          internal_responsible_role?:
+            | Database["public"]["Enums"]["publication_responsible_role"]
+            | null
+          process_number?: string | null
+          published_date?: string
+          raw_payload?: Json | null
+          source?: Database["public"]["Enums"]["publication_source"]
+          status?: Database["public"]["Enums"]["publication_status"]
+          tese?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publications_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      publication_integrations: {
+        Row: {
+          api_key: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          last_poll_error: string | null
+          last_poll_status: string | null
+          last_received_at: string | null
+          monitor_document: string | null
+          monitor_oab: string | null
+          source: Database["public"]["Enums"]["publication_source"]
+          updated_at: string
+          user_id: string
+          webhook_secret: string
+        }
+        Insert: {
+          api_key?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_poll_error?: string | null
+          last_poll_status?: string | null
+          last_received_at?: string | null
+          monitor_document?: string | null
+          monitor_oab?: string | null
+          source: Database["public"]["Enums"]["publication_source"]
+          updated_at?: string
+          user_id: string
+          webhook_secret?: string
+        }
+        Update: {
+          api_key?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_poll_error?: string | null
+          last_poll_status?: string | null
+          last_received_at?: string | null
+          monitor_document?: string | null
+          monitor_oab?: string | null
+          source?: Database["public"]["Enums"]["publication_source"]
+          updated_at?: string
+          user_id?: string
+          webhook_secret?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean
+          link_tab: string | null
+          message: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          link_tab?: string | null
+          message?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          link_tab?: string | null
+          message?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      publication_followups: {
+        Row: {
+          created_at: string
+          id: string
+          note: string
+          publication_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note: string
+          publication_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note?: string
+          publication_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publication_followups_publication_id_fkey"
+            columns: ["publication_id"]
+            isOneToOne: false
+            referencedRelation: "publications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       clickup_integrations: {
         Row: {
           created_at: string
@@ -818,6 +1017,19 @@ export type Database = {
         | "monthly"
         | "quarterly"
         | "yearly"
+      publication_responsible_role: "advogado" | "operacional"
+      publication_source:
+        | "manual"
+        | "jusbrasil"
+        | "escavador"
+        | "outro"
+        | "webjur"
+      publication_status:
+        | "pending"
+        | "in_progress"
+        | "completed"
+        | "overdue"
+        | "cancelled"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -962,6 +1174,21 @@ export const Constants = {
         "monthly",
         "quarterly",
         "yearly",
+      ],
+      publication_responsible_role: ["advogado", "operacional"],
+      publication_source: [
+        "manual",
+        "jusbrasil",
+        "escavador",
+        "outro",
+        "webjur",
+      ],
+      publication_status: [
+        "pending",
+        "in_progress",
+        "completed",
+        "overdue",
+        "cancelled",
       ],
     },
   },

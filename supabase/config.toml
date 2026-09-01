@@ -1,7 +1,13 @@
-project_id = "spsfvgcvibtftnkoxodb"
+project_id = "dtpyeytvawomzkcihmsy"
 
 [functions.legal-chat]
 verify_jwt = true
 
 [functions.admin-update-role]
+verify_jwt = true
+
+[functions.publication-webhook]
+verify_jwt = false
+
+[functions.poll-jusbrasil]
 verify_jwt = true
