@@ -19,6 +19,7 @@
 // notificação) já está pronto e não muda.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
+import { findOrCreateCaseId } from "../_shared/findOrCreateCase.ts";
 
 // TODO: confirmar com a documentação da conta JusBrasil ativa (Consulta
 // Processual / Distribuição). Estrutura provável, a ajustar:
@@ -117,6 +118,10 @@ Deno.serve(async (req) => {
           ? new Date(publishedDateRaw).toISOString().slice(0, 10)
           : new Date().toISOString().slice(0, 10);
 
+        // Abre (ou reaproveita) o Caso correspondente antes de gravar a
+        // publicação, para ela já nascer vinculada e aparecer em "Casos".
+        const caseId = await findOrCreateCaseId(adminClient, integration.user_id, processNumber);
+
         const { data: inserted, error: insertError } = await adminClient
           .from("publications")
           .insert({
@@ -125,6 +130,7 @@ Deno.serve(async (req) => {
             content,
             published_date: publishedDate,
             process_number: processNumber,
+            case_id: caseId,
             external_id: externalId,
             raw_payload: item,
             imported_automatically: true,
@@ -142,7 +148,9 @@ Deno.serve(async (req) => {
           await adminClient.from("notifications").insert({
             user_id: integration.user_id,
             title: "Nova publicação importada via JusBrasil",
-            message: processNumber ? `Processo ${processNumber}` : content.slice(0, 140),
+            message: processNumber
+              ? `Processo ${processNumber}${caseId ? " — caso aberto automaticamente" : ""}`
+              : content.slice(0, 140),
             link_tab: "publications",
           });
         }

@@ -27,6 +27,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
+import { findOrCreateCaseId } from "../_shared/findOrCreateCase.ts";
 
 type PublicationSource = "jusbrasil" | "webjur" | "escavador" | "manual" | "outro";
 
@@ -161,6 +162,10 @@ Deno.serve(async (req) => {
   const publishedDate = extractPublicationDate(payload);
   const processNumber = extractProcessNumber(payload);
 
+  // Abre (ou reaproveita) o Caso correspondente antes de gravar a
+  // publicação, para ela já nascer vinculada e aparecer em "Casos".
+  const caseId = await findOrCreateCaseId(adminClient, userId, processNumber);
+
   const { data: inserted, error: insertError } = await adminClient
     .from("publications")
     .insert({
@@ -169,6 +174,7 @@ Deno.serve(async (req) => {
       content,
       published_date: publishedDate,
       process_number: processNumber,
+      case_id: caseId,
       external_id: externalId,
       raw_payload: payload,
       imported_automatically: true,
@@ -193,7 +199,9 @@ Deno.serve(async (req) => {
     const { error: notifError } = await adminClient.from("notifications").insert({
       user_id: userId,
       title: `Nova publicação importada via ${sourceLabels[source] || source}`,
-      message: processNumber ? `Processo ${processNumber}` : content.slice(0, 140),
+      message: processNumber
+        ? `Processo ${processNumber}${caseId ? " — caso aberto automaticamente" : ""}`
+        : content.slice(0, 140),
       link_tab: "publications",
     });
     if (notifError) console.error("Error creating notification:", notifError);
