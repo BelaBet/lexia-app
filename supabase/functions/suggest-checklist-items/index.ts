@@ -1,6 +1,16 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildCorsHeaders } from "../_shared/cors.ts";
+import { checkAndLogRateLimit } from "../_shared/rateLimit.ts";
+
+const MAX_TEXT_LENGTH = 4000;
+const MAX_EXISTING_ITEMS = 50;
+
+function clampText(value: unknown, maxLength: number): string | undefined {
+  if (typeof value !== "string") return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed.slice(0, maxLength) : undefined;
+}
 
 serve(async (req) => {
   const corsHeaders = buildCorsHeaders(
@@ -42,7 +52,33 @@ serve(async (req) => {
       });
     }
 
-    const { context, caseType, clientInfo, existingItems } = await req.json();
+    const body = await req.json();
+
+    const context = clampText(body?.context, MAX_TEXT_LENGTH);
+    if (!context) {
+      return new Response(JSON.stringify({ error: "Informe o contexto para gerar sugestões" }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+    const caseType = clampText(body?.caseType, 200);
+    const clientInfo = clampText(body?.clientInfo, MAX_TEXT_LENGTH);
+    const existingItems = Array.isArray(body?.existingItems)
+      ? body.existingItems.filter((i: unknown): i is string => typeof i === "string").slice(0, MAX_EXISTING_ITEMS).map((i: string) => i.slice(0, 200))
+      : [];
+
+    // Per-user sliding-window rate limit, same mechanism as legal-chat.
+    const RATE_LIMIT_MAX = Number(Deno.env.get("AI_RATE_LIMIT_MAX") ?? "20");
+    const RATE_LIMIT_WINDOW_SECONDS = Number(Deno.env.get("AI_RATE_LIMIT_WINDOW_SECONDS") ?? "300");
+    const { allowed, error: rateLimitError } = await checkAndLogRateLimit(supabase, user.id, "suggest-checklist-items", RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_SECONDS);
+    if (rateLimitError) console.error("Rate limit check failed", rateLimitError);
+    if (!allowed) {
+      const minutes = Math.max(1, Math.round(RATE_LIMIT_WINDOW_SECONDS / 60));
+      return new Response(
+        JSON.stringify({ error: `Limite de ${RATE_LIMIT_MAX} requisições a cada ${minutes} minuto(s) atingido. Aguarde um pouco antes de tentar novamente.` }),
+        { status: 429, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
     const model = Deno.env.get("OPENAI_MODEL") || "gpt-4.1-mini";

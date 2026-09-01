@@ -57,9 +57,13 @@ export function AIChat({ onOpenGuide }: AIChatProps = {}) {
   const [showTemplateGallery, setShowTemplateGallery] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  // Preview blob: URLs for images stay alive as long as the message history
+  // renders them, so they're revoked on unmount instead of right after send.
+  const objectUrlsRef = useRef<Set<string>>(new Set());
 
   const scrollToBottom = () => messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   useEffect(() => { scrollToBottom(); }, [messages]);
+  useEffect(() => () => { objectUrlsRef.current.forEach((url) => URL.revokeObjectURL(url)); }, []);
 
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files ?? []);
@@ -89,6 +93,7 @@ export function AIChat({ onOpenGuide }: AIChatProps = {}) {
       if (file.type.startsWith("image/")) {
         type = "image";
         preview = URL.createObjectURL(file);
+        objectUrlsRef.current.add(preview);
       } else if (file.type === "application/pdf") {
         type = "pdf";
       }
@@ -102,7 +107,10 @@ export function AIChat({ onOpenGuide }: AIChatProps = {}) {
   const removeAttachment = (id: string) => {
     setAttachments((prev) => {
       const attachment = prev.find((a) => a.id === id);
-      if (attachment?.preview) URL.revokeObjectURL(attachment.preview);
+      if (attachment?.preview) {
+        URL.revokeObjectURL(attachment.preview);
+        objectUrlsRef.current.delete(attachment.preview);
+      }
       return prev.filter((a) => a.id !== id);
     });
   };
@@ -234,7 +242,9 @@ export function AIChat({ onOpenGuide }: AIChatProps = {}) {
         setMessages((prev) => [...prev, { id: `error-${Date.now()}`, role: "assistant", content: "Desculpe, ocorreu um erro ao processar sua solicitação. Por favor, tente novamente.", timestamp: new Date() }]);
       }
     } finally {
-      currentAttachments.forEach((att) => { if (att.preview) URL.revokeObjectURL(att.preview); });
+      // Preview URLs for sent attachments are kept alive: they're still
+      // referenced by this message in the chat history above. They're
+      // revoked together on unmount (see objectUrlsRef cleanup effect).
       setIsLoading(false);
     }
   };

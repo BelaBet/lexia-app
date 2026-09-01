@@ -1,6 +1,10 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { buildCorsHeaders } from "../_shared/cors.ts";
+import { checkAndLogRateLimit } from "../_shared/rateLimit.ts";
+
+const MAX_PAGES = 20;
+const MAX_IMAGE_DATA_URL_LENGTH = 15_000_000; // ~11MB decoded, matches the frontend's 10MB file cap with base64 overhead
 
 serve(async (req) => {
   const corsHeaders = buildCorsHeaders(
@@ -51,6 +55,36 @@ serve(async (req) => {
       });
     }
 
+    if (images.length > MAX_PAGES) {
+      return new Response(JSON.stringify({ error: `Too many pages. Maximum is ${MAX_PAGES} per request.` }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    const safeImages = images.filter(
+      (img): img is string => typeof img === "string" && img.startsWith("data:image/") && img.length <= MAX_IMAGE_DATA_URL_LENGTH,
+    );
+    if (safeImages.length !== images.length) {
+      return new Response(JSON.stringify({ error: "One or more pages are not valid images or exceed the size limit." }), {
+        status: 400,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
+    // Per-user sliding-window rate limit, same mechanism as legal-chat.
+    const RATE_LIMIT_MAX = Number(Deno.env.get("AI_RATE_LIMIT_MAX") ?? "20");
+    const RATE_LIMIT_WINDOW_SECONDS = Number(Deno.env.get("AI_RATE_LIMIT_WINDOW_SECONDS") ?? "300");
+    const { allowed, error: rateLimitError } = await checkAndLogRateLimit(supabase, user.id, "pdf-ocr", RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_SECONDS);
+    if (rateLimitError) console.error("[pdf-ocr] Rate limit check failed", rateLimitError);
+    if (!allowed) {
+      const minutes = Math.max(1, Math.round(RATE_LIMIT_WINDOW_SECONDS / 60));
+      return new Response(JSON.stringify({ error: `Limite de ${RATE_LIMIT_MAX} requisições a cada ${minutes} minuto(s) atingido. Aguarde um pouco antes de tentar novamente.` }), {
+        status: 429,
+        headers: { ...corsHeaders, "Content-Type": "application/json" },
+      });
+    }
+
     console.log(`[pdf-ocr] Processing ${images.length} page(s) from: ${fileName}`);
 
     const openaiApiKey = Deno.env.get("OPENAI_API_KEY");
@@ -64,7 +98,7 @@ serve(async (req) => {
     }
 
     // Build multimodal content with images
-    const imageContents = images.map((img: string, idx: number) => ({
+    const imageContents = safeImages.map((img) => ({
       type: "image_url" as const,
       image_url: {
         url: img, // base64 data URL

@@ -1,5 +1,6 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
+import { checkAndLogRateLimit } from "../_shared/rateLimit.ts";
 
 const encoder = new TextEncoder();
 
@@ -38,32 +39,18 @@ Deno.serve(async (req) => {
   const { data: { user }, error: userError } = await supabase.auth.getUser();
   if (userError || !user) return jsonError("Sessão inválida ou expirada", 401);
 
-  // Per-user sliding-window rate limit, backed by the legal_chat_requests table
-  // (RLS-scoped: this user can only see/insert their own rows). Configurable via
-  // env so limits can be tuned without a redeploy of the migration.
+  // Per-user sliding-window rate limit, checked and recorded atomically in
+  // one DB call (see _shared/rateLimit.ts) so concurrent requests from the
+  // same user can't all read the same count and slip through together.
   const RATE_LIMIT_MAX = Number(Deno.env.get("AI_RATE_LIMIT_MAX") ?? "20");
   const RATE_LIMIT_WINDOW_SECONDS = Number(Deno.env.get("AI_RATE_LIMIT_WINDOW_SECONDS") ?? "300");
-  const windowStart = new Date(Date.now() - RATE_LIMIT_WINDOW_SECONDS * 1000).toISOString();
 
-  const { count: recentRequestCount, error: rateLimitError } = await supabase
-    .from("legal_chat_requests")
-    .select("id", { count: "exact", head: true })
-    .eq("user_id", user.id)
-    .gte("created_at", windowStart);
-
-  if (rateLimitError) {
-    // Fail open on infra errors (don't block the chat because logging failed),
-    // but log loudly so it's visible in function logs.
-    console.error("Rate limit check failed", rateLimitError);
-  } else if ((recentRequestCount ?? 0) >= RATE_LIMIT_MAX) {
+  const { allowed, error: rateLimitError } = await checkAndLogRateLimit(supabase, user.id, "legal-chat", RATE_LIMIT_MAX, RATE_LIMIT_WINDOW_SECONDS);
+  if (rateLimitError) console.error("Rate limit check failed", rateLimitError);
+  if (!allowed) {
     const minutes = Math.max(1, Math.round(RATE_LIMIT_WINDOW_SECONDS / 60));
     return jsonError(`Limite de ${RATE_LIMIT_MAX} mensagens a cada ${minutes} minuto(s) atingido. Aguarde um pouco antes de tentar novamente.`, 429);
   }
-
-  // Record this request before calling the model so a burst of concurrent
-  // requests can't all read the same (stale) count and slip through together.
-  const { error: logError } = await supabase.from("legal_chat_requests").insert({ user_id: user.id });
-  if (logError) console.error("Failed to record chat request for rate limiting", logError);
 
   type TextPart = { type: "text"; text: string };
   type ImagePart = { type: "image_url"; image_url: { url: string } };
