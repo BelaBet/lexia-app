@@ -14,9 +14,9 @@
 import { findOrCreateCaseId, ProcessualData } from "./findOrCreateCase.ts";
 import { syncDeadlineEvents, attachDocumentIfAvailable } from "./syncPublicationExtras.ts";
 import { computeFallbackExternalId } from "./externalId.ts";
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 
-// deno-lint-ignore no-explicit-any
-type AdminClient = any;
+type AdminClient = SupabaseClient;
 
 // TODO: confirmar com a documentação da conta JusBrasil ativa (Consulta
 // Processual / Distribuição). Estrutura provável, a ajustar:
@@ -64,11 +64,6 @@ export interface JusbrasilIntegration {
 }
 
 async function fetchJusbrasilNewItems(apiKey: string, document: string | null, oab: string | null): Promise<JusbrasilProcessItem[]> {
-  // TODO: substituir pelo endpoint real assim que confirmado (ex:
-  // `${JUSBRASIL_API_BASE_URL}/v1/processos/consulta` ou similar). O corpo
-  // abaixo é uma tentativa razoável baseada na documentação pública
-  // (busca por CPF/CNPJ ou por OAB), mas precisa validação com um payload
-  // de exemplo real.
   const query: Record<string, string> = {};
   if (document) query.documento = document;
   if (oab) query.oab = oab;
@@ -87,7 +82,6 @@ async function fetchJusbrasilNewItems(apiKey: string, document: string | null, o
   }
 
   const data = await response.json();
-  // Tenta reconhecer os formatos mais prováveis de lista de resultados.
   if (Array.isArray(data)) return data;
   if (Array.isArray(data?.results)) return data.results;
   if (Array.isArray(data?.processos)) return data.processos;
@@ -109,12 +103,50 @@ function firstDate(...values: unknown[]): string | null {
   return isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
 }
 
+// Converte um número que pode vir em formato brasileiro ("12.345,67") OU
+// americano/JSON puro ("12345.67") — o provedor não documenta qual dos dois
+// formatos usa, e assumir sempre o formato brasileiro (removendo todos os
+// pontos e trocando vírgula por ponto) inflava em 100x qualquer valor que já
+// viesse como "12345.67" (o "." é removido e o número vira "1234567").
+//
+// Heurística: um valor numérico (typeof number) nunca passa por aqui — já é
+// number. Para string:
+//   - contém vírgula E ponto: o último separador que aparece é o decimal
+//     (ex.: "1.234,56" -> decimal "," ; "1,234.56" -> decimal ".").
+//   - só vírgula: vírgula é o separador decimal (padrão BR: "1234,56").
+//   - só ponto, com exatamente 1 ou 2 dígitos depois do último ponto E um
+//     único ponto na string: trata como separador decimal já correto (ex.:
+//     "12345.67" ou "12345.6") — evita destruir valores que já chegam no
+//     formato americano/JSON.
+//   - só ponto, mas com 3+ dígitos depois OU mais de um ponto: separador de
+//     milhar BR (ex.: "12.345" -> 12345; "1.234.567" -> 1234567).
 function firstNumber(...values: unknown[]): number | null {
   for (const v of values) {
     if (typeof v === "number" && !isNaN(v)) return v;
     if (typeof v === "string" && v.trim().length > 0) {
-      // Aceita tanto "12345.67" quanto formato brasileiro "12.345,67".
-      const normalized = v.trim().replace(/\./g, "").replace(",", ".");
+      const raw = v.trim();
+      const hasComma = raw.includes(",");
+      const hasDot = raw.includes(".");
+      let normalized: string;
+
+      if (hasComma && hasDot) {
+        const lastComma = raw.lastIndexOf(",");
+        const lastDot = raw.lastIndexOf(".");
+        normalized = lastComma > lastDot
+          ? raw.replace(/\./g, "").replace(",", ".")
+          : raw.replace(/,/g, "");
+      } else if (hasComma) {
+        normalized = raw.replace(/\./g, "").replace(",", ".");
+      } else if (hasDot) {
+        const dotCount = (raw.match(/\./g) || []).length;
+        const digitsAfterLastDot = raw.length - raw.lastIndexOf(".") - 1;
+        normalized = (dotCount === 1 && digitsAfterLastDot <= 2)
+          ? raw
+          : raw.replace(/\./g, "");
+      } else {
+        normalized = raw;
+      }
+
       const parsed = Number(normalized);
       if (!isNaN(parsed)) return parsed;
     }
@@ -122,12 +154,6 @@ function firstNumber(...values: unknown[]): number | null {
   return null;
 }
 
-// Extrai os dados processuais destacados no sistema (vara, comarca, valor da
-// causa, data de abertura no tribunal e data de aceitação) a partir do item
-// retornado pela API do JusBrasil. Os nomes de campo abaixo são uma tentativa
-// razoável baseada nos termos mais comuns usados por consultas processuais —
-// TODO: confirmar/ajustar contra um payload de exemplo real assim que houver
-// acesso à conta ativa.
 function extractProcessualData(item: JusbrasilProcessItem): ProcessualData {
   return {
     vara: firstString(item.vara, item.orgao_julgador, item.orgaoJulgador),
@@ -143,9 +169,6 @@ function extractProcessualData(item: JusbrasilProcessItem): ProcessualData {
   };
 }
 
-// Extrai os prazos externo e interno, quando a API já os fornecer, para que
-// os eventos correspondentes já nasçam na Agenda junto com a publicação —
-// TODO: confirmar os nomes de campo reais quando houver payload de exemplo.
 function extractDeadlines(item: JusbrasilProcessItem): { external: string | null; internal: string | null } {
   return {
     external: firstDate(item.prazo_externo, item.prazoExterno, item.prazo, item.deadline),
@@ -153,8 +176,6 @@ function extractDeadlines(item: JusbrasilProcessItem): { external: string | null
   };
 }
 
-// Identifica o tipo do documento monitorado só para fins de exibição no
-// contador financeiro (não afeta a busca em si).
 function detectDocumentType(document: string | null, oab: string | null): "cpf" | "cnpj" | "oab" | "outro" {
   if (document) {
     const digits = document.replace(/\D/g, "");
@@ -191,10 +212,6 @@ export interface PollIntegrationResult {
   error?: string;
 }
 
-// Executa a busca ativa para UMA integração: consulta a API, importa cada
-// processo/movimentação novo como publicação (com dedup, dados processuais,
-// prazo->evento na Agenda e anexo automático do documento quando disponível)
-// e sempre registra o uso no contador financeiro, com sucesso ou erro.
 export async function pollJusbrasilIntegration(
   adminClient: AdminClient,
   integration: JusbrasilIntegration,
@@ -216,12 +233,6 @@ export async function pollJusbrasilIntegration(
         ? new Date(publishedDateRaw).toISOString().slice(0, 10)
         : new Date().toISOString().slice(0, 10);
 
-      // A consulta à API não usa cursor/timestamp (ver TODO em
-      // fetchJusbrasilNewItems), então o mesmo item pode voltar em buscas
-      // seguintes. Sem um `item.id` reconhecido, um external_id nulo faria a
-      // deduplicação não se aplicar e reimportaria o mesmo item a cada
-      // execução — por isso, nesse caso, calculamos um id determinístico a
-      // partir do conteúdo do próprio item (ver _shared/externalId.ts).
       const externalId = firstString(item.id)
         ?? await computeFallbackExternalId(["jusbrasil", integration.user_id, processNumber, publishedDate, content.slice(0, 200)]);
 

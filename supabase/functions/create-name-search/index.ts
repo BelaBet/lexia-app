@@ -38,9 +38,11 @@ Deno.serve(async (req) => {
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
+  // Usa a integração JusBrasil já cadastrada em Integrações (mesma api_key
+  // do monitoramento) — não pede uma chave nova.
   const { data: integration, error: integrationError } = await adminClient
     .from("publication_integrations")
-    .select("id, api_key")
+    .select("id, api_key, price_per_name_search")
     .eq("user_id", user.id)
     .eq("source", "jusbrasil")
     .eq("is_active", true)
@@ -78,6 +80,10 @@ Deno.serve(async (req) => {
       })
       .eq("id", report.id);
 
+    // Usa o preço configurado em Integrações (price_per_name_search) — antes
+    // era gravado sempre 0, mesmo com um valor configurado, o que zerava o
+    // contador financeiro independente da configuração comercial.
+    const unitPrice = integration.price_per_name_search ?? 0;
     await adminClient.from("process_search_charges").insert({
       user_id: user.id,
       integration_id: integration.id,
@@ -85,8 +91,8 @@ Deno.serve(async (req) => {
       document: name,
       document_type: "nome",
       search_type: "busca_nome",
-      unit_price: 0,
-      charged_amount: 0,
+      unit_price: unitPrice,
+      charged_amount: unitPrice,
     });
 
     return json({

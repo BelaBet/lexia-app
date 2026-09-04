@@ -10,6 +10,18 @@
 // podem ser alteradas pela service role (ver migração
 // name_search_autos_download_lock), então mesmo um usuário tentando bater
 // direto na tabela não consegue burlar isso.
+//
+// CONDIÇÃO DE CORRIDA (corrigido): antes, a checagem de "já travado?" era um
+// SELECT separado do UPDATE que efetivamente trava — duas requisições quase
+// simultâneas para o MESMO result_id podiam passar pela checagem antes que
+// qualquer uma gravasse o bloqueio, e as duas baixavam os autos (documentos
+// e cobranças duplicados, chamadas repetidas à API externa). A correção usa
+// um UPDATE atômico com WHERE autos_download_locked = false AND
+// autos_status <> 'solicitado' como "reserva" do direito de baixar: o
+// Postgres serializa updates concorrentes na mesma linha, então só a
+// primeira requisição encontra a condição satisfeita e recebe a linha de
+// volta — a segunda recebe zero linhas afetadas e é rejeitada aqui, antes de
+// chamar a API externa.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
@@ -67,6 +79,31 @@ Deno.serve(async (req) => {
     }, 403);
   }
 
+  // RESERVA ATÔMICA: só avança se, no exato momento do UPDATE, a linha
+  // ainda não estiver travada NEM já reservada por outra requisição em
+  // andamento (autos_status = "solicitado"). Se outra requisição concorrente
+  // já reservou entre o SELECT acima e este UPDATE, `claimed` vem nulo aqui.
+  const { data: claimed, error: claimError } = await adminClient
+    .from("process_search_results")
+    .update({ autos_status: "solicitado", autos_requested_at: new Date().toISOString() })
+    .eq("id", resultId)
+    .eq("user_id", user.id)
+    .eq("autos_download_locked", false)
+    .neq("autos_status", "solicitado")
+    .select("id")
+    .maybeSingle();
+
+  if (claimError) {
+    console.error("Error claiming autos download:", claimError);
+    return json({ error: "Erro ao iniciar download" }, 500);
+  }
+  if (!claimed) {
+    return json({
+      error: "Já existe um download em andamento (ou já concluído) para este processo. Aguarde ou verifique o status.",
+      locked: true,
+    }, 409);
+  }
+
   const { data: report } = await adminClient
     .from("process_search_reports")
     .select("integration_id")
@@ -75,16 +112,19 @@ Deno.serve(async (req) => {
 
   const { data: integration } = await adminClient
     .from("publication_integrations")
-    .select("id, api_key")
+    .select("id, api_key, price_per_autos")
     .eq("id", report?.integration_id)
     .maybeSingle();
 
-  if (!integration?.api_key) return json({ error: "Integração JusBrasil não encontrada ou sem chave" }, 400);
-
-  await adminClient
-    .from("process_search_results")
-    .update({ autos_status: "solicitado", autos_requested_at: new Date().toISOString() })
-    .eq("id", resultId);
+  if (!integration?.api_key) {
+    // Libera a reserva — não há como prosseguir, então não faz sentido
+    // deixar o processo preso em "solicitado" impedindo novas tentativas.
+    await adminClient
+      .from("process_search_results")
+      .update({ autos_status: "erro", autos_error: "Integração JusBrasil não encontrada ou sem chave" })
+      .eq("id", resultId);
+    return json({ error: "Integração JusBrasil não encontrada ou sem chave" }, 400);
+  }
 
   try {
     const documents = await fetchCaseAutos(integration.api_key, result.process_number);
@@ -125,6 +165,9 @@ Deno.serve(async (req) => {
       }
     }
 
+    // Marca como pronto e TRAVA — mesmo que só parte dos documentos tenha
+    // baixado com sucesso, a tentativa já contou (evita repetir cobrança
+    // no JusBrasil ficando preso num loop de novas tentativas).
     await adminClient
       .from("process_search_results")
       .update({
@@ -135,6 +178,10 @@ Deno.serve(async (req) => {
       })
       .eq("id", resultId);
 
+    // Usa o preço configurado em Integrações (price_per_autos) — antes era
+    // gravado sempre 0, mesmo com um valor configurado, o que zerava o
+    // contador financeiro independente da configuração comercial.
+    const unitPrice = integration.price_per_autos ?? 0;
     await adminClient.from("process_search_charges").insert({
       user_id: user.id,
       integration_id: integration.id,
@@ -142,14 +189,19 @@ Deno.serve(async (req) => {
       document: result.process_number,
       document_type: "nome",
       search_type: "autos",
-      unit_price: 0,
-      charged_amount: 0,
+      unit_price: unitPrice,
+      charged_amount: unitPrice,
     });
 
     return json({ success: saved > 0, documents_saved: saved, locked: true });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("Error fetching case autos:", message);
+    // Falha ao FALAR com o JusBrasil (não chegou a listar/baixar nada) —
+    // não trava, o usuário pode tentar de novo. A trava é só para quando o
+    // download efetivamente aconteceu (ver bloco de sucesso acima). Como o
+    // autos_status volta a ser "erro" (diferente de "solicitado"), a reserva
+    // atômica acima libera automaticamente uma nova tentativa.
     await adminClient
       .from("process_search_results")
       .update({ autos_status: "erro", autos_error: message.slice(0, 500) })

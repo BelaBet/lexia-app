@@ -63,16 +63,24 @@ async function callFunction<T>(name: string, body: Record<string, unknown>): Pro
     // supabase-js não expõe o corpo de erro em `error` para respostas
     // non-2xx via functions.invoke em todas as versões — tenta extrair a
     // mensagem que a função devolveu.
+    //
+    // Corrigido: a mensagem extraída do corpo da resposta era lançada
+    // (throw) dentro do MESMO try cujo catch a capturava e descartava,
+    // caindo sempre no erro genérico de `error.message` abaixo — o usuário
+    // nunca via o motivo real retornado pelo backend (ex.: "Integração não
+    // encontrada"). Agora o valor extraído só é usado para montar o erro
+    // final, fora do try/catch de parsing.
     const context = (error as { context?: { json?: () => Promise<unknown> } }).context;
+    let backendMessage: string | null = null;
     if (context?.json) {
       try {
-        const body = (await context.json()) as { error?: string };
-        if (body?.error) throw new Error(body.error);
+        const parsed = (await context.json()) as { error?: string };
+        if (parsed?.error) backendMessage = parsed.error;
       } catch {
-        // ignora, cai no throw genérico abaixo
+        // corpo da resposta não é JSON válido — ignora, cai no erro genérico abaixo
       }
     }
-    throw new Error(error.message || "Erro ao chamar função");
+    throw new Error(backendMessage || error.message || "Erro ao chamar função");
   }
   return data as T;
 }
