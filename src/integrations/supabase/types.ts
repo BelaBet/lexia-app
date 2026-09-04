@@ -817,6 +817,9 @@ export type Database = {
           meeting_link: string | null
           notification_enabled: boolean
           notification_minutes_before: number | null
+          priority: Database["public"]["Enums"]["checklist_priority"] | null
+          publication_id: string | null
+          status: Database["public"]["Enums"]["checklist_status"] | null
           title: string
           type: string
           user_id: string | null
@@ -832,6 +835,9 @@ export type Database = {
           meeting_link?: string | null
           notification_enabled?: boolean
           notification_minutes_before?: number | null
+          priority?: Database["public"]["Enums"]["checklist_priority"] | null
+          publication_id?: string | null
+          status?: Database["public"]["Enums"]["checklist_status"] | null
           title: string
           type?: string
           user_id?: string | null
@@ -847,6 +853,9 @@ export type Database = {
           meeting_link?: string | null
           notification_enabled?: boolean
           notification_minutes_before?: number | null
+          priority?: Database["public"]["Enums"]["checklist_priority"] | null
+          publication_id?: string | null
+          status?: Database["public"]["Enums"]["checklist_status"] | null
           title?: string
           type?: string
           user_id?: string | null
@@ -857,6 +866,13 @@ export type Database = {
             columns: ["case_id"]
             isOneToOne: false
             referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "events_publication_id_fkey"
+            columns: ["publication_id"]
+            isOneToOne: false
+            referencedRelation: "publications"
             referencedColumns: ["id"]
           },
         ]
@@ -1042,6 +1058,47 @@ export type Database = {
           user_id?: string
         }
         Relationships: []
+      }
+      publication_attachments: {
+        Row: {
+          created_at: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          file_type: string | null
+          id: string
+          publication_id: string
+          source: string
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          publication_id: string
+          source?: string
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          publication_id?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publication_attachments_publication_id_fkey"
+            columns: ["publication_id"]
+            isOneToOne: false
+            referencedRelation: "publications"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       publication_followups: {
         Row: {
@@ -1330,6 +1387,7 @@ export type Database = {
       }
       is_case_client: { Args: { _case_id: string }; Returns: boolean }
       is_case_owner: { Args: { _case_id: string }; Returns: boolean }
+      is_publication_owner: { Args: { _publication_id: string }; Returns: boolean }
       search_users_for_sharing: {
         Args: { search_term: string }
         Returns: {

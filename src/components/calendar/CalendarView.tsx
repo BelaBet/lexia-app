@@ -17,7 +17,7 @@ import {
   Send,
   FileText
 } from "lucide-react";
-import { useEvents, useCreateEvent, useDeleteEvent, useSendInvites, CalendarEvent, CreateEventData } from "@/hooks/useEvents";
+import { useEvents, useCreateEvent, useDeleteEvent, useUpdateEvent, useSendInvites, CalendarEvent, CreateEventData } from "@/hooks/useEvents";
 import { useChecklists } from "@/hooks/useChecklists";
 import { useNotifications } from "@/hooks/useNotifications";
 import { openGoogleCalendar, downloadICS } from "@/lib/calendarExport";
@@ -41,6 +41,16 @@ const eventTypeConfig = {
   hearing: { label: "Audiência", class: "bg-primary/10 text-primary border-l-primary" },
   deadline: { label: "Prazo", class: "bg-destructive/10 text-destructive border-l-destructive" },
   meeting: { label: "Reunião", class: "bg-success/10 text-success border-l-success" },
+  prazo_externo: { label: "Prazo Externo (Publicação)", class: "bg-destructive/10 text-destructive border-l-destructive" },
+  prazo_interno: { label: "Prazo Interno (Publicação)", class: "bg-warning/10 text-warning border-l-warning" },
+};
+
+const taskStatusConfig: Record<string, { label: string; class: string }> = {
+  pending: { label: "Pendente", class: "bg-warning/10 text-warning" },
+  in_progress: { label: "Em Andamento", class: "bg-primary/10 text-primary" },
+  completed: { label: "Concluído", class: "bg-success/10 text-success" },
+  overdue: { label: "Atrasado", class: "bg-destructive/10 text-destructive" },
+  cancelled: { label: "Cancelado", class: "bg-muted text-muted-foreground" },
 };
 
 const months = [
@@ -94,6 +104,7 @@ export function CalendarView() {
   }, [selectedDay]);
   const createEvent = useCreateEvent();
   const deleteEvent = useDeleteEvent();
+  const updateEvent = useUpdateEvent();
   const sendInvites = useSendInvites();
   const { 
     requestPermission, 
@@ -455,6 +466,24 @@ export function CalendarView() {
                     </span>
                   </div>
                   <p className="font-medium text-sm mb-2">{event.title}</p>
+                  {event.status && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        updateEvent.mutate({
+                          id: event.id,
+                          status: event.status === "completed" ? "pending" : "completed",
+                        });
+                      }}
+                      className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full mb-2 transition-colors ${
+                        taskStatusConfig[event.status]?.class || "bg-muted text-muted-foreground"
+                      }`}
+                      title="Clique para marcar como concluído/pendente"
+                    >
+                      <CheckSquare className="w-3 h-3" />
+                      {taskStatusConfig[event.status]?.label || event.status}
+                    </button>
+                  )}
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                     <span className="flex items-center gap-1">
                       <Clock className="w-3 h-3" />
@@ -857,6 +886,29 @@ export function CalendarView() {
                                 <Trash2 className="w-4 h-4 text-destructive" />
                               </button>
                             </div>
+
+                            {event.status && (
+                              <div className="flex items-center gap-2 mb-3">
+                                <select
+                                  value={event.status}
+                                  onChange={(e) =>
+                                    updateEvent.mutate({ id: event.id, status: e.target.value as CalendarEvent["status"] & string })
+                                  }
+                                  className={`text-xs px-2 py-1 rounded-full border-0 cursor-pointer ${
+                                    taskStatusConfig[event.status]?.class || "bg-muted text-muted-foreground"
+                                  }`}
+                                >
+                                  {Object.entries(taskStatusConfig).map(([value, { label }]) => (
+                                    <option key={value} value={value}>{label}</option>
+                                  ))}
+                                </select>
+                                {event.priority && (
+                                  <span className="text-xs text-muted-foreground">
+                                    Prioridade: {event.priority === "urgent" ? "Urgente" : event.priority === "high" ? "Alta" : event.priority === "medium" ? "Média" : "Baixa"}
+                                  </span>
+                                )}
+                              </div>
+                            )}
 
                             {event.description && (
                               <p className="text-sm text-muted-foreground mb-3">{event.description}</p>

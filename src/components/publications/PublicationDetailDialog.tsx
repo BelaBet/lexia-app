@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import {
   Dialog,
   DialogContent,
@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Send, Trash2, Scale, Gavel, Users, Landmark } from "lucide-react";
+import { Loader2, Send, Trash2, Scale, Gavel, Users, Landmark, Upload, FileText, Download } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -17,7 +17,12 @@ import {
   usePublicationFollowups,
   useAddPublicationFollowup,
   useDeletePublicationFollowup,
+  usePublicationAttachments,
+  useUploadPublicationAttachment,
+  useDeletePublicationAttachment,
+  getPublicationAttachmentUrl,
 } from "@/hooks/usePublications";
+import { toast } from "sonner";
 
 interface PublicationDetailDialogProps {
   publication: Publication | null;
@@ -42,6 +47,10 @@ export function PublicationDetailDialog({ publication, onOpenChange }: Publicati
   const { data: followups = [], isLoading } = usePublicationFollowups(publication?.id || null);
   const addFollowup = useAddPublicationFollowup();
   const deleteFollowup = useDeletePublicationFollowup();
+  const { data: attachments = [] } = usePublicationAttachments(publication?.id || null);
+  const uploadAttachment = useUploadPublicationAttachment();
+  const deleteAttachment = useDeletePublicationAttachment();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const currencyFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
   if (!publication) return null;
@@ -50,6 +59,22 @@ export function PublicationDetailDialog({ publication, onOpenChange }: Publicati
     if (!note.trim()) return;
     await addFollowup.mutateAsync({ publicationId: publication.id, note: note.trim() });
     setNote("");
+  };
+
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    await uploadAttachment.mutateAsync({ publicationId: publication.id, file });
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
+  const handleDownload = async (filePath: string) => {
+    try {
+      const url = await getPublicationAttachmentUrl(filePath);
+      window.open(url, "_blank", "noopener,noreferrer");
+    } catch {
+      toast.error("Erro ao abrir documento");
+    }
   };
 
   return (
@@ -153,6 +178,52 @@ export function PublicationDetailDialog({ publication, onOpenChange }: Publicati
               </div>
             </div>
           )}
+
+          <div>
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-sm font-semibold flex items-center gap-1.5">
+                <FileText className="w-4 h-4" /> Documentos
+              </p>
+              <Button type="button" variant="outline" size="sm" onClick={() => fileInputRef.current?.click()} disabled={uploadAttachment.isPending}>
+                {uploadAttachment.isPending ? <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" /> : <Upload className="w-3.5 h-3.5 mr-1.5" />}
+                Anexar
+              </Button>
+              <input ref={fileInputRef} type="file" className="hidden" onChange={handleFileSelect} />
+            </div>
+            {attachments.length === 0 ? (
+              <p className="text-xs text-muted-foreground">
+                Nenhum documento anexado ainda. Publicações importadas automaticamente via API trazem o documento do processo quando disponível.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {attachments.map((a) => (
+                  <div key={a.id} className="flex items-center justify-between gap-2 bg-muted/40 rounded-lg p-2.5">
+                    <button
+                      type="button"
+                      onClick={() => handleDownload(a.file_path)}
+                      className="flex items-center gap-2 text-sm text-left hover:underline min-w-0"
+                    >
+                      <Download className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+                      <span className="truncate">{a.file_name}</span>
+                      {a.source === "api" && (
+                        <Badge variant="outline" className="text-[10px] shrink-0">API</Badge>
+                      )}
+                    </button>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="icon"
+                      className="shrink-0 h-7 w-7 text-muted-foreground hover:text-destructive"
+                      onClick={() => deleteAttachment.mutate({ id: a.id, publicationId: publication.id, filePath: a.file_path })}
+                      aria-label="Remover documento"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {publication.tese && (
             <div>
