@@ -41,6 +41,102 @@ export type Database = {
         }
         Relationships: []
       }
+      case_clients: {
+        Row: {
+          case_id: string
+          client_id: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          case_id: string
+          client_id: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          case_id?: string
+          client_id?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "case_clients_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_clients_client_id_fkey"
+            columns: ["client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      case_timeline_events: {
+        Row: {
+          case_id: string
+          client_summary: string
+          created_at: string
+          created_by: string | null
+          event_date: string
+          id: string
+          internal_note: string | null
+          publication_id: string | null
+          source: Database["public"]["Enums"]["timeline_event_source"]
+          title: string
+          updated_at: string
+          visible_to_client: boolean
+        }
+        Insert: {
+          case_id: string
+          client_summary: string
+          created_at?: string
+          created_by?: string | null
+          event_date?: string
+          id?: string
+          internal_note?: string | null
+          publication_id?: string | null
+          source?: Database["public"]["Enums"]["timeline_event_source"]
+          title: string
+          updated_at?: string
+          visible_to_client?: boolean
+        }
+        Update: {
+          case_id?: string
+          client_summary?: string
+          created_at?: string
+          created_by?: string | null
+          event_date?: string
+          id?: string
+          internal_note?: string | null
+          publication_id?: string | null
+          source?: Database["public"]["Enums"]["timeline_event_source"]
+          title?: string
+          updated_at?: string
+          visible_to_client?: boolean
+        }
+        Relationships: [
+          {
+            foreignKeyName: "case_timeline_events_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "case_timeline_events_publication_id_fkey"
+            columns: ["publication_id"]
+            isOneToOne: false
+            referencedRelation: "publications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       cases: {
         Row: {
           case_number: string
@@ -371,205 +467,6 @@ export type Database = {
           },
         ]
       }
-      publications: {
-        Row: {
-          case_id: string | null
-          content: string
-          created_at: string
-          external_deadline: string | null
-          external_id: string | null
-          external_responsible_name: string | null
-          external_responsible_role:
-            | Database["public"]["Enums"]["publication_responsible_role"]
-            | null
-          id: string
-          imported_automatically: boolean
-          internal_deadline: string | null
-          internal_responsible_name: string | null
-          internal_responsible_role:
-            | Database["public"]["Enums"]["publication_responsible_role"]
-            | null
-          process_number: string | null
-          published_date: string
-          raw_payload: Json | null
-          source: Database["public"]["Enums"]["publication_source"]
-          status: Database["public"]["Enums"]["publication_status"]
-          tese: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          case_id?: string | null
-          content: string
-          created_at?: string
-          external_deadline?: string | null
-          external_id?: string | null
-          external_responsible_name?: string | null
-          external_responsible_role?:
-            | Database["public"]["Enums"]["publication_responsible_role"]
-            | null
-          id?: string
-          imported_automatically?: boolean
-          internal_deadline?: string | null
-          internal_responsible_name?: string | null
-          internal_responsible_role?:
-            | Database["public"]["Enums"]["publication_responsible_role"]
-            | null
-          process_number?: string | null
-          published_date: string
-          raw_payload?: Json | null
-          source?: Database["public"]["Enums"]["publication_source"]
-          status?: Database["public"]["Enums"]["publication_status"]
-          tese?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          case_id?: string | null
-          content?: string
-          created_at?: string
-          external_deadline?: string | null
-          external_id?: string | null
-          external_responsible_name?: string | null
-          external_responsible_role?:
-            | Database["public"]["Enums"]["publication_responsible_role"]
-            | null
-          id?: string
-          imported_automatically?: boolean
-          internal_deadline?: string | null
-          internal_responsible_name?: string | null
-          internal_responsible_role?:
-            | Database["public"]["Enums"]["publication_responsible_role"]
-            | null
-          process_number?: string | null
-          published_date?: string
-          raw_payload?: Json | null
-          source?: Database["public"]["Enums"]["publication_source"]
-          status?: Database["public"]["Enums"]["publication_status"]
-          tese?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "publications_case_id_fkey"
-            columns: ["case_id"]
-            isOneToOne: false
-            referencedRelation: "cases"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      publication_integrations: {
-        Row: {
-          api_key: string | null
-          created_at: string
-          id: string
-          is_active: boolean
-          last_poll_error: string | null
-          last_poll_status: string | null
-          last_received_at: string | null
-          monitor_document: string | null
-          monitor_oab: string | null
-          source: Database["public"]["Enums"]["publication_source"]
-          updated_at: string
-          user_id: string
-          webhook_secret: string
-        }
-        Insert: {
-          api_key?: string | null
-          created_at?: string
-          id?: string
-          is_active?: boolean
-          last_poll_error?: string | null
-          last_poll_status?: string | null
-          last_received_at?: string | null
-          monitor_document?: string | null
-          monitor_oab?: string | null
-          source: Database["public"]["Enums"]["publication_source"]
-          updated_at?: string
-          user_id: string
-          webhook_secret?: string
-        }
-        Update: {
-          api_key?: string | null
-          created_at?: string
-          id?: string
-          is_active?: boolean
-          last_poll_error?: string | null
-          last_poll_status?: string | null
-          last_received_at?: string | null
-          monitor_document?: string | null
-          monitor_oab?: string | null
-          source?: Database["public"]["Enums"]["publication_source"]
-          updated_at?: string
-          user_id?: string
-          webhook_secret?: string
-        }
-        Relationships: []
-      }
-      notifications: {
-        Row: {
-          created_at: string
-          id: string
-          is_read: boolean
-          link_tab: string | null
-          message: string | null
-          title: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          is_read?: boolean
-          link_tab?: string | null
-          message?: string | null
-          title: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          is_read?: boolean
-          link_tab?: string | null
-          message?: string | null
-          title?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      publication_followups: {
-        Row: {
-          created_at: string
-          id: string
-          note: string
-          publication_id: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          note: string
-          publication_id: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          note?: string
-          publication_id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "publication_followups_publication_id_fkey"
-            columns: ["publication_id"]
-            isOneToOne: false
-            referencedRelation: "publications"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
       clickup_integrations: {
         Row: {
           created_at: string
@@ -594,6 +491,158 @@ export type Database = {
           updated_at?: string
           user_id?: string
           workspace_id?: string | null
+        }
+        Relationships: []
+      }
+      client_documents: {
+        Row: {
+          ai_summary: string | null
+          case_id: string
+          category: string | null
+          created_at: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          file_type: string | null
+          id: string
+          request_id: string | null
+          status: Database["public"]["Enums"]["client_document_status"]
+          uploaded_by: Database["public"]["Enums"]["client_document_uploader"]
+          uploaded_by_user_id: string
+        }
+        Insert: {
+          ai_summary?: string | null
+          case_id: string
+          category?: string | null
+          created_at?: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          request_id?: string | null
+          status?: Database["public"]["Enums"]["client_document_status"]
+          uploaded_by: Database["public"]["Enums"]["client_document_uploader"]
+          uploaded_by_user_id: string
+        }
+        Update: {
+          ai_summary?: string | null
+          case_id?: string
+          category?: string | null
+          created_at?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          request_id?: string | null
+          status?: Database["public"]["Enums"]["client_document_status"]
+          uploaded_by?: Database["public"]["Enums"]["client_document_uploader"]
+          uploaded_by_user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_documents_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "client_documents_request_id_fkey"
+            columns: ["request_id"]
+            isOneToOne: false
+            referencedRelation: "client_requests"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      client_requests: {
+        Row: {
+          case_id: string
+          created_at: string
+          created_by: string
+          description: string | null
+          due_date: string | null
+          fulfilled_at: string | null
+          id: string
+          status: Database["public"]["Enums"]["client_request_status"]
+          title: string
+          type: Database["public"]["Enums"]["client_request_type"]
+          updated_at: string
+        }
+        Insert: {
+          case_id: string
+          created_at?: string
+          created_by: string
+          description?: string | null
+          due_date?: string | null
+          fulfilled_at?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["client_request_status"]
+          title: string
+          type?: Database["public"]["Enums"]["client_request_type"]
+          updated_at?: string
+        }
+        Update: {
+          case_id?: string
+          created_at?: string
+          created_by?: string
+          description?: string | null
+          due_date?: string | null
+          fulfilled_at?: string | null
+          id?: string
+          status?: Database["public"]["Enums"]["client_request_status"]
+          title?: string
+          type?: Database["public"]["Enums"]["client_request_type"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "client_requests_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      clients: {
+        Row: {
+          created_at: string
+          email: string
+          full_name: string
+          id: string
+          invite_status: string
+          invited_at: string | null
+          owner_id: string
+          phone: string | null
+          updated_at: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          email: string
+          full_name: string
+          id?: string
+          invite_status?: string
+          invited_at?: string | null
+          owner_id: string
+          phone?: string | null
+          updated_at?: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          email?: string
+          full_name?: string
+          id?: string
+          invite_status?: string
+          invited_at?: string | null
+          owner_id?: string
+          phone?: string | null
+          updated_at?: string
+          user_id?: string | null
         }
         Relationships: []
       }
@@ -842,6 +891,57 @@ export type Database = {
         }
         Relationships: []
       }
+      legal_chat_requests: {
+        Row: {
+          created_at: string
+          function_name: string
+          id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          function_name?: string
+          id?: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          function_name?: string
+          id?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          created_at: string
+          id: string
+          is_read: boolean
+          link_tab: string | null
+          message: string | null
+          title: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          link_tab?: string | null
+          message?: string | null
+          title: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_read?: boolean
+          link_tab?: string | null
+          message?: string | null
+          title?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       obligation_history: {
         Row: {
           checklist_id: string | null
@@ -925,6 +1025,175 @@ export type Database = {
         }
         Relationships: []
       }
+      publication_followups: {
+        Row: {
+          created_at: string
+          id: string
+          note: string
+          publication_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note: string
+          publication_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note?: string
+          publication_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publication_followups_publication_id_fkey"
+            columns: ["publication_id"]
+            isOneToOne: false
+            referencedRelation: "publications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      publication_integrations: {
+        Row: {
+          api_key: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          last_poll_error: string | null
+          last_poll_status: string | null
+          last_received_at: string | null
+          monitor_document: string | null
+          monitor_oab: string | null
+          source: Database["public"]["Enums"]["publication_source"]
+          updated_at: string
+          user_id: string
+          webhook_secret: string
+        }
+        Insert: {
+          api_key?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_poll_error?: string | null
+          last_poll_status?: string | null
+          last_received_at?: string | null
+          monitor_document?: string | null
+          monitor_oab?: string | null
+          source: Database["public"]["Enums"]["publication_source"]
+          updated_at?: string
+          user_id: string
+          webhook_secret?: string
+        }
+        Update: {
+          api_key?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_poll_error?: string | null
+          last_poll_status?: string | null
+          last_received_at?: string | null
+          monitor_document?: string | null
+          monitor_oab?: string | null
+          source?: Database["public"]["Enums"]["publication_source"]
+          updated_at?: string
+          user_id?: string
+          webhook_secret?: string
+        }
+        Relationships: []
+      }
+      publications: {
+        Row: {
+          case_id: string | null
+          content: string
+          created_at: string
+          external_deadline: string | null
+          external_id: string | null
+          external_responsible_name: string | null
+          external_responsible_role:
+            | Database["public"]["Enums"]["publication_responsible_role"]
+            | null
+          id: string
+          imported_automatically: boolean
+          internal_deadline: string | null
+          internal_responsible_name: string | null
+          internal_responsible_role:
+            | Database["public"]["Enums"]["publication_responsible_role"]
+            | null
+          process_number: string | null
+          published_date: string
+          raw_payload: Json | null
+          source: Database["public"]["Enums"]["publication_source"]
+          status: Database["public"]["Enums"]["publication_status"]
+          tese: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          case_id?: string | null
+          content: string
+          created_at?: string
+          external_deadline?: string | null
+          external_id?: string | null
+          external_responsible_name?: string | null
+          external_responsible_role?:
+            | Database["public"]["Enums"]["publication_responsible_role"]
+            | null
+          id?: string
+          imported_automatically?: boolean
+          internal_deadline?: string | null
+          internal_responsible_name?: string | null
+          internal_responsible_role?:
+            | Database["public"]["Enums"]["publication_responsible_role"]
+            | null
+          process_number?: string | null
+          published_date: string
+          raw_payload?: Json | null
+          source?: Database["public"]["Enums"]["publication_source"]
+          status?: Database["public"]["Enums"]["publication_status"]
+          tese?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          case_id?: string | null
+          content?: string
+          created_at?: string
+          external_deadline?: string | null
+          external_id?: string | null
+          external_responsible_name?: string | null
+          external_responsible_role?:
+            | Database["public"]["Enums"]["publication_responsible_role"]
+            | null
+          id?: string
+          imported_automatically?: boolean
+          internal_deadline?: string | null
+          internal_responsible_name?: string | null
+          internal_responsible_role?:
+            | Database["public"]["Enums"]["publication_responsible_role"]
+            | null
+          process_number?: string | null
+          published_date?: string
+          raw_payload?: Json | null
+          source?: Database["public"]["Enums"]["publication_source"]
+          status?: Database["public"]["Enums"]["publication_status"]
+          tese?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publications_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       user_roles: {
         Row: {
           created_at: string
@@ -946,11 +1215,50 @@ export type Database = {
         }
         Relationships: []
       }
+      white_label_settings: {
+        Row: {
+          brand_name: string
+          id: boolean
+          logo_url: string | null
+          primary_color: string
+          sidebar_color: string
+          tagline: string
+          updated_at: string
+        }
+        Insert: {
+          brand_name?: string
+          id?: boolean
+          logo_url?: string | null
+          primary_color?: string
+          sidebar_color?: string
+          tagline?: string
+          updated_at?: string
+        }
+        Update: {
+          brand_name?: string
+          id?: boolean
+          logo_url?: string | null
+          primary_color?: string
+          sidebar_color?: string
+          tagline?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      check_and_log_rate_limit: {
+        Args: {
+          p_function: string
+          p_max: number
+          p_user_id: string
+          p_window_seconds: number
+        }
+        Returns: boolean
+      }
       check_rate_limit: {
         Args: {
           p_endpoint: string
@@ -987,6 +1295,8 @@ export type Database = {
         }
         Returns: boolean
       }
+      is_case_client: { Args: { _case_id: string }; Returns: boolean }
+      is_case_owner: { Args: { _case_id: string }; Returns: boolean }
       search_users_for_sharing: {
         Args: { search_term: string }
         Returns: {
@@ -1010,13 +1320,14 @@ export type Database = {
         | "completed"
         | "overdue"
         | "cancelled"
-      recurrence_type:
-        | "none"
-        | "daily"
-        | "weekly"
-        | "monthly"
-        | "quarterly"
-        | "yearly"
+      client_document_status:
+        | "received"
+        | "processing"
+        | "classified"
+        | "needs_review"
+      client_document_uploader: "client" | "lawyer"
+      client_request_status: "pending" | "fulfilled" | "cancelled"
+      client_request_type: "document" | "signature" | "questionnaire" | "other"
       publication_responsible_role: "advogado" | "operacional"
       publication_source:
         | "manual"
@@ -1030,6 +1341,14 @@ export type Database = {
         | "completed"
         | "overdue"
         | "cancelled"
+      recurrence_type:
+        | "none"
+        | "daily"
+        | "weekly"
+        | "monthly"
+        | "quarterly"
+        | "yearly"
+      timeline_event_source: "manual" | "publication" | "document" | "system"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -1167,14 +1486,15 @@ export const Constants = {
         "overdue",
         "cancelled",
       ],
-      recurrence_type: [
-        "none",
-        "daily",
-        "weekly",
-        "monthly",
-        "quarterly",
-        "yearly",
+      client_document_status: [
+        "received",
+        "processing",
+        "classified",
+        "needs_review",
       ],
+      client_document_uploader: ["client", "lawyer"],
+      client_request_status: ["pending", "fulfilled", "cancelled"],
+      client_request_type: ["document", "signature", "questionnaire", "other"],
       publication_responsible_role: ["advogado", "operacional"],
       publication_source: [
         "manual",
@@ -1190,6 +1510,15 @@ export const Constants = {
         "overdue",
         "cancelled",
       ],
+      recurrence_type: [
+        "none",
+        "daily",
+        "weekly",
+        "monthly",
+        "quarterly",
+        "yearly",
+      ],
+      timeline_event_source: ["manual", "publication", "document", "system"],
     },
   },
 } as const
