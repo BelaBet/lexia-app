@@ -51,16 +51,16 @@ interface SidebarProps {
 }
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { id: "publications", label: "Publicações", icon: FileSearch },
+  { id: "cases", label: "Processos", icon: FolderOpen },
+  { id: "calendar", label: "Agenda", icon: Calendar },
   { id: "documents", label: "Meus Documentos", icon: FileText },
   { id: "document-creator", label: "Criar Documento", icon: FilePlus },
   { id: "checklists", label: "Checklists", icon: ListChecks },
   { id: "assistant", label: "Assistente IA", icon: MessageSquare },
   { id: "pdf-reader", label: "Leitor PDF", icon: Upload },
-  { id: "cases", label: "Processos", icon: FolderOpen },
-  { id: "calendar", label: "Agenda", icon: Calendar },
-  { id: "guide", label: "Guia de Uso", icon: BookOpen },
-  { id: "publications", label: "Publicações", icon: FileSearch },
   { id: "financial-counter", label: "Contador Financeiro", icon: Wallet },
+  { id: "guide", label: "Guia de Uso", icon: BookOpen },
 ];
 const settingsSubItems = [
   { id: "settings", label: "Preferências", icon: Settings },
