@@ -1023,166 +1023,6 @@ export type Database = {
           },
         ]
       }
-      profiles: {
-        Row: {
-          avatar_url: string | null
-          created_at: string
-          full_name: string | null
-          id: string
-          oab_number: string | null
-          phone: string | null
-          specialty: string | null
-          updated_at: string
-          user_id: string
-        }
-        Insert: {
-          avatar_url?: string | null
-          created_at?: string
-          full_name?: string | null
-          id?: string
-          oab_number?: string | null
-          phone?: string | null
-          specialty?: string | null
-          updated_at?: string
-          user_id: string
-        }
-        Update: {
-          avatar_url?: string | null
-          created_at?: string
-          full_name?: string | null
-          id?: string
-          oab_number?: string | null
-          phone?: string | null
-          specialty?: string | null
-          updated_at?: string
-          user_id?: string
-        }
-        Relationships: []
-      }
-      publication_attachments: {
-        Row: {
-          created_at: string
-          file_name: string
-          file_path: string
-          file_size: number | null
-          file_type: string | null
-          id: string
-          publication_id: string
-          source: string
-        }
-        Insert: {
-          created_at?: string
-          file_name: string
-          file_path: string
-          file_size?: number | null
-          file_type?: string | null
-          id?: string
-          publication_id: string
-          source?: string
-        }
-        Update: {
-          created_at?: string
-          file_name?: string
-          file_path?: string
-          file_size?: number | null
-          file_type?: string | null
-          id?: string
-          publication_id?: string
-          source?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "publication_attachments_publication_id_fkey"
-            columns: ["publication_id"]
-            isOneToOne: false
-            referencedRelation: "publications"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      publication_followups: {
-        Row: {
-          created_at: string
-          id: string
-          note: string
-          publication_id: string
-          user_id: string
-        }
-        Insert: {
-          created_at?: string
-          id?: string
-          note: string
-          publication_id: string
-          user_id: string
-        }
-        Update: {
-          created_at?: string
-          id?: string
-          note?: string
-          publication_id?: string
-          user_id?: string
-        }
-        Relationships: [
-          {
-            foreignKeyName: "publication_followups_publication_id_fkey"
-            columns: ["publication_id"]
-            isOneToOne: false
-            referencedRelation: "publications"
-            referencedColumns: ["id"]
-          },
-        ]
-      }
-      publication_integrations: {
-        Row: {
-          api_key: string | null
-          created_at: string
-          id: string
-          is_active: boolean
-          last_poll_error: string | null
-          last_poll_status: string | null
-          last_received_at: string | null
-          monitor_document: string | null
-          monitor_oab: string | null
-          price_per_search: number | null
-          source: Database["public"]["Enums"]["publication_source"]
-          updated_at: string
-          user_id: string
-          webhook_secret: string
-        }
-        Insert: {
-          api_key?: string | null
-          created_at?: string
-          id?: string
-          is_active?: boolean
-          last_poll_error?: string | null
-          last_poll_status?: string | null
-          last_received_at?: string | null
-          monitor_document?: string | null
-          monitor_oab?: string | null
-          price_per_search?: number | null
-          source: Database["public"]["Enums"]["publication_source"]
-          updated_at?: string
-          user_id: string
-          webhook_secret?: string
-        }
-        Update: {
-          api_key?: string | null
-          created_at?: string
-          id?: string
-          is_active?: boolean
-          last_poll_error?: string | null
-          last_poll_status?: string | null
-          last_received_at?: string | null
-          monitor_document?: string | null
-          monitor_oab?: string | null
-          price_per_search?: number | null
-          source?: Database["public"]["Enums"]["publication_source"]
-          updated_at?: string
-          user_id?: string
-          webhook_secret?: string
-        }
-        Relationships: []
-      }
       process_search_charges: {
         Row: {
           charged_amount: number
@@ -1480,6 +1320,172 @@ export type Database = {
           },
         ]
       }
+      profiles: {
+        Row: {
+          avatar_url: string | null
+          created_at: string
+          full_name: string | null
+          id: string
+          oab_number: string | null
+          phone: string | null
+          specialty: string | null
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          oab_number?: string | null
+          phone?: string | null
+          specialty?: string | null
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          avatar_url?: string | null
+          created_at?: string
+          full_name?: string | null
+          id?: string
+          oab_number?: string | null
+          phone?: string | null
+          specialty?: string | null
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
+      publication_attachments: {
+        Row: {
+          created_at: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          file_type: string | null
+          id: string
+          publication_id: string
+          source: string
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          publication_id: string
+          source?: string
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          publication_id?: string
+          source?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publication_attachments_publication_id_fkey"
+            columns: ["publication_id"]
+            isOneToOne: false
+            referencedRelation: "publications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      publication_followups: {
+        Row: {
+          created_at: string
+          id: string
+          note: string
+          publication_id: string
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          note: string
+          publication_id: string
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          note?: string
+          publication_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publication_followups_publication_id_fkey"
+            columns: ["publication_id"]
+            isOneToOne: false
+            referencedRelation: "publications"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      publication_integrations: {
+        Row: {
+          api_key: string | null
+          created_at: string
+          id: string
+          is_active: boolean
+          last_poll_error: string | null
+          last_poll_status: string | null
+          last_received_at: string | null
+          monitor_document: string | null
+          monitor_oab: string | null
+          price_per_autos: number | null
+          price_per_name_search: number | null
+          price_per_search: number | null
+          source: Database["public"]["Enums"]["publication_source"]
+          updated_at: string
+          user_id: string
+          webhook_secret: string
+        }
+        Insert: {
+          api_key?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_poll_error?: string | null
+          last_poll_status?: string | null
+          last_received_at?: string | null
+          monitor_document?: string | null
+          monitor_oab?: string | null
+          price_per_autos?: number | null
+          price_per_name_search?: number | null
+          price_per_search?: number | null
+          source: Database["public"]["Enums"]["publication_source"]
+          updated_at?: string
+          user_id: string
+          webhook_secret?: string
+        }
+        Update: {
+          api_key?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          last_poll_error?: string | null
+          last_poll_status?: string | null
+          last_received_at?: string | null
+          monitor_document?: string | null
+          monitor_oab?: string | null
+          price_per_autos?: number | null
+          price_per_name_search?: number | null
+          price_per_search?: number | null
+          source?: Database["public"]["Enums"]["publication_source"]
+          updated_at?: string
+          user_id?: string
+          webhook_secret?: string
+        }
+        Relationships: []
+      }
       publications: {
         Row: {
           case_id: string | null
@@ -1687,7 +1693,10 @@ export type Database = {
       }
       is_case_client: { Args: { _case_id: string }; Returns: boolean }
       is_case_owner: { Args: { _case_id: string }; Returns: boolean }
-      is_publication_owner: { Args: { _publication_id: string }; Returns: boolean }
+      is_publication_owner: {
+        Args: { _publication_id: string }
+        Returns: boolean
+      }
       search_users_for_sharing: {
         Args: { search_term: string }
         Returns: {
@@ -1755,12 +1764,12 @@ export type Tables<
   DefaultSchemaTableNameOrOptions extends
     | keyof (DefaultSchema["Tables"] & DefaultSchema["Views"])
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof (DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"] &
         DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Views"])
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1784,11 +1793,11 @@ export type TablesInsert<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1809,11 +1818,11 @@ export type TablesUpdate<
   DefaultSchemaTableNameOrOptions extends
     | keyof DefaultSchema["Tables"]
     | { schema: keyof DatabaseWithoutInternals },
-  TableName extends DefaultSchemaTableNameOrOptions extends {
+  TableName extends (DefaultSchemaTableNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaTableNameOrOptions["schema"]]["Tables"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaTableNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1834,11 +1843,11 @@ export type Enums<
   DefaultSchemaEnumNameOrOptions extends
     | keyof DefaultSchema["Enums"]
     | { schema: keyof DatabaseWithoutInternals },
-  EnumName extends DefaultSchemaEnumNameOrOptions extends {
+  EnumName extends (DefaultSchemaEnumNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[DefaultSchemaEnumNameOrOptions["schema"]]["Enums"]
-    : never = never,
+    : never) = never,
 > = DefaultSchemaEnumNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }
@@ -1851,11 +1860,11 @@ export type CompositeTypes<
   PublicCompositeTypeNameOrOptions extends
     | keyof DefaultSchema["CompositeTypes"]
     | { schema: keyof DatabaseWithoutInternals },
-  CompositeTypeName extends PublicCompositeTypeNameOrOptions extends {
+  CompositeTypeName extends (PublicCompositeTypeNameOrOptions extends {
     schema: keyof DatabaseWithoutInternals
   }
     ? keyof DatabaseWithoutInternals[PublicCompositeTypeNameOrOptions["schema"]]["CompositeTypes"]
-    : never = never,
+    : never) = never,
 > = PublicCompositeTypeNameOrOptions extends {
   schema: keyof DatabaseWithoutInternals
 }

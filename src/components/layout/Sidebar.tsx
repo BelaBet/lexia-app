@@ -25,7 +25,7 @@ import {
   FileSearch,
   Palette,
   Wallet,
-  UserSearch
+  Search
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -54,7 +54,7 @@ const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
   { id: "publications", label: "Publicações", icon: FileSearch },
   { id: "cases", label: "Processos", icon: FolderOpen },
-  { id: "process-search", label: "Buscar Processos", icon: UserSearch },
+  { id: "process-search", label: "Buscar Processos", icon: Search },
   { id: "calendar", label: "Agenda", icon: Calendar },
   { id: "documents", label: "Meus Documentos", icon: FileText },
   { id: "document-creator", label: "Criar Documento", icon: FilePlus },

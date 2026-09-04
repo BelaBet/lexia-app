@@ -10,6 +10,14 @@
 -- versionado no repositório. Reflete fielmente as tabelas, policies,
 -- triggers e bucket de storage existentes no banco.
 
+-- publication_integrations ganha os valores configuráveis (por integração)
+-- cobrados do cliente por busca por nome e por download de autos —
+-- análogos ao price_per_search já existente para a busca por documento/OAB.
+
+ALTER TABLE public.publication_integrations
+  ADD COLUMN IF NOT EXISTS price_per_name_search NUMERIC,
+  ADD COLUMN IF NOT EXISTS price_per_autos NUMERIC;
+
 -- process_search_charges (contador financeiro) precisa aceitar os novos
 -- tipos de cobrança gerados pela busca por nome e pelo download de autos.
 
