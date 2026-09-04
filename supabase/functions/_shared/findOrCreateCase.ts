@@ -1,20 +1,11 @@
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
+
 // Compartilhado entre publication-webhook e poll-jusbrasil: quando uma nova
 // publicação/processo chega automaticamente da API, o sistema já abre (ou
 // reaproveita) um Caso correspondente em "Casos", para o advogado ver o
 // processo lá — não só na lista de Publicações. O caso é identificado pelo
 // número do processo; se já existir um caso com esse número para o mesmo
 // usuário, a publicação é só vinculada a ele (não duplica).
-//
-// Título/cliente são preenchidos com um valor provisório, para o advogado
-// completar depois — o objetivo aqui é só garantir que o caso já apareça na
-// tela de Casos assim que a publicação chegar, sem exigir nenhuma ação
-// manual antes disso.
-//
-// Quando o payload da fonte externa (JusBrasil, WebJur etc.) já traz dados
-// processuais (vara, comarca, valor da causa, datas de abertura/aceitação),
-// esses dados são gravados no Caso recém-criado também — assim eles ficam
-// destacados tanto em Publicações quanto em Casos sem esperar o advogado
-// preencher manualmente.
 
 export interface ProcessualData {
   vara?: string | null;
@@ -24,10 +15,8 @@ export interface ProcessualData {
   data_aceitacao?: string | null;
 }
 
-// deno-lint-ignore no-explicit-any
 export async function findOrCreateCaseId(
-  // deno-lint-ignore no-explicit-any
-  adminClient: any,
+  adminClient: SupabaseClient,
   userId: string,
   processNumber: string | null,
   processualData?: ProcessualData,
@@ -66,9 +55,6 @@ export async function findOrCreateCaseId(
     .maybeSingle();
 
   if (createError) {
-    // Se dois eventos chegarem ao mesmo tempo para o mesmo processo, é
-    // possível que o caso já tenha sido criado entre a busca e a inserção
-    // acima — nesse caso, apenas busca de novo em vez de falhar.
     const { data: retry } = await adminClient
       .from("cases")
       .select("id")

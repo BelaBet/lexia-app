@@ -1,13 +1,14 @@
 // Recebe notificações (webhook) de provedores externos de monitoramento de
-// publicações/processos — hoje: JusBrasil (API Dossiê) e WebJur — e importa
-// automaticamente cada nova publicação/demanda para a tela de Rastreamento
-// de Publicações do usuário dono da integração, criando também uma
-// notificação in-app.
+// publicações/processos — JusBrasil (API Dossê), WebJur e Escavador — e
+// importa automaticamente cada nova publicação/movimentação para a tela de
+// Rastreamento de Publicações do usuário dono da integração, criando
+// também uma notificação in-app.
 //
-// URL de configuração no provedor externo (JusBrasil/WebJur), usando a URL
-// do próprio projeto Supabase (a mesma usada nas outras edge functions):
+// URL de configuração no provedor externo, usando a URL do próprio projeto
+// Supabase (a mesma usada nas outras edge functions):
 //   https://<seu-projeto>.supabase.co/functions/v1/publication-webhook/<user_id>?source=jusbrasil
 //   https://<seu-projeto>.supabase.co/functions/v1/publication-webhook/<user_id>?source=webjur
+//   https://<seu-projeto>.supabase.co/functions/v1/publication-webhook/<user_id>?source=escavador
 //
 // Autenticação: cada usuário gera, na tela de Integrações, um segredo de
 // webhook próprio (tabela publication_integrations). O provedor deve enviar
@@ -15,15 +16,21 @@
 // para provedores que não suportam headers customizados). A função só grava
 // dados na conta do usuário se o segredo bater.
 //
-// IMPORTANTE: o formato exato do corpo (JSON) enviado pelo JusBrasil e pelo
-// WebJur pode variar conforme o plano/endpoint contratado. Este handler faz
-// uma extração "best effort" dos campos mais prováveis (conteúdo, número do
-// processo, data) e sempre guarda o payload bruto em `raw_payload` — assim,
-// mesmo que algum campo específico não seja reconhecido automaticamente,
-// nenhuma informação é perdida e o registro pode ser ajustado manualmente na
-// tela de Publicações. Quando houver acesso à conta real do provedor, revise
-// os nomes de campo abaixo (marcados com TODO) contra um payload de exemplo
-// real e ajuste o mapeamento.
+// IMPORTANTE — formato do JusBrasil (Monitoramento de Processos), já
+// confirmado contra a documentação oficial: o corpo do webhook é um ARRAY
+// de "envelopes" de evento, um por movimentação/atualização:
+//   [{ target_number, evt_type, created_at, target_url, source_url, data }, ...]
+// Quando evt_type === 1 (movimentação), `data` é um array de tuplas
+// [data, título, detalhe|null, null, movement_id, [[x,y]], instância?] — cada
+// tupla vira UMA publicação separada (um webhook costuma trazer ~12 eventos
+// de uma vez). Outros evt_type (ex.: 8 = monitorado suspenso) ainda não têm
+// o formato de `data` totalmente documentado — nesses casos guardamos o
+// envelope inteiro em raw_payload para revisão manual, sem perder a
+// informação.
+//
+// WebJur e Escavador continuam com extração "best effort" a partir de um
+// objeto único (formato exato não confirmado — TODOs abaixo), guardando
+// sempre o payload bruto em `raw_payload`.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
@@ -31,69 +38,24 @@ import { findOrCreateCaseId, ProcessualData } from "../_shared/findOrCreateCase.
 import { syncDeadlineEvents, attachDocumentIfAvailable } from "../_shared/syncPublicationExtras.ts";
 import { computeFallbackExternalId } from "../_shared/externalId.ts";
 
-type PublicationSource = "jusbrasil" | "webjur" | "escavador" | "manual" | "outro";
+type PublicationSource = "jusbrasil" | "webjur" | "escavador";
+
+interface PublicationRow {
+  content: string;
+  publishedDate: string;
+  processNumber: string | null;
+  externalId: string;
+  processualData?: ProcessualData;
+  externalDeadline?: string | null;
+  internalDeadline?: string | null;
+  rawPayload: unknown;
+}
 
 function firstString(...values: unknown[]): string | null {
   for (const v of values) {
     if (typeof v === "string" && v.trim().length > 0) return v.trim();
   }
   return null;
-}
-
-function extractPublicationDate(payload: Record<string, unknown>): string {
-  // TODO: confirmar o nome real do campo de data quando houver payload de exemplo.
-  const raw = firstString(
-    payload.data_publicacao,
-    payload.published_date,
-    payload.data,
-    payload.date,
-    (payload.publicacao as Record<string, unknown> | undefined)?.data,
-  );
-  if (raw) {
-    const parsed = new Date(raw);
-    if (!isNaN(parsed.getTime())) return parsed.toISOString().slice(0, 10);
-  }
-  return new Date().toISOString().slice(0, 10);
-}
-
-function extractContent(payload: Record<string, unknown>): string {
-  // TODO: confirmar o nome real do campo de conteúdo/teor quando houver payload de exemplo.
-  const content = firstString(
-    payload.conteudo,
-    payload.content,
-    payload.texto,
-    payload.resumo,
-    payload.description,
-    payload.summary,
-  );
-  if (content) return content;
-  // Fallback: nenhum campo reconhecido — guarda o JSON bruto como conteúdo
-  // para não perder a informação, para revisão manual depois.
-  try {
-    return JSON.stringify(payload).slice(0, 4000);
-  } catch {
-    return "Publicação importada automaticamente (conteúdo não reconhecido, ver dados brutos).";
-  }
-}
-
-function extractProcessNumber(payload: Record<string, unknown>): string | null {
-  return firstString(
-    payload.numero_processo,
-    payload.process_number,
-    payload.processo,
-    payload.numeroProcesso,
-    (payload.processo as Record<string, unknown> | undefined)?.numero,
-  );
-}
-
-function extractExternalId(payload: Record<string, unknown>): string | null {
-  return firstString(
-    payload.id,
-    payload.publicacao_id,
-    payload.movimentacao_id,
-    payload.event_id,
-    payload.uuid,
-  );
 }
 
 function firstDate(...values: unknown[]): string | null {
@@ -103,12 +65,36 @@ function firstDate(...values: unknown[]): string | null {
   return isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
 }
 
+// Mesma heurística de _shared/pollJusbrasilIntegration.ts: aceita tanto
+// "12.345,67" (BR) quanto "12345.67" (americano/JSON) sem inflar o valor em
+// 100x quando ele já vem no segundo formato.
 function firstNumber(...values: unknown[]): number | null {
   for (const v of values) {
     if (typeof v === "number" && !isNaN(v)) return v;
     if (typeof v === "string" && v.trim().length > 0) {
-      // Aceita tanto "12345.67" quanto formato brasileiro "12.345,67".
-      const normalized = v.trim().replace(/\./g, "").replace(",", ".");
+      const raw = v.trim();
+      const hasComma = raw.includes(",");
+      const hasDot = raw.includes(".");
+      let normalized: string;
+
+      if (hasComma && hasDot) {
+        const lastComma = raw.lastIndexOf(",");
+        const lastDot = raw.lastIndexOf(".");
+        normalized = lastComma > lastDot
+          ? raw.replace(/\./g, "").replace(",", ".")
+          : raw.replace(/,/g, "");
+      } else if (hasComma) {
+        normalized = raw.replace(/\./g, "").replace(",", ".");
+      } else if (hasDot) {
+        const dotCount = (raw.match(/\./g) || []).length;
+        const digitsAfterLastDot = raw.length - raw.lastIndexOf(".") - 1;
+        normalized = (dotCount === 1 && digitsAfterLastDot <= 2)
+          ? raw
+          : raw.replace(/\./g, "");
+      } else {
+        normalized = raw;
+      }
+
       const parsed = Number(normalized);
       if (!isNaN(parsed)) return parsed;
     }
@@ -116,37 +102,110 @@ function firstNumber(...values: unknown[]): number | null {
   return null;
 }
 
-// Extrai os dados processuais destacados no sistema (vara, comarca, valor da
-// causa, data de abertura no tribunal e data de aceitação) a partir do
-// payload recebido do provedor (JusBrasil/WebJur/Escavador). Assim como o
-// restante deste handler, é uma extração "best effort" — TODO: confirmar os
-// nomes de campo reais quando houver um payload de exemplo do provedor.
-function extractProcessualData(payload: Record<string, unknown>): ProcessualData {
+// ---- JusBrasil (Monitoramento): array de envelopes de evento ----
+
+interface JusbrasilEventEnvelope {
+  target_number?: string;
+  evt_type?: number;
+  created_at?: string;
+  target_url?: string;
+  source_url?: string;
+  data?: unknown;
+  [key: string]: unknown;
+}
+
+function extractJusbrasilMovementRows(envelope: JusbrasilEventEnvelope): PublicationRow[] {
+  const processNumber = firstString(envelope.target_number);
+  const movements = Array.isArray(envelope.data) ? (envelope.data as unknown[]) : [];
+  const rows: PublicationRow[] = [];
+
+  for (const movement of movements) {
+    if (!Array.isArray(movement)) continue;
+    const [date, title, detail, , movementId] = movement as [string, string, string | null, unknown, string | number];
+    const titlePart = firstString(title) ?? "Movimentação";
+    const detailPart = firstString(detail);
+    const content = detailPart ? `${titlePart}: ${detailPart}` : titlePart;
+    const publishedDate = firstDate(date) ?? new Date().toISOString().slice(0, 10);
+    const externalId = `${processNumber ?? "sem-processo"}-${firstString(movementId) ?? publishedDate}`;
+
+    rows.push({
+      content,
+      publishedDate,
+      processNumber,
+      externalId,
+      rawPayload: { envelope, movement },
+    });
+  }
+
+  return rows;
+}
+
+function extractJusbrasilFallbackRow(envelope: JusbrasilEventEnvelope): PublicationRow {
+  const processNumber = firstString(envelope.target_number);
+  const publishedDate = firstDate(envelope.created_at) ?? new Date().toISOString().slice(0, 10);
   return {
+    content: `Evento JusBrasil (tipo ${envelope.evt_type ?? "desconhecido"}) — revisar manualmente.`,
+    publishedDate,
+    processNumber,
+    externalId: `${processNumber ?? "sem-processo"}-evt${envelope.evt_type ?? "?"}-${publishedDate}`,
+    rawPayload: envelope,
+  };
+}
+
+// ---- WebJur / Escavador: objeto único, extração "best effort" ----
+
+function extractGenericRow(payload: Record<string, unknown>): Omit<PublicationRow, "externalId"> {
+  // TODO: confirmar os nomes de campo reais quando houver payload de
+  // exemplo do provedor (WebJur/Escavador).
+  const content = firstString(
+    payload.conteudo, payload.content, payload.texto, payload.resumo, payload.description, payload.summary,
+  ) ?? (() => {
+    try { return JSON.stringify(payload).slice(0, 4000); }
+    catch { return "Publicação importada automaticamente (conteúdo não reconhecido, ver dados brutos)."; }
+  })();
+
+  const recognizedDate = firstDate(
+    payload.data_publicacao, payload.published_date, payload.data, payload.date,
+    (payload.publicacao as Record<string, unknown> | undefined)?.data,
+  );
+  // Quando o payload não traz um campo de data reconhecido, usamos a data
+  // de hoje só para satisfazer a coluna NOT NULL — isso NÃO é a data real
+  // da publicação. Marcamos `_date_estimated` no raw_payload (ver uso mais
+  // abaixo) para que isso fique auditável em vez de silenciosamente
+  // indistinguível de uma data real, já que pode afetar ordenação, prazos e
+  // relatórios por período.
+  const dateEstimated = recognizedDate === null;
+  const publishedDate = recognizedDate ?? new Date().toISOString().slice(0, 10);
+  if (dateEstimated) {
+    console.warn("publication-webhook: nenhuma data reconhecida no payload — usando data de importação como estimativa.");
+  }
+
+  const processNumber = firstString(
+    payload.numero_processo, payload.process_number, payload.processo, payload.numeroProcesso,
+    (payload.processo as Record<string, unknown> | undefined)?.numero,
+  );
+
+  const processualData: ProcessualData = {
     vara: firstString(payload.vara, payload.orgao_julgador, payload.orgaoJulgador),
     comarca: firstString(payload.comarca, payload.municipio, payload.foro),
     valor_causa: firstNumber(payload.valor_causa, payload.valorCausa, payload.valor_da_causa),
-    data_abertura_tribunal: firstDate(
-      payload.data_distribuicao,
-      payload.dataDistribuicao,
-      payload.data_abertura,
-      payload.dataAbertura,
-    ),
+    data_abertura_tribunal: firstDate(payload.data_distribuicao, payload.dataDistribuicao, payload.data_abertura, payload.dataAbertura),
     data_aceitacao: firstDate(payload.data_aceitacao, payload.dataAceitacao),
   };
+
+  const externalDeadline = firstDate(payload.prazo_externo, payload.prazoExterno, payload.prazo, payload.deadline);
+  const internalDeadline = firstDate(payload.prazo_interno, payload.prazoInterno);
+
+  const rawPayload = dateEstimated ? { ...payload, _date_estimated: true } : payload;
+
+  return { content, publishedDate, processNumber, processualData, externalDeadline, internalDeadline, rawPayload };
 }
 
-// Extrai os prazos externo e interno, quando o provedor já os fornecer, para
-// que os eventos correspondentes já nasçam na Agenda junto com a publicação
-// — TODO: confirmar os nomes de campo reais quando houver payload de exemplo.
-function extractDeadlines(payload: Record<string, unknown>): { external: string | null; internal: string | null } {
-  return {
-    external: firstDate(payload.prazo_externo, payload.prazoExterno, payload.prazo, payload.deadline),
-    internal: firstDate(payload.prazo_interno, payload.prazoInterno),
-  };
+function extractGenericExternalId(payload: Record<string, unknown>): string | null {
+  return firstString(payload.id, payload.publicacao_id, payload.movimentacao_id, payload.event_id, payload.uuid);
 }
 
-const sourceLabels: Record<string, string> = {
+const sourceLabels: Record<PublicationSource, string> = {
   jusbrasil: "JusBrasil",
   webjur: "WebJur",
   escavador: "Escavador",
@@ -162,8 +221,6 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "Método não permitido" }, 405);
 
   const url = new URL(req.url);
-  // O user_id vem como o último segmento do path após o nome da função:
-  // /publication-webhook/<user_id>
   const pathParts = url.pathname.split("/").filter(Boolean);
   const userId = pathParts[pathParts.length - 1];
   const sourceParam = (url.searchParams.get("source") || "").toLowerCase();
@@ -177,9 +234,7 @@ Deno.serve(async (req) => {
   const source = sourceParam as PublicationSource;
 
   const providedSecret = req.headers.get("x-webhook-secret") || url.searchParams.get("secret") || "";
-  if (!providedSecret) {
-    return json({ error: "Segredo do webhook ausente" }, 401);
-  }
+  if (!providedSecret) return json({ error: "Segredo do webhook ausente" }, 401);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
@@ -202,60 +257,79 @@ Deno.serve(async (req) => {
     return json({ error: "Não autorizado" }, 401);
   }
 
-  let payload: Record<string, unknown>;
+  let rawBody: unknown;
   try {
-    payload = await req.json();
+    rawBody = await req.json();
   } catch {
     return json({ error: "JSON inválido" }, 400);
   }
 
-  const content = extractContent(payload);
-  const publishedDate = extractPublicationDate(payload);
-  const processNumber = extractProcessNumber(payload);
-  const processualData = extractProcessualData(payload);
-  const deadlines = extractDeadlines(payload);
+  // Monta a lista de linhas de publicação a importar, dependendo da fonte.
+  const rows: PublicationRow[] = [];
 
-  // O provedor pode reenviar a mesma notificação sem um campo de id
-  // reconhecido (ver TODO em extractExternalId) — nesse caso, um
-  // external_id nulo faria a deduplicação (índice único em
-  // publications(user_id, source, external_id) WHERE external_id IS NOT
-  // NULL) não se aplicar, duplicando a publicação a cada reenvio. Por isso,
-  // quando nenhum id é reconhecido no payload, calculamos um identificador
-  // determinístico a partir do conteúdo (ver _shared/externalId.ts).
-  const externalId = extractExternalId(payload)
-    ?? await computeFallbackExternalId(["publication-webhook", source, userId, processNumber, publishedDate, content.slice(0, 200)]);
+  if (source === "jusbrasil") {
+    const envelopes: JusbrasilEventEnvelope[] = Array.isArray(rawBody)
+      ? (rawBody as JusbrasilEventEnvelope[])
+      : [rawBody as JusbrasilEventEnvelope];
 
-  // Abre (ou reaproveita) o Caso correspondente antes de gravar a
-  // publicação, para ela já nascer vinculada e aparecer em "Casos" — já com
-  // os dados processuais destacados (vara, comarca, valor da causa, datas),
-  // quando o provedor os fornecer.
-  const caseId = await findOrCreateCaseId(adminClient, userId, processNumber, processualData);
+    for (const envelope of envelopes) {
+      if (envelope?.evt_type === 1) {
+        rows.push(...extractJusbrasilMovementRows(envelope));
+      } else {
+        rows.push(extractJusbrasilFallbackRow(envelope));
+      }
+    }
+  } else {
+    const payload = (Array.isArray(rawBody) ? rawBody[0] : rawBody) as Record<string, unknown>;
+    const generic = extractGenericRow(payload ?? {});
+    const externalId = extractGenericExternalId(payload ?? {})
+      ?? await computeFallbackExternalId(["publication-webhook", source, userId, generic.processNumber, generic.publishedDate, generic.content.slice(0, 200)]);
+    rows.push({ ...generic, externalId });
+  }
 
-  const { data: inserted, error: insertError } = await adminClient
-    .from("publications")
-    .insert({
-      user_id: userId,
-      source,
-      content,
-      published_date: publishedDate,
-      process_number: processNumber,
-      case_id: caseId,
-      external_id: externalId,
-      external_deadline: deadlines.external,
-      internal_deadline: deadlines.internal,
-      raw_payload: payload,
-      imported_automatically: true,
-      status: "pending",
-      ...processualData,
-    })
-    .select("id")
-    .maybeSingle();
+  let imported = 0;
 
-  // Reenvio do mesmo evento pelo provedor (mesmo external_id) não é erro —
-  // apenas confirma recebimento sem duplicar o registro.
-  if (insertError && insertError.code !== "23505") {
-    console.error("Error inserting publication from webhook:", insertError);
-    return json({ error: "Erro ao gravar publicação" }, 500);
+  for (const row of rows) {
+    const caseId = await findOrCreateCaseId(adminClient, userId, row.processNumber, row.processualData);
+
+    const { data: inserted, error: insertError } = await adminClient
+      .from("publications")
+      .insert({
+        user_id: userId,
+        source,
+        content: row.content,
+        published_date: row.publishedDate,
+        process_number: row.processNumber,
+        case_id: caseId,
+        external_id: row.externalId,
+        external_deadline: row.externalDeadline ?? null,
+        internal_deadline: row.internalDeadline ?? null,
+        raw_payload: row.rawPayload,
+        imported_automatically: true,
+        status: "pending",
+        ...(row.processualData ?? {}),
+      })
+      .select("id")
+      .maybeSingle();
+
+    // Reenvio do mesmo evento pelo provedor (mesmo external_id) não é erro
+    // — apenas confirma recebimento sem duplicar o registro.
+    if (insertError && insertError.code !== "23505") {
+      console.error("Error inserting publication from webhook:", insertError);
+      continue;
+    }
+    if (inserted) {
+      imported += 1;
+      await syncDeadlineEvents(adminClient, userId, {
+        id: inserted.id,
+        case_id: caseId,
+        process_number: row.processNumber,
+        content: row.content,
+        external_deadline: row.externalDeadline ?? null,
+        internal_deadline: row.internalDeadline ?? null,
+      });
+      await attachDocumentIfAvailable(adminClient, inserted.id, (row.rawPayload ?? {}) as Record<string, unknown>);
+    }
   }
 
   await adminClient
@@ -263,30 +337,20 @@ Deno.serve(async (req) => {
     .update({ last_received_at: new Date().toISOString() })
     .eq("id", integration.id);
 
-  if (inserted) {
-    // Prazo(s) já viram evento na Agenda, e o documento do processo (quando
-    // o payload já o fornecer) é baixado e anexado à publicação — nenhum
-    // dos dois depende de ação manual depois.
-    await syncDeadlineEvents(adminClient, userId, {
-      id: inserted.id,
-      case_id: caseId,
-      process_number: processNumber,
-      content,
-      external_deadline: deadlines.external,
-      internal_deadline: deadlines.internal,
-    });
-    await attachDocumentIfAvailable(adminClient, inserted.id, payload);
-
+  // Uma notificação consolidada por chamada de webhook (um webhook do
+  // JusBrasil pode trazer ~12 eventos de uma vez — notificar um por um
+  // seria spam).
+  if (imported > 0) {
     const { error: notifError } = await adminClient.from("notifications").insert({
       user_id: userId,
-      title: `Nova publicação importada via ${sourceLabels[source] || source}`,
-      message: processNumber
-        ? `Processo ${processNumber}${caseId ? " — caso aberto automaticamente" : ""}`
-        : content.slice(0, 140),
+      title: `${imported} nova(s) publicação(ões) importada(s) via ${sourceLabels[source]}`,
+      message: rows[0]?.processNumber
+        ? `Inclui o processo ${rows[0].processNumber}`
+        : "Confira em Publicações.",
       link_tab: "publications",
     });
     if (notifError) console.error("Error creating notification:", notifError);
   }
 
-  return json({ success: true, duplicated: !inserted });
+  return json({ success: true, imported, received: rows.length });
 });

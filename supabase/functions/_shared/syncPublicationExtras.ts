@@ -1,23 +1,4 @@
-// Compartilhado entre publication-webhook e poll-jusbrasil: depois que uma
-// publicação é gravada, este módulo cuida de duas coisas que devem
-// acontecer automaticamente, sem depender de ação manual do advogado:
-//
-// 1) syncDeadlineEvents — cria (ou atualiza) na Agenda um evento para cada
-//    prazo da publicação (externo e interno), do mesmo jeito que acontece
-//    quando o prazo é lançado manualmente pela tela de Publicações (ver
-//    `syncPublicationDeadlineEvents` em src/hooks/usePublications.ts —
-//    mantenha os dois em sincronia se a lógica mudar).
-//
-// 2) attachDocumentIfAvailable — quando o payload da fonte externa já traz
-//    o documento/anexo do processo (PDF da petição, decisão etc.), baixa e
-//    guarda esse arquivo junto da publicação, para não depender de upload
-//    manual depois. O nome do campo com a URL do documento varia por
-//    provedor e não estava confirmado no momento em que este código foi
-//    escrito — TODO: ajustar a lista de campos abaixo contra um payload de
-//    exemplo real assim que houver acesso à conta ativa.
-
-// deno-lint-ignore no-explicit-any
-type AdminClient = any;
+import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 
 function firstString(...values: unknown[]): string | null {
   for (const v of values) {
@@ -27,7 +8,7 @@ function firstString(...values: unknown[]): string | null {
 }
 
 export async function syncDeadlineEvents(
-  adminClient: AdminClient,
+  adminClient: SupabaseClient,
   userId: string,
   publication: {
     id: string;
@@ -82,13 +63,10 @@ export async function syncDeadlineEvents(
 }
 
 export async function attachDocumentIfAvailable(
-  adminClient: AdminClient,
+  adminClient: SupabaseClient,
   publicationId: string,
-  // deno-lint-ignore no-explicit-any
-  payload: Record<string, any>,
+  payload: Record<string, unknown>,
 ): Promise<void> {
-  // TODO: confirmar o(s) nome(s) real(is) do campo com a URL do documento
-  // assim que houver um payload de exemplo real do provedor.
   const documentUrl = firstString(
     payload.documento_url,
     payload.documentoUrl,

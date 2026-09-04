@@ -14,6 +14,7 @@ export interface CreateReportResult {
   reportId: string;
 }
 
+// 1) Cria (ou atualiza) a definição do relatório de busca por nome.
 export async function createNameSearchReport(
   apiKey: string,
   name: string,
@@ -30,12 +31,15 @@ export async function createNameSearchReport(
   if (!response.ok) {
     throw new Error(`JusBrasil (criar relatório) respondeu ${response.status}: ${await response.text().catch(() => "")}`);
   }
+  // A resposta documentada é um número inteiro "puro" (o id do relatório).
   const raw = await response.text();
   const reportId = raw.trim().replace(/^"|"$/g, "");
   if (!reportId) throw new Error("JusBrasil não retornou o id do relatório criado.");
   return { reportId };
 }
 
+// 2) Inicia a busca paga (consome créditos da conta JusBrasil). Sem essa
+//    chamada o relatório fica parado, nunca processa.
 export async function startNameSearchBilling(apiKey: string, reportId: string): Promise<void> {
   const response = await fetch(
     `${JUSBRASIL_API_BASE_URL}/api/relatorio-judicial/live_report_def/${reportId}/bill_start_update`,
@@ -50,6 +54,8 @@ export async function startNameSearchBilling(apiKey: string, reportId: string): 
   }
 }
 
+// Formato "pandas" retornado pelo export: colunas separadas dos valores,
+// cada linha de `data` é uma tupla posicional correspondente a `columns`.
 interface PandasExport {
   columns: string[];
   index: number[];
@@ -82,6 +88,12 @@ export interface NameSearchRow {
   raw_data: Record<string, unknown>;
 }
 
+// Mapeia os nomes de coluna documentados pelo JusBrasil para os campos do
+// nosso banco. Vários nomes alternativos são aceitos porque a
+// documentação usa termos em português com pequenas variações e não havia,
+// no momento em que este código foi escrito, um payload de exemplo real
+// para confirmar a grafia exata — ajustar aqui assim que a primeira busca
+// real vier, se necessário.
 const FIELD_ALIASES: Record<keyof Omit<NameSearchRow, "raw_data">, string[]> = {
   process_number: ["numero_processo", "numero do processo", "número do processo", "processo"],
   tribunal: ["tribunal"],
@@ -142,6 +154,8 @@ function toStringOrNull(value: unknown): string | null {
   return s.length ? s : null;
 }
 
+// Converte o export "pandas" (colunas + linhas posicionais) numa lista de
+// objetos já no formato das nossas colunas.
 export function parsePandasExport(json: PandasExport): NameSearchRow[] {
   const columns = json.columns ?? [];
   return (json.data ?? []).map((rowValues) => {
@@ -180,12 +194,15 @@ export function parsePandasExport(json: PandasExport): NameSearchRow[] {
   });
 }
 
+// 3) Busca o resultado do relatório (formato pandas). Se ainda estiver
+//    processando, a API pode responder algo que não é o export completo —
+//    tratamos qualquer corpo sem "columns"/"data" como "ainda não pronto".
 export async function fetchNameSearchExport(apiKey: string, reportId: string): Promise<NameSearchRow[] | null> {
   const response = await fetch(
     `${JUSBRASIL_API_BASE_URL}/api/live_report_def/${reportId}/export?report_format=json&report_type=completo`,
     { headers: { "Authorization": `Bearer ${apiKey}` } },
   );
-  if (response.status === 404 || response.status === 202) return null;
+  if (response.status === 404 || response.status === 202) return null; // ainda processando
   if (!response.ok) {
     throw new Error(`JusBrasil (exportar relatório) respondeu ${response.status}: ${await response.text().catch(() => "")}`);
   }
@@ -194,6 +211,11 @@ export async function fetchNameSearchExport(apiKey: string, reportId: string): P
   return parsePandasExport(json as PandasExport);
 }
 
+// 4) Autos processuais — pede a listagem de peças/anexos de um processo
+//    específico pelo número CNJ. As URLs retornadas são válidas por até 7
+//    dias. `atualiza_tribunal_anexos: true` teria custo adicional segundo a
+//    documentação, então mantemos false (usa o que já está em cache do
+//    JusBrasil).
 export interface AutosDocument {
   nome: string;
   url: string;
@@ -209,6 +231,9 @@ export async function fetchCaseAutos(apiKey: string, cnj: string): Promise<Autos
     throw new Error(`JusBrasil (autos processuais) respondeu ${response.status}: ${await response.text().catch(() => "")}`);
   }
   const json = await response.json();
+  // Formato exato da lista de documentos não confirmado pela documentação
+  // pública (só o lado do pedido estava documentado) — aceitamos algumas
+  // formas prováveis e não quebramos se vier vazio.
   const rawList = Array.isArray(json) ? json : (json?.documentos ?? json?.anexos ?? json?.arquivos ?? []);
   if (!Array.isArray(rawList)) return [];
   return rawList
