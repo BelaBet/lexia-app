@@ -5,7 +5,11 @@ import reactRefresh from "eslint-plugin-react-refresh";
 import tseslint from "typescript-eslint";
 
 export default tseslint.config(
-  { ignores: ["dist"] },
+  // supabase/functions roda no runtime Deno (Edge Functions), não no Vite/React
+  // desta app — usa globals e comentários de lint próprios do Deno
+  // (`deno-lint-ignore`) que o ESLint não entende, então não faz sentido
+  // lintar esses arquivos aqui.
+  { ignores: ["dist", "supabase/functions"] },
   {
     extends: [js.configs.recommended, ...tseslint.configs.recommended],
     files: ["**/*.{ts,tsx}"],
