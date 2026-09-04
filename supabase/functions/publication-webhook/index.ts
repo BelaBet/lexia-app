@@ -27,7 +27,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
-import { findOrCreateCaseId } from "../_shared/findOrCreateCase.ts";
+import { findOrCreateCaseId, ProcessualData } from "../_shared/findOrCreateCase.ts";
 
 type PublicationSource = "jusbrasil" | "webjur" | "escavador" | "manual" | "outro";
 
@@ -92,6 +92,46 @@ function extractExternalId(payload: Record<string, unknown>): string | null {
     payload.event_id,
     payload.uuid,
   );
+}
+
+function firstDate(...values: unknown[]): string | null {
+  const raw = firstString(...values);
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  return isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+}
+
+function firstNumber(...values: unknown[]): number | null {
+  for (const v of values) {
+    if (typeof v === "number" && !isNaN(v)) return v;
+    if (typeof v === "string" && v.trim().length > 0) {
+      // Aceita tanto "12345.67" quanto formato brasileiro "12.345,67".
+      const normalized = v.trim().replace(/\./g, "").replace(",", ".");
+      const parsed = Number(normalized);
+      if (!isNaN(parsed)) return parsed;
+    }
+  }
+  return null;
+}
+
+// Extrai os dados processuais destacados no sistema (vara, comarca, valor da
+// causa, data de abertura no tribunal e data de aceitação) a partir do
+// payload recebido do provedor (JusBrasil/WebJur/Escavador). Assim como o
+// restante deste handler, é uma extração "best effort" — TODO: confirmar os
+// nomes de campo reais quando houver um payload de exemplo do provedor.
+function extractProcessualData(payload: Record<string, unknown>): ProcessualData {
+  return {
+    vara: firstString(payload.vara, payload.orgao_julgador, payload.orgaoJulgador),
+    comarca: firstString(payload.comarca, payload.municipio, payload.foro),
+    valor_causa: firstNumber(payload.valor_causa, payload.valorCausa, payload.valor_da_causa),
+    data_abertura_tribunal: firstDate(
+      payload.data_distribuicao,
+      payload.dataDistribuicao,
+      payload.data_abertura,
+      payload.dataAbertura,
+    ),
+    data_aceitacao: firstDate(payload.data_aceitacao, payload.dataAceitacao),
+  };
 }
 
 const sourceLabels: Record<string, string> = {
@@ -161,10 +201,13 @@ Deno.serve(async (req) => {
   const content = extractContent(payload);
   const publishedDate = extractPublicationDate(payload);
   const processNumber = extractProcessNumber(payload);
+  const processualData = extractProcessualData(payload);
 
   // Abre (ou reaproveita) o Caso correspondente antes de gravar a
-  // publicação, para ela já nascer vinculada e aparecer em "Casos".
-  const caseId = await findOrCreateCaseId(adminClient, userId, processNumber);
+  // publicação, para ela já nascer vinculada e aparecer em "Casos" — já com
+  // os dados processuais destacados (vara, comarca, valor da causa, datas),
+  // quando o provedor os fornecer.
+  const caseId = await findOrCreateCaseId(adminClient, userId, processNumber, processualData);
 
   const { data: inserted, error: insertError } = await adminClient
     .from("publications")
@@ -179,6 +222,7 @@ Deno.serve(async (req) => {
       raw_payload: payload,
       imported_automatically: true,
       status: "pending",
+      ...processualData,
     })
     .select("id")
     .maybeSingle();
