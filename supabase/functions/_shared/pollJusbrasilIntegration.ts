@@ -13,6 +13,7 @@
 
 import { findOrCreateCaseId, ProcessualData } from "./findOrCreateCase.ts";
 import { syncDeadlineEvents, attachDocumentIfAvailable } from "./syncPublicationExtras.ts";
+import { computeFallbackExternalId } from "./externalId.ts";
 
 // deno-lint-ignore no-explicit-any
 type AdminClient = any;
@@ -208,13 +209,21 @@ export async function pollJusbrasilIntegration(
     let imported = 0;
 
     for (const item of items) {
-      const externalId = firstString(item.id);
       const content = firstString(item.conteudo, item.resumo) || JSON.stringify(item).slice(0, 4000);
       const processNumber = firstString(item.numero_processo, item.processo);
       const publishedDateRaw = firstString(item.data_publicacao, item.data);
       const publishedDate = publishedDateRaw && !isNaN(new Date(publishedDateRaw).getTime())
         ? new Date(publishedDateRaw).toISOString().slice(0, 10)
         : new Date().toISOString().slice(0, 10);
+
+      // A consulta à API não usa cursor/timestamp (ver TODO em
+      // fetchJusbrasilNewItems), então o mesmo item pode voltar em buscas
+      // seguintes. Sem um `item.id` reconhecido, um external_id nulo faria a
+      // deduplicação não se aplicar e reimportaria o mesmo item a cada
+      // execução — por isso, nesse caso, calculamos um id determinístico a
+      // partir do conteúdo do próprio item (ver _shared/externalId.ts).
+      const externalId = firstString(item.id)
+        ?? await computeFallbackExternalId(["jusbrasil", integration.user_id, processNumber, publishedDate, content.slice(0, 200)]);
 
       const processualData = extractProcessualData(item);
       const deadlines = extractDeadlines(item);

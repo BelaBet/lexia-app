@@ -3,7 +3,7 @@ import { FolderOpen, Plus, Search, Filter, MoreVertical, Calendar, FileText, Use
 import { generateIntakeChecklistPdf } from "@/lib/intakeChecklistPdf";
 import { useCases, useCreateCase, useDeleteCase, Case, CreateCaseData } from "@/hooks/useCases";
 import { useDocuments } from "@/hooks/useDocuments";
-import { format, isAfter, isBefore, startOfDay, endOfDay, subDays, subMonths } from "date-fns";
+import { format, isAfter, isBefore, startOfDay, endOfDay, subDays, subMonths, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   Dialog,
@@ -746,7 +746,7 @@ export function CasesManager() {
                       <p className="text-xs text-muted-foreground">Abertura no Tribunal</p>
                       <p className="font-medium">
                         {selectedCase.data_abertura_tribunal
-                          ? format(new Date(selectedCase.data_abertura_tribunal), "dd/MM/yyyy", { locale: ptBR })
+                          ? format(parseISO(selectedCase.data_abertura_tribunal), "dd/MM/yyyy", { locale: ptBR })
                           : "—"}
                       </p>
                     </div>
@@ -754,7 +754,7 @@ export function CasesManager() {
                       <p className="text-xs text-muted-foreground">Data de Aceitação</p>
                       <p className="font-medium">
                         {selectedCase.data_aceitacao
-                          ? format(new Date(selectedCase.data_aceitacao), "dd/MM/yyyy", { locale: ptBR })
+                          ? format(parseISO(selectedCase.data_aceitacao), "dd/MM/yyyy", { locale: ptBR })
                           : "—"}
                       </p>
                     </div>

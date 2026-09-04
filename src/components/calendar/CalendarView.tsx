@@ -144,7 +144,7 @@ export function CalendarView() {
   };
 
   const getEventsForDay = (day: Date) => {
-    return events.filter((e) => isSameDay(new Date(e.event_date), day));
+    return events.filter((e) => isSameDay(parseISO(e.event_date), day));
   };
 
   const getChecklistsForDay = (day: Date) => {
@@ -462,7 +462,7 @@ export function CalendarView() {
                       {eventTypeConfig[event.type as keyof typeof eventTypeConfig]?.label || event.type}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                      {format(new Date(event.event_date), "dd MMM", { locale: ptBR })}
+                      {format(parseISO(event.event_date), "dd MMM", { locale: ptBR })}
                     </span>
                   </div>
                   <p className="font-medium text-sm mb-2">{event.title}</p>

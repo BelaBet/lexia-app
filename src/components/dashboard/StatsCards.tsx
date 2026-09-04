@@ -2,6 +2,12 @@ import { FileText, FolderOpen, Clock, CheckCircle } from "lucide-react";
 import { useDocuments } from "@/hooks/useDocuments";
 import { useCases } from "@/hooks/useCases";
 import { useEvents } from "@/hooks/useEvents";
+import { parseISO, startOfDay, differenceInCalendarDays } from "date-fns";
+
+// Tipos de evento que contam como "prazo" para o card de Prazos Próximos —
+// inclui os prazos processuais criados automaticamente a partir de
+// publicações (externo/interno), além do tipo genérico "deadline".
+const DEADLINE_EVENT_TYPES = new Set(["deadline", "prazo_externo", "prazo_interno"]);
 
 export function StatsCards() {
   const { data: documents = [] } = useDocuments();
@@ -16,19 +22,21 @@ export function StatsCards() {
   // (status "closed"), mesma origem de dados.
   const archivedCases = cases.filter((c) => c.status === "closed").length;
   
-  const today = new Date();
+  // event_date é uma coluna DATE (sem timezone) — usar parseISO em vez de
+  // `new Date(string)` evita que o dia mude por causa do fuso horário local
+  // (Brasil é UTC-3, então `new Date("2026-09-10")` vira 09/09 à noite aqui).
+  const today = startOfDay(new Date());
   const upcomingEvents = events.filter((e) => {
-    const eventDate = new Date(e.event_date);
-    const diffDays = Math.ceil((eventDate.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
+    const diffDays = differenceInCalendarDays(parseISO(e.event_date), today);
     return diffDays >= 0 && diffDays <= 7;
   }).length;
 
   const nextDeadline = events
-    .filter((e) => e.type === "deadline" && new Date(e.event_date) >= today)
-    .sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime())[0];
+    .filter((e) => DEADLINE_EVENT_TYPES.has(e.type) && differenceInCalendarDays(parseISO(e.event_date), today) >= 0)
+    .sort((a, b) => parseISO(a.event_date).getTime() - parseISO(b.event_date).getTime())[0];
 
   const nextDeadlineDays = nextDeadline
-    ? Math.ceil((new Date(nextDeadline.event_date).getTime() - today.getTime()) / (1000 * 60 * 60 * 24))
+    ? differenceInCalendarDays(parseISO(nextDeadline.event_date), today)
     : null;
 
   const stats = [

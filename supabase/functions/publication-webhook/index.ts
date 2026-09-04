@@ -29,6 +29,7 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
 import { findOrCreateCaseId, ProcessualData } from "../_shared/findOrCreateCase.ts";
 import { syncDeadlineEvents, attachDocumentIfAvailable } from "../_shared/syncPublicationExtras.ts";
+import { computeFallbackExternalId } from "../_shared/externalId.ts";
 
 type PublicationSource = "jusbrasil" | "webjur" | "escavador" | "manual" | "outro";
 
@@ -208,12 +209,21 @@ Deno.serve(async (req) => {
     return json({ error: "JSON inválido" }, 400);
   }
 
-  const externalId = extractExternalId(payload);
   const content = extractContent(payload);
   const publishedDate = extractPublicationDate(payload);
   const processNumber = extractProcessNumber(payload);
   const processualData = extractProcessualData(payload);
   const deadlines = extractDeadlines(payload);
+
+  // O provedor pode reenviar a mesma notificação sem um campo de id
+  // reconhecido (ver TODO em extractExternalId) — nesse caso, um
+  // external_id nulo faria a deduplicação (índice único em
+  // publications(user_id, source, external_id) WHERE external_id IS NOT
+  // NULL) não se aplicar, duplicando a publicação a cada reenvio. Por isso,
+  // quando nenhum id é reconhecido no payload, calculamos um identificador
+  // determinístico a partir do conteúdo (ver _shared/externalId.ts).
+  const externalId = extractExternalId(payload)
+    ?? await computeFallbackExternalId(["publication-webhook", source, userId, processNumber, publishedDate, content.slice(0, 200)]);
 
   // Abre (ou reaproveita) o Caso correspondente antes de gravar a
   // publicação, para ela já nascer vinculada e aparecer em "Casos" — já com

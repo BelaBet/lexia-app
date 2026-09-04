@@ -11,6 +11,7 @@ const items = [
   ["dashboard", "Dashboard"],
   ["publications", "Publicações"],
   ["cases", "Processos"],
+  ["process-search", "Buscar Processos"],
   ["calendar", "Agenda"],
   ["documents", "Documentos"],
   ["assistant", "Assistente IA"],
