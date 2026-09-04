@@ -14,6 +14,7 @@ const items = [
   ["cases", "Casos"],
   ["calendar", "Agenda"],
   ["publications", "Publicações"],
+  ["financial-counter", "Contador Financeiro"],
   ["checklists", "Checklists"],
   ["pdf-reader", "Leitor PDF"],
   ["document-creator", "Criar Documento"],

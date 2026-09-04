@@ -6,7 +6,7 @@ import { Switch } from "@/components/ui/switch";
 import { Input } from "@/components/ui/input";
 import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
-import { Copy, Check, RefreshCw, Trash2, Radio, Loader2, Search, AlertTriangle } from "lucide-react";
+import { Copy, Check, RefreshCw, Trash2, Radio, Loader2, Search, AlertTriangle, PlayCircle, DollarSign } from "lucide-react";
 import {
   usePublicationIntegrations,
   useCreatePublicationIntegration,
@@ -14,6 +14,7 @@ import {
   useTogglePublicationIntegration,
   useUpdatePublicationIntegrationConfig,
   useDeletePublicationIntegration,
+  useTriggerManualSearch,
   PublicationIntegration,
   WebhookSource,
 } from "@/hooks/usePublicationIntegrations";
@@ -70,22 +71,30 @@ function CopyField({ label, value }: { label: string; value: string }) {
 
 function JusbrasilPollingConfig({ integration }: { integration: PublicationIntegration }) {
   const updateConfig = useUpdatePublicationIntegrationConfig();
+  const triggerManualSearch = useTriggerManualSearch();
   const [apiKey, setApiKey] = useState(integration.api_key || "");
   const [document, setDocument] = useState(integration.monitor_document || "");
   const [oab, setOab] = useState(integration.monitor_oab || "");
+  const [pricePerSearch, setPricePerSearch] = useState(
+    integration.price_per_search != null ? String(integration.price_per_search) : "",
+  );
 
   useEffect(() => {
     setApiKey(integration.api_key || "");
     setDocument(integration.monitor_document || "");
     setOab(integration.monitor_oab || "");
-  }, [integration.id, integration.api_key, integration.monitor_document, integration.monitor_oab]);
+    setPricePerSearch(integration.price_per_search != null ? String(integration.price_per_search) : "");
+  }, [integration.id, integration.api_key, integration.monitor_document, integration.monitor_oab, integration.price_per_search]);
 
   const handleSave = () => {
+    const normalizedPrice = pricePerSearch.trim().replace(",", ".");
+    const parsedPrice = normalizedPrice ? Number(normalizedPrice) : null;
     updateConfig.mutate({
       id: integration.id,
       api_key: apiKey || null,
       monitor_document: document || null,
       monitor_oab: oab || null,
+      price_per_search: parsedPrice != null && !isNaN(parsedPrice) ? parsedPrice : null,
     });
   };
 
@@ -131,6 +140,23 @@ function JusbrasilPollingConfig({ integration }: { integration: PublicationInteg
         </div>
       </div>
 
+      <div className="space-y-1">
+        <Label htmlFor={`price-${integration.id}`} className="text-xs flex items-center gap-1">
+          <DollarSign className="w-3 h-3" /> Valor cobrado por pesquisa (R$)
+        </Label>
+        <Input
+          id={`price-${integration.id}`}
+          value={pricePerSearch}
+          onChange={(e) => setPricePerSearch(e.target.value)}
+          placeholder="0,00"
+          inputMode="decimal"
+        />
+        <p className="text-[11px] text-muted-foreground">
+          Usado no Contador Financeiro: cada busca ativa (diária) ou busca manual deste CPF/CNPJ/OAB soma esse
+          valor ao total cobrado do cliente.
+        </p>
+      </div>
+
       {integration.last_poll_status === "error" && integration.last_poll_error && (
         <div className="flex items-start gap-1.5 text-xs text-destructive bg-destructive/10 rounded p-2">
           <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" />
@@ -138,14 +164,31 @@ function JusbrasilPollingConfig({ integration }: { integration: PublicationInteg
         </div>
       )}
 
-      <Button type="button" size="sm" variant="outline" onClick={handleSave} disabled={updateConfig.isPending}>
-        {updateConfig.isPending && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
-        Salvar configuração de busca ativa
-      </Button>
+      <div className="flex flex-wrap gap-2">
+        <Button type="button" size="sm" variant="outline" onClick={handleSave} disabled={updateConfig.isPending}>
+          {updateConfig.isPending && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}
+          Salvar configuração de busca ativa
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant="secondary"
+          className="gap-1.5"
+          onClick={() => triggerManualSearch.mutate(integration.id)}
+          disabled={triggerManualSearch.isPending || !integration.api_key || (!integration.monitor_document && !integration.monitor_oab)}
+        >
+          {triggerManualSearch.isPending ? (
+            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+          ) : (
+            <PlayCircle className="w-3.5 h-3.5" />
+          )}
+          Buscar agora
+        </Button>
+      </div>
 
       <p className="text-[11px] text-muted-foreground">
         Depois de salvar, é preciso ativar o agendamento uma única vez (script SQL fornecido separadamente,
-        rodado no SQL Editor do Supabase).
+        rodado no SQL Editor do Supabase). "Buscar agora" roda a busca imediatamente, fora do agendamento.
       </p>
     </div>
   );

@@ -12,6 +12,7 @@ export interface PublicationIntegration {
   api_key: string | null;
   monitor_document: string | null;
   monitor_oab: string | null;
+  price_per_search: number | null;
   last_poll_status: string | null;
   last_poll_error: string | null;
   is_active: boolean;
@@ -114,6 +115,7 @@ export interface UpdatePublicationIntegrationInput {
   api_key?: string | null;
   monitor_document?: string | null;
   monitor_oab?: string | null;
+  price_per_search?: number | null;
 }
 
 export function useUpdatePublicationIntegrationConfig() {
@@ -138,6 +140,41 @@ export function useUpdatePublicationIntegrationConfig() {
     onError: (error) => {
       console.error("Error updating publication integration config:", error);
       toast.error("Erro ao salvar configuração");
+    },
+  });
+}
+
+// Dispara a edge function manual-process-search para buscar imediatamente
+// (fora do agendamento diário) por novidades na integração JusBrasil
+// informada. Cada chamada gera um registro no contador financeiro de
+// pesquisas processuais (ver useProcessSearchCharges).
+export function useTriggerManualSearch() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (integrationId: string) => {
+      const { data, error } = await supabase.functions.invoke("manual-process-search", {
+        body: { integration_id: integrationId },
+      });
+      if (error) throw error;
+      if (data?.error) throw new Error(data.error);
+      return data as { success: boolean; imported: number };
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["publication_integrations"] });
+      queryClient.invalidateQueries({ queryKey: ["publications"] });
+      queryClient.invalidateQueries({ queryKey: ["cases"] });
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+      queryClient.invalidateQueries({ queryKey: ["process_search_charges"] });
+      toast.success(
+        data.imported > 0
+          ? `Busca concluída: ${data.imported} novidade(s) importada(s).`
+          : "Busca concluída: nenhuma novidade encontrada.",
+      );
+    },
+    onError: (error: Error) => {
+      console.error("Error triggering manual search:", error);
+      toast.error(error.message || "Erro ao buscar agora");
     },
   });
 }

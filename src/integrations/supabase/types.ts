@@ -1143,6 +1143,7 @@ export type Database = {
           last_received_at: string | null
           monitor_document: string | null
           monitor_oab: string | null
+          price_per_search: number | null
           source: Database["public"]["Enums"]["publication_source"]
           updated_at: string
           user_id: string
@@ -1158,6 +1159,7 @@ export type Database = {
           last_received_at?: string | null
           monitor_document?: string | null
           monitor_oab?: string | null
+          price_per_search?: number | null
           source: Database["public"]["Enums"]["publication_source"]
           updated_at?: string
           user_id: string
@@ -1173,12 +1175,60 @@ export type Database = {
           last_received_at?: string | null
           monitor_document?: string | null
           monitor_oab?: string | null
+          price_per_search?: number | null
           source?: Database["public"]["Enums"]["publication_source"]
           updated_at?: string
           user_id?: string
           webhook_secret?: string
         }
         Relationships: []
+      }
+      process_search_charges: {
+        Row: {
+          charged_amount: number
+          created_at: string
+          document: string
+          document_type: string
+          id: string
+          integration_id: string | null
+          search_type: string
+          source: string
+          unit_price: number
+          user_id: string
+        }
+        Insert: {
+          charged_amount?: number
+          created_at?: string
+          document: string
+          document_type?: string
+          id?: string
+          integration_id?: string | null
+          search_type: string
+          source: string
+          unit_price?: number
+          user_id: string
+        }
+        Update: {
+          charged_amount?: number
+          created_at?: string
+          document?: string
+          document_type?: string
+          id?: string
+          integration_id?: string | null
+          search_type?: string
+          source?: string
+          unit_price?: number
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "process_search_charges_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "publication_integrations"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       publications: {
         Row: {
