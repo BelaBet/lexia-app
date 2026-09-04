@@ -1230,6 +1230,256 @@ export type Database = {
           },
         ]
       }
+      process_search_documents: {
+        Row: {
+          created_at: string
+          file_name: string
+          file_path: string
+          file_size: number | null
+          file_type: string | null
+          id: string
+          result_id: string
+          source_url: string | null
+          user_id: string
+        }
+        Insert: {
+          created_at?: string
+          file_name: string
+          file_path: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          result_id: string
+          source_url?: string | null
+          user_id: string
+        }
+        Update: {
+          created_at?: string
+          file_name?: string
+          file_path?: string
+          file_size?: number | null
+          file_type?: string | null
+          id?: string
+          result_id?: string
+          source_url?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "process_search_documents_result_id_fkey"
+            columns: ["result_id"]
+            isOneToOne: false
+            referencedRelation: "process_search_results"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      process_search_reports: {
+        Row: {
+          billed_at: string | null
+          completed_at: string | null
+          created_at: string
+          distribuido_from: string | null
+          distribuido_to: string | null
+          error_message: string | null
+          id: string
+          integration_id: string | null
+          jusbrasil_report_id: string | null
+          requested_at: string
+          result_count: number
+          search_name: string
+          status: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          billed_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          distribuido_from?: string | null
+          distribuido_to?: string | null
+          error_message?: string | null
+          id?: string
+          integration_id?: string | null
+          jusbrasil_report_id?: string | null
+          requested_at?: string
+          result_count?: number
+          search_name: string
+          status?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          billed_at?: string | null
+          completed_at?: string | null
+          created_at?: string
+          distribuido_from?: string | null
+          distribuido_to?: string | null
+          error_message?: string | null
+          id?: string
+          integration_id?: string | null
+          jusbrasil_report_id?: string | null
+          requested_at?: string
+          result_count?: number
+          search_name?: string
+          status?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "process_search_reports_integration_id_fkey"
+            columns: ["integration_id"]
+            isOneToOne: false
+            referencedRelation: "publication_integrations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      process_search_results: {
+        Row: {
+          advogados: Json | null
+          area: string | null
+          autos_download_locked: boolean
+          autos_downloaded_at: string | null
+          autos_error: string | null
+          autos_ready_at: string | null
+          autos_requested_at: string | null
+          autos_status: string
+          autos_unlock_reason: string | null
+          autos_unlocked_at: string | null
+          autos_unlocked_by: string | null
+          case_id: string | null
+          comarca: string | null
+          created_at: string
+          data_distribuicao: string | null
+          data_extincao: string | null
+          foro: string | null
+          id: string
+          juiz: string | null
+          natureza: string | null
+          notes: string | null
+          partes_ativas: Json | null
+          partes_passivas: Json | null
+          pipeline_stage: string
+          process_number: string | null
+          raw_data: Json | null
+          report_id: string
+          sentenca_data: string | null
+          sentenca_texto: string | null
+          status_processual: string | null
+          total_movimentacoes: number | null
+          tribunal: string | null
+          ultima_movimentacao_data: string | null
+          ultima_movimentacao_texto: string | null
+          ultima_movimentacao_tipo: string | null
+          updated_at: string
+          url_detalhes: string | null
+          user_id: string
+          valor: number | null
+          vara: string | null
+        }
+        Insert: {
+          advogados?: Json | null
+          area?: string | null
+          autos_download_locked?: boolean
+          autos_downloaded_at?: string | null
+          autos_error?: string | null
+          autos_ready_at?: string | null
+          autos_requested_at?: string | null
+          autos_status?: string
+          autos_unlock_reason?: string | null
+          autos_unlocked_at?: string | null
+          autos_unlocked_by?: string | null
+          case_id?: string | null
+          comarca?: string | null
+          created_at?: string
+          data_distribuicao?: string | null
+          data_extincao?: string | null
+          foro?: string | null
+          id?: string
+          juiz?: string | null
+          natureza?: string | null
+          notes?: string | null
+          partes_ativas?: Json | null
+          partes_passivas?: Json | null
+          pipeline_stage?: string
+          process_number?: string | null
+          raw_data?: Json | null
+          report_id: string
+          sentenca_data?: string | null
+          sentenca_texto?: string | null
+          status_processual?: string | null
+          total_movimentacoes?: number | null
+          tribunal?: string | null
+          ultima_movimentacao_data?: string | null
+          ultima_movimentacao_texto?: string | null
+          ultima_movimentacao_tipo?: string | null
+          updated_at?: string
+          url_detalhes?: string | null
+          user_id: string
+          valor?: number | null
+          vara?: string | null
+        }
+        Update: {
+          advogados?: Json | null
+          area?: string | null
+          autos_download_locked?: boolean
+          autos_downloaded_at?: string | null
+          autos_error?: string | null
+          autos_ready_at?: string | null
+          autos_requested_at?: string | null
+          autos_status?: string
+          autos_unlock_reason?: string | null
+          autos_unlocked_at?: string | null
+          autos_unlocked_by?: string | null
+          case_id?: string | null
+          comarca?: string | null
+          created_at?: string
+          data_distribuicao?: string | null
+          data_extincao?: string | null
+          foro?: string | null
+          id?: string
+          juiz?: string | null
+          natureza?: string | null
+          notes?: string | null
+          partes_ativas?: Json | null
+          partes_passivas?: Json | null
+          pipeline_stage?: string
+          process_number?: string | null
+          raw_data?: Json | null
+          report_id?: string
+          sentenca_data?: string | null
+          sentenca_texto?: string | null
+          status_processual?: string | null
+          total_movimentacoes?: number | null
+          tribunal?: string | null
+          ultima_movimentacao_data?: string | null
+          ultima_movimentacao_texto?: string | null
+          ultima_movimentacao_tipo?: string | null
+          updated_at?: string
+          url_detalhes?: string | null
+          user_id?: string
+          valor?: number | null
+          vara?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "process_search_results_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "process_search_results_report_id_fkey"
+            columns: ["report_id"]
+            isOneToOne: false
+            referencedRelation: "process_search_reports"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       publications: {
         Row: {
           case_id: string | null

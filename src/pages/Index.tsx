@@ -20,6 +20,7 @@ import { ChecklistsManager } from "@/components/checklists/ChecklistsManager";
 import { GuidePage } from "@/components/guide/GuidePage";
 import { PublicationsManager } from "@/components/publications/PublicationsManager";
 import { ProcessSearchFinancialCounter } from "@/components/financial/ProcessSearchFinancialCounter";
+import { ProcessSearchCRM } from "@/components/processSearch/ProcessSearchCRM";
 import { BrandingSettings } from "@/components/settings/BrandingSettings";
 import Sales from "@/pages/Sales";
 import { useAuth } from "@/contexts/AuthContext";
@@ -34,6 +35,7 @@ const Index = () => {
       case "document-creator": return <DocumentCreator />;
       case "documents": return <DocumentsPage />;
       case "cases": return <CasesManager />;
+      case "process-search": return <ProcessSearchCRM />;
       case "checklists": return <ChecklistsManager />;
       case "guide": return <GuidePage />;
       case "calendar": return <CalendarView />;
