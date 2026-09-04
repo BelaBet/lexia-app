@@ -8,8 +8,13 @@ export function StatsCards() {
   const { data: cases = [] } = useCases();
   const { data: events = [] } = useEvents();
 
-  const activeCases = cases.filter((c) => c.status === "active").length;
-  const completedDocs = documents.filter((d) => d.status === "completed").length;
+  // "Processos Abertos" = casos ainda não encerrados (status diferente de
+  // "closed"), refletindo os dados de cada caso puxados via API de
+  // monitoramento de processos (JusBrasil/WebJur/Escavador) de cada empresa.
+  const openCases = cases.filter((c) => c.status !== "closed").length;
+  // "Processo Baixado" = casos com baixa/encerramento no tribunal
+  // (status "closed"), mesma origem de dados.
+  const archivedCases = cases.filter((c) => c.status === "closed").length;
   
   const today = new Date();
   const upcomingEvents = events.filter((e) => {
@@ -39,8 +44,8 @@ export function StatsCards() {
       color: "text-primary",
     },
     {
-      label: "Casos Ativos",
-      value: activeCases.toString(),
+      label: "Processos Abertos",
+      value: openCases.toString(),
       icon: FolderOpen,
       change: cases.length > 0 ? `${cases.length} total` : "Nenhum ainda",
       color: "text-gold-warm",
@@ -53,10 +58,10 @@ export function StatsCards() {
       color: "text-warning",
     },
     {
-      label: "Concluídos",
-      value: completedDocs.toString(),
+      label: "Processo Baixado",
+      value: archivedCases.toString(),
       icon: CheckCircle,
-      change: "Documentos finalizados",
+      change: "Encerrados no tribunal",
       color: "text-success",
     },
   ];
