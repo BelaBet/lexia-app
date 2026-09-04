@@ -18,7 +18,7 @@ export function StatsCards() {
   // "closed"), refletindo os dados de cada caso puxados via API de
   // monitoramento de processos (JusBrasil/WebJur/Escavador) de cada empresa.
   const openCases = cases.filter((c) => c.status !== "closed").length;
-  // "Processo Baixado" = casos com baixa/encerramento no tribunal
+  // "Processos Baixados" = casos com baixa/encerramento no tribunal
   // (status "closed"), mesma origem de dados.
   const archivedCases = cases.filter((c) => c.status === "closed").length;
   
@@ -50,27 +50,31 @@ export function StatsCards() {
         return created >= weekAgo;
       }).length} esta semana` : "Nenhum ainda",
       color: "text-primary",
+      valueColor: "",
     },
     {
       label: "Processos Abertos",
       value: openCases.toString(),
       icon: FolderOpen,
       change: cases.length > 0 ? `${cases.length} total` : "Nenhum ainda",
-      color: "text-gold-warm",
+      color: "text-green-400",
+      valueColor: "text-green-400",
     },
     {
       label: "Prazos Próximos",
       value: upcomingEvents.toString(),
       icon: Clock,
       change: nextDeadlineDays !== null ? `Próximo: ${nextDeadlineDays} dias` : "Sem prazos",
-      color: "text-warning",
+      color: "text-red-600",
+      valueColor: "text-red-600",
     },
     {
-      label: "Processo Baixado",
+      label: "Processos Baixados",
       value: archivedCases.toString(),
       icon: CheckCircle,
       change: "Encerrados no tribunal",
-      color: "text-success",
+      color: "text-purple-900",
+      valueColor: "text-purple-900",
     },
   ];
 
@@ -89,7 +93,7 @@ export function StatsCards() {
             </span>
           </div>
           <div className="mt-4">
-            <p className="stat-value">{stat.value}</p>
+            <p className={`stat-value ${stat.valueColor}`}>{stat.value}</p>
             <p className="stat-label">{stat.label}</p>
           </div>
         </div>
