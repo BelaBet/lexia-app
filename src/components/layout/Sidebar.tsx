@@ -23,7 +23,8 @@ import {
   ListChecks,
   BookOpen,
   FileSearch,
-  Palette
+  Palette,
+  Wallet
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -59,6 +60,7 @@ const navItems = [
   { id: "calendar", label: "Agenda", icon: Calendar },
   { id: "guide", label: "Guia de Uso", icon: BookOpen },
   { id: "publications", label: "Publicações", icon: FileSearch },
+  { id: "financial-counter", label: "Contador Financeiro", icon: Wallet },
 ];
 const settingsSubItems = [
   { id: "settings", label: "Preferências", icon: Settings },
