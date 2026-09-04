@@ -148,7 +148,7 @@ export function BrandingSettings() {
                 id="brand-tagline"
                 value={tagline}
                 onChange={(e) => setTagline(e.target.value)}
-                placeholder="Assistente Jurídico Inteligente"
+                placeholder="Gestor Inteligente de Processos"
               />
             </div>
           </div>
