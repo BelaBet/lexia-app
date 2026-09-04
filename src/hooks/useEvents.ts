@@ -47,6 +47,13 @@ export interface CalendarEvent {
   attachments?: EventAttachment[];
 }
 
+// Evento criado automaticamente via API/integração — usado para decidir
+// se mostra o botão de excluir ou o aviso de bloqueio. O banco também
+// bloqueia a exclusão desses eventos (ver trigger trg_prevent_delete_api_event).
+export function isApiCreatedEvent(event: Pick<CalendarEvent, "publication_id">): boolean {
+  return event.publication_id !== null;
+}
+
 export interface CreateEventData {
   title: string;
   description?: string;
@@ -184,25 +191,57 @@ export function useCreateEvent() {
   });
 }
 
+export interface UpdateEventData {
+  id: string;
+  title?: string;
+  description?: string | null;
+  event_date?: string;
+  event_time?: string;
+  type?: string;
+  location?: string | null;
+  meeting_link?: string | null;
+  notification_enabled?: boolean;
+  notification_minutes_before?: number;
+  status?: EventTaskStatus;
+  priority?: EventTaskPriority;
+}
+
 export function useUpdateEvent() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async ({ id, status, priority }: { id: string; status?: EventTaskStatus; priority?: EventTaskPriority }) => {
-      const updates: Record<string, unknown> = {};
-      if (status !== undefined) updates.status = status;
-      if (priority !== undefined) updates.priority = priority;
-
-      const { data, error } = await supabase.from("events").update(updates).eq("id", id).select().single();
+    mutationFn: async ({ id, ...changes }: UpdateEventData) => {
+      const { data, error } = await supabase.from("events").update(changes).eq("id", id).select().single();
       if (error) throw error;
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["events"] });
+      toast.success("Evento atualizado!");
     },
     onError: (error) => {
       console.error("Error updating event:", error);
-      toast.error("Erro ao atualizar tarefa");
+      toast.error("Erro ao atualizar evento");
+    },
+  });
+}
+
+// Atalho pra marcar concluído/reabrir sem passar pelo diálogo de edição
+// inteiro — usado pelo círculo clicável nas listas de eventos.
+export function useToggleEventStatus() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, status }: { id: string; status: EventTaskStatus }) => {
+      const { error } = await supabase.from("events").update({ status }).eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+    },
+    onError: (error) => {
+      console.error("Error toggling event status:", error);
+      toast.error("Erro ao atualizar status do evento");
     },
   });
 }
@@ -211,19 +250,26 @@ export function useDeleteEvent() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: async (id: string) => {
+    mutationFn: async (event: Pick<CalendarEvent, "id" | "publication_id">) => {
+      // Reforço no front (o banco já bloqueia isso de qualquer forma, ver
+      // trigger trg_prevent_delete_api_event): eventos criados
+      // automaticamente pela integração não podem ser excluídos.
+      if (event.publication_id) {
+        throw new Error("Este evento foi criado automaticamente por uma integração e não pode ser excluído.");
+      }
+
       // Delete attachments from storage first
       const { data: attachments } = await supabase
         .from("event_attachments")
         .select("file_path")
-        .eq("event_id", id);
+        .eq("event_id", event.id);
 
       if (attachments && attachments.length > 0) {
         const filePaths = attachments.map((a) => a.file_path);
         await supabase.storage.from("event-files").remove(filePaths);
       }
 
-      const { error } = await supabase.from("events").delete().eq("id", id);
+      const { error } = await supabase.from("events").delete().eq("id", event.id);
 
       if (error) throw error;
     },
@@ -233,7 +279,7 @@ export function useDeleteEvent() {
     },
     onError: (error) => {
       console.error("Error deleting event:", error);
-      toast.error("Erro ao excluir evento");
+      toast.error(error instanceof Error ? error.message : "Erro ao excluir evento");
     },
   });
 }
