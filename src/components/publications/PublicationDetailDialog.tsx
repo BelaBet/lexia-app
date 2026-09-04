@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
 import { Loader2, Send, Trash2, Scale, Gavel, Users, Landmark, Upload, FileText, Download } from "lucide-react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
   Publication,
@@ -92,7 +92,7 @@ export function PublicationDetailDialog({ publication, onOpenChange }: Publicati
             <p className="text-sm font-medium text-muted-foreground mb-1">Teor</p>
             <p className="text-sm whitespace-pre-wrap">{publication.content}</p>
             <p className="text-xs text-muted-foreground mt-2">
-              Publicado em {format(new Date(publication.published_date), "dd/MM/yyyy", { locale: ptBR })}
+              Publicado em {format(parseISO(publication.published_date), "dd/MM/yyyy", { locale: ptBR })}
             </p>
           </div>
 
@@ -103,7 +103,7 @@ export function PublicationDetailDialog({ publication, onOpenChange }: Publicati
               </div>
               {publication.external_deadline ? (
                 <>
-                  <p className="text-sm">{format(new Date(publication.external_deadline), "dd/MM/yyyy", { locale: ptBR })}</p>
+                  <p className="text-sm">{format(parseISO(publication.external_deadline), "dd/MM/yyyy", { locale: ptBR })}</p>
                   {publication.external_responsible_name && (
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
                       <Users className="w-3 h-3" />
@@ -123,7 +123,7 @@ export function PublicationDetailDialog({ publication, onOpenChange }: Publicati
               </div>
               {publication.internal_deadline ? (
                 <>
-                  <p className="text-sm">{format(new Date(publication.internal_deadline), "dd/MM/yyyy", { locale: ptBR })}</p>
+                  <p className="text-sm">{format(parseISO(publication.internal_deadline), "dd/MM/yyyy", { locale: ptBR })}</p>
                   {publication.internal_responsible_name && (
                     <p className="text-xs text-muted-foreground flex items-center gap-1">
                       <Users className="w-3 h-3" />
@@ -163,7 +163,7 @@ export function PublicationDetailDialog({ publication, onOpenChange }: Publicati
                   <p className="text-xs text-muted-foreground">Abertura no Tribunal</p>
                   <p className="font-medium">
                     {publication.data_abertura_tribunal
-                      ? format(new Date(publication.data_abertura_tribunal), "dd/MM/yyyy", { locale: ptBR })
+                      ? format(parseISO(publication.data_abertura_tribunal), "dd/MM/yyyy", { locale: ptBR })
                       : "—"}
                   </p>
                 </div>
@@ -171,7 +171,7 @@ export function PublicationDetailDialog({ publication, onOpenChange }: Publicati
                   <p className="text-xs text-muted-foreground">Data de Aceitação</p>
                   <p className="font-medium">
                     {publication.data_aceitacao
-                      ? format(new Date(publication.data_aceitacao), "dd/MM/yyyy", { locale: ptBR })
+                      ? format(parseISO(publication.data_aceitacao), "dd/MM/yyyy", { locale: ptBR })
                       : "—"}
                   </p>
                 </div>
