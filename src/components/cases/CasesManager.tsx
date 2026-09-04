@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { FolderOpen, Plus, Search, Filter, MoreVertical, Calendar, FileText, User, X, ChevronDown, ClipboardList } from "lucide-react";
+import { FolderOpen, Plus, Search, Filter, MoreVertical, Calendar, FileText, User, X, ChevronDown, ClipboardList, Scale, Gavel, Landmark } from "lucide-react";
 import { generateIntakeChecklistPdf } from "@/lib/intakeChecklistPdf";
-import { useCases, useCreateCase, useDeleteCase, Case } from "@/hooks/useCases";
+import { useCases, useCreateCase, useDeleteCase, Case, CreateCaseData } from "@/hooks/useCases";
 import { useDocuments } from "@/hooks/useDocuments";
 import { format, isAfter, isBefore, startOfDay, endOfDay, subDays, subMonths } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -56,7 +56,18 @@ export function CasesManager() {
   const [selectedCase, setSelectedCase] = useState<Case | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [newCase, setNewCase] = useState({ case_number: "", title: "", client: "", type: "Cível" });
+  const [newCase, setNewCase] = useState<CreateCaseData & { valor_causa_input: string }>({
+    case_number: "",
+    title: "",
+    client: "",
+    parte_diversa: "",
+    type: "Cível",
+    vara: "",
+    comarca: "",
+    valor_causa_input: "",
+    data_abertura_tribunal: "",
+    data_aceitacao: "",
+  });
   
   // Filter states
   const [filters, setFilters] = useState<Filters>({
@@ -116,13 +127,34 @@ export function CasesManager() {
     return true;
   });
 
+  const emptyNewCase: CreateCaseData & { valor_causa_input: string } = {
+    case_number: "",
+    title: "",
+    client: "",
+    parte_diversa: "",
+    type: "Cível",
+    vara: "",
+    comarca: "",
+    valor_causa_input: "",
+    data_abertura_tribunal: "",
+    data_aceitacao: "",
+  };
+
   const handleCreateCase = async () => {
     if (!newCase.case_number || !newCase.title || !newCase.client) return;
-    
-    await createCase.mutateAsync(newCase);
-    setNewCase({ case_number: "", title: "", client: "", type: "Cível" });
+
+    const { valor_causa_input, ...rest } = newCase;
+    const valor_causa = valor_causa_input.trim() ? Number(valor_causa_input.replace(",", ".")) : null;
+
+    await createCase.mutateAsync({
+      ...rest,
+      valor_causa: valor_causa !== null && !Number.isNaN(valor_causa) ? valor_causa : null,
+    });
+    setNewCase(emptyNewCase);
     setIsDialogOpen(false);
   };
+
+  const currencyFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
   const getDocumentCount = (caseId: string) => {
     return documents.length;
@@ -475,13 +507,40 @@ export function CasesManager() {
               </div>
 
               <h4 className="font-medium text-foreground mb-1">{caseItem.title}</h4>
-              <p className="text-sm text-muted-foreground font-mono mb-4">{caseItem.case_number}</p>
+              <p className="text-sm text-muted-foreground font-mono mb-2">{caseItem.case_number}</p>
 
-              <div className="flex items-center justify-between text-sm text-muted-foreground">
+              {/* Dados processuais em destaque: vara, comarca e valor da causa */}
+              {(caseItem.vara || caseItem.comarca || caseItem.valor_causa != null) && (
+                <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground mb-3">
+                  {caseItem.vara && (
+                    <span className="flex items-center gap-1">
+                      <Gavel className="w-3.5 h-3.5" />
+                      {caseItem.vara}
+                    </span>
+                  )}
+                  {caseItem.comarca && (
+                    <span className="flex items-center gap-1">
+                      <Landmark className="w-3.5 h-3.5" />
+                      {caseItem.comarca}
+                    </span>
+                  )}
+                  {caseItem.valor_causa != null && (
+                    <span className="flex items-center gap-1 font-medium text-foreground">
+                      <Scale className="w-3.5 h-3.5" />
+                      {currencyFormatter.format(caseItem.valor_causa)}
+                    </span>
+                  )}
+                </div>
+              )}
+
+              <div className="flex items-center justify-between text-sm text-muted-foreground mb-1">
                 <div className="flex items-center gap-4">
                   <span className="flex items-center gap-1">
                     <User className="w-4 h-4" />
                     {caseItem.client}
+                    {caseItem.parte_diversa && (
+                      <span className="text-xs">× {caseItem.parte_diversa}</span>
+                    )}
                   </span>
                 </div>
                 <div className="flex items-center gap-4">
@@ -532,15 +591,27 @@ export function CasesManager() {
                 className="legal-input"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Cliente</label>
-              <input
-                type="text"
-                value={newCase.client}
-                onChange={(e) => setNewCase({ ...newCase, client: e.target.value })}
-                placeholder="Nome do cliente"
-                className="legal-input"
-              />
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium mb-2">Cliente</label>
+                <input
+                  type="text"
+                  value={newCase.client}
+                  onChange={(e) => setNewCase({ ...newCase, client: e.target.value })}
+                  placeholder="Nome do cliente"
+                  className="legal-input"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium mb-2">Parte Diversa</label>
+                <input
+                  type="text"
+                  value={newCase.parte_diversa}
+                  onChange={(e) => setNewCase({ ...newCase, parte_diversa: e.target.value })}
+                  placeholder="Nome da parte contrária"
+                  className="legal-input"
+                />
+              </div>
             </div>
             <div>
               <label className="block text-sm font-medium mb-2">Tipo</label>
@@ -554,6 +625,65 @@ export function CasesManager() {
                 ))}
               </select>
             </div>
+
+            {/* Dados processuais destacados no sistema */}
+            <div className="rounded-lg border border-border p-4 space-y-4">
+              <p className="text-sm font-semibold text-foreground">Dados Processuais</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Vara</label>
+                  <input
+                    type="text"
+                    value={newCase.vara}
+                    onChange={(e) => setNewCase({ ...newCase, vara: e.target.value })}
+                    placeholder="Ex: 3ª Vara Cível"
+                    className="legal-input"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Comarca</label>
+                  <input
+                    type="text"
+                    value={newCase.comarca}
+                    onChange={(e) => setNewCase({ ...newCase, comarca: e.target.value })}
+                    placeholder="Ex: Caruaru/PE"
+                    className="legal-input"
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-2">Valor da Causa</label>
+                  <input
+                    type="text"
+                    inputMode="decimal"
+                    value={newCase.valor_causa_input}
+                    onChange={(e) => setNewCase({ ...newCase, valor_causa_input: e.target.value })}
+                    placeholder="0,00"
+                    className="legal-input"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Abertura no Tribunal</label>
+                  <input
+                    type="date"
+                    value={newCase.data_abertura_tribunal || ""}
+                    onChange={(e) => setNewCase({ ...newCase, data_abertura_tribunal: e.target.value })}
+                    className="legal-input"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-2">Data de Aceitação</label>
+                  <input
+                    type="date"
+                    value={newCase.data_aceitacao || ""}
+                    onChange={(e) => setNewCase({ ...newCase, data_aceitacao: e.target.value })}
+                    className="legal-input"
+                  />
+                </div>
+              </div>
+            </div>
+
             <button
               onClick={handleCreateCase}
               disabled={!newCase.case_number || !newCase.title || !newCase.client || createCase.isPending}
@@ -562,6 +692,77 @@ export function CasesManager() {
               {createCase.isPending ? "Criando..." : "Criar Caso"}
             </button>
           </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* Detalhe do Caso: destaca os dados processuais (vara, comarca, valor
+          da causa, datas de abertura/aceitação e parte diversa) */}
+      <Dialog open={!!selectedCase} onOpenChange={(open) => !open && setSelectedCase(null)}>
+        <DialogContent className="max-w-lg">
+          {selectedCase && (
+            <>
+              <DialogHeader>
+                <DialogTitle className="font-serif flex items-center gap-2 flex-wrap">
+                  {selectedCase.title}
+                  <span className={`text-xs px-2 py-1 rounded-full ${statusConfig[selectedCase.status as keyof typeof statusConfig]?.class || statusConfig.active.class}`}>
+                    {statusConfig[selectedCase.status as keyof typeof statusConfig]?.label || selectedCase.status}
+                  </span>
+                </DialogTitle>
+              </DialogHeader>
+              <div className="space-y-4 mt-2">
+                <p className="text-sm text-muted-foreground font-mono">{selectedCase.case_number}</p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <p className="text-xs text-muted-foreground">Cliente</p>
+                    <p className="font-medium">{selectedCase.client}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-muted-foreground">Parte Diversa</p>
+                    <p className="font-medium">{selectedCase.parte_diversa || "—"}</p>
+                  </div>
+                </div>
+
+                <div className="rounded-lg border border-border p-3 space-y-3">
+                  <p className="text-sm font-semibold flex items-center gap-1.5">
+                    <Scale className="w-4 h-4" /> Dados Processuais
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                    <div>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1"><Gavel className="w-3 h-3" /> Vara</p>
+                      <p className="font-medium">{selectedCase.vara || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground flex items-center gap-1"><Landmark className="w-3 h-3" /> Comarca</p>
+                      <p className="font-medium">{selectedCase.comarca || "—"}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Valor da Causa</p>
+                      <p className="font-medium">
+                        {selectedCase.valor_causa != null ? currencyFormatter.format(selectedCase.valor_causa) : "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Abertura no Tribunal</p>
+                      <p className="font-medium">
+                        {selectedCase.data_abertura_tribunal
+                          ? format(new Date(selectedCase.data_abertura_tribunal), "dd/MM/yyyy", { locale: ptBR })
+                          : "—"}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-muted-foreground">Data de Aceitação</p>
+                      <p className="font-medium">
+                        {selectedCase.data_aceitacao
+                          ? format(new Date(selectedCase.data_aceitacao), "dd/MM/yyyy", { locale: ptBR })
+                          : "—"}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </>
+          )}
         </DialogContent>
       </Dialog>
     </div>

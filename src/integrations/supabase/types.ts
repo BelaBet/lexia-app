@@ -141,35 +141,53 @@ export type Database = {
         Row: {
           case_number: string
           client: string
+          comarca: string | null
           created_at: string
+          data_abertura_tribunal: string | null
+          data_aceitacao: string | null
           id: string
+          parte_diversa: string | null
           status: string
           title: string
           type: string
           updated_at: string
           user_id: string | null
+          valor_causa: number | null
+          vara: string | null
         }
         Insert: {
           case_number: string
           client: string
+          comarca?: string | null
           created_at?: string
+          data_abertura_tribunal?: string | null
+          data_aceitacao?: string | null
           id?: string
+          parte_diversa?: string | null
           status?: string
           title: string
           type?: string
           updated_at?: string
           user_id?: string | null
+          valor_causa?: number | null
+          vara?: string | null
         }
         Update: {
           case_number?: string
           client?: string
+          comarca?: string | null
           created_at?: string
+          data_abertura_tribunal?: string | null
+          data_aceitacao?: string | null
           id?: string
+          parte_diversa?: string | null
           status?: string
           title?: string
           type?: string
           updated_at?: string
           user_id?: string | null
+          valor_causa?: number | null
+          vara?: string | null
         }
         Relationships: []
       }
@@ -1108,8 +1126,11 @@ export type Database = {
       publications: {
         Row: {
           case_id: string | null
+          comarca: string | null
           content: string
           created_at: string
+          data_abertura_tribunal: string | null
+          data_aceitacao: string | null
           external_deadline: string | null
           external_id: string | null
           external_responsible_name: string | null
@@ -1131,11 +1152,16 @@ export type Database = {
           tese: string | null
           updated_at: string
           user_id: string
+          valor_causa: number | null
+          vara: string | null
         }
         Insert: {
           case_id?: string | null
+          comarca?: string | null
           content: string
           created_at?: string
+          data_abertura_tribunal?: string | null
+          data_aceitacao?: string | null
           external_deadline?: string | null
           external_id?: string | null
           external_responsible_name?: string | null
@@ -1157,11 +1183,16 @@ export type Database = {
           tese?: string | null
           updated_at?: string
           user_id: string
+          valor_causa?: number | null
+          vara?: string | null
         }
         Update: {
           case_id?: string | null
+          comarca?: string | null
           content?: string
           created_at?: string
+          data_abertura_tribunal?: string | null
+          data_aceitacao?: string | null
           external_deadline?: string | null
           external_id?: string | null
           external_responsible_name?: string | null
@@ -1183,6 +1214,8 @@ export type Database = {
           tese?: string | null
           updated_at?: string
           user_id?: string
+          valor_causa?: number | null
+          vara?: string | null
         }
         Relationships: [
           {

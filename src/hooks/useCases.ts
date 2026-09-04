@@ -7,8 +7,20 @@ export interface Case {
   case_number: string;
   title: string;
   client: string;
+  /** Parte contrária/adversa do processo (a outra parte além do Cliente). */
+  parte_diversa: string | null;
   type: string;
   status: string;
+  /** Vara judicial responsável pelo processo. */
+  vara: string | null;
+  /** Comarca (jurisdição/localidade) do processo. */
+  comarca: string | null;
+  /** Valor da causa/processo, em reais. */
+  valor_causa: number | null;
+  /** Data de abertura/distribuição do processo no tribunal. */
+  data_abertura_tribunal: string | null;
+  /** Data de aceitação do processo. */
+  data_aceitacao: string | null;
   created_at: string;
   updated_at: string;
   user_id: string | null;
@@ -32,17 +44,37 @@ export function useCases() {
   });
 }
 
+export interface CreateCaseData {
+  case_number: string;
+  title: string;
+  client: string;
+  parte_diversa?: string;
+  type?: string;
+  status?: string;
+  vara?: string;
+  comarca?: string;
+  valor_causa?: number | null;
+  data_abertura_tribunal?: string | null;
+  data_aceitacao?: string | null;
+}
+
 export function useCreateCase() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (caseData: { case_number: string; title: string; client: string; type?: string; status?: string }) => {
+    mutationFn: async (caseData: CreateCaseData) => {
       const user = await requireUser();
       const { data, error } = await supabase.from("cases").insert({
         case_number: caseData.case_number.trim(),
         title: caseData.title.trim(),
         client: caseData.client.trim(),
+        parte_diversa: caseData.parte_diversa?.trim() || null,
         type: caseData.type || "Cível",
         status: caseData.status || "active",
+        vara: caseData.vara?.trim() || null,
+        comarca: caseData.comarca?.trim() || null,
+        valor_causa: caseData.valor_causa ?? null,
+        data_abertura_tribunal: caseData.data_abertura_tribunal || null,
+        data_aceitacao: caseData.data_aceitacao || null,
         user_id: user.id,
       }).select().single();
       if (error) throw error;

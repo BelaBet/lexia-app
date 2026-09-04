@@ -9,6 +9,20 @@
 // completar depois — o objetivo aqui é só garantir que o caso já apareça na
 // tela de Casos assim que a publicação chegar, sem exigir nenhuma ação
 // manual antes disso.
+//
+// Quando o payload da fonte externa (JusBrasil, WebJur etc.) já traz dados
+// processuais (vara, comarca, valor da causa, datas de abertura/aceitação),
+// esses dados são gravados no Caso recém-criado também — assim eles ficam
+// destacados tanto em Publicações quanto em Casos sem esperar o advogado
+// preencher manualmente.
+
+export interface ProcessualData {
+  vara?: string | null;
+  comarca?: string | null;
+  valor_causa?: number | null;
+  data_abertura_tribunal?: string | null;
+  data_aceitacao?: string | null;
+}
 
 // deno-lint-ignore no-explicit-any
 export async function findOrCreateCaseId(
@@ -16,6 +30,7 @@ export async function findOrCreateCaseId(
   adminClient: any,
   userId: string,
   processNumber: string | null,
+  processualData?: ProcessualData,
 ): Promise<string | null> {
   if (!processNumber) return null;
 
@@ -41,6 +56,11 @@ export async function findOrCreateCaseId(
       client: "A definir",
       type: "Cível",
       status: "active",
+      vara: processualData?.vara || null,
+      comarca: processualData?.comarca || null,
+      valor_causa: processualData?.valor_causa ?? null,
+      data_abertura_tribunal: processualData?.data_abertura_tribunal || null,
+      data_aceitacao: processualData?.data_aceitacao || null,
     })
     .select("id")
     .maybeSingle();

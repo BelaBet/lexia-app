@@ -19,7 +19,7 @@
 // notificação) já está pronto e não muda.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
-import { findOrCreateCaseId } from "../_shared/findOrCreateCase.ts";
+import { findOrCreateCaseId, ProcessualData } from "../_shared/findOrCreateCase.ts";
 
 // TODO: confirmar com a documentação da conta JusBrasil ativa (Consulta
 // Processual / Distribuição). Estrutura provável, a ajustar:
@@ -33,6 +33,21 @@ interface JusbrasilProcessItem {
   conteudo?: string;
   data_publicacao?: string;
   data?: string;
+  vara?: string;
+  orgao_julgador?: string;
+  orgaoJulgador?: string;
+  comarca?: string;
+  municipio?: string;
+  foro?: string;
+  valor_causa?: string | number;
+  valorCausa?: string | number;
+  valor_da_causa?: string | number;
+  data_distribuicao?: string;
+  dataDistribuicao?: string;
+  data_abertura?: string;
+  dataAbertura?: string;
+  data_aceitacao?: string;
+  dataAceitacao?: string;
   [key: string]: unknown;
 }
 
@@ -73,6 +88,47 @@ function firstString(...values: unknown[]): string | null {
     if (typeof v === "string" && v.trim().length > 0) return v.trim();
   }
   return null;
+}
+
+function firstDate(...values: unknown[]): string | null {
+  const raw = firstString(...values);
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  return isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+}
+
+function firstNumber(...values: unknown[]): number | null {
+  for (const v of values) {
+    if (typeof v === "number" && !isNaN(v)) return v;
+    if (typeof v === "string" && v.trim().length > 0) {
+      // Aceita tanto "12345.67" quanto formato brasileiro "12.345,67".
+      const normalized = v.trim().replace(/\./g, "").replace(",", ".");
+      const parsed = Number(normalized);
+      if (!isNaN(parsed)) return parsed;
+    }
+  }
+  return null;
+}
+
+// Extrai os dados processuais destacados no sistema (vara, comarca, valor da
+// causa, data de abertura no tribunal e data de aceitação) a partir do item
+// retornado pela API do JusBrasil. Os nomes de campo abaixo são uma tentativa
+// razoável baseada nos termos mais comuns usados por consultas processuais —
+// TODO: confirmar/ajustar contra um payload de exemplo real assim que houver
+// acesso à conta ativa.
+function extractProcessualData(item: JusbrasilProcessItem): ProcessualData {
+  return {
+    vara: firstString(item.vara, item.orgao_julgador, item.orgaoJulgador),
+    comarca: firstString(item.comarca, item.municipio, item.foro),
+    valor_causa: firstNumber(item.valor_causa, item.valorCausa, item.valor_da_causa),
+    data_abertura_tribunal: firstDate(
+      item.data_distribuicao,
+      item.dataDistribuicao,
+      item.data_abertura,
+      item.dataAbertura,
+    ),
+    data_aceitacao: firstDate(item.data_aceitacao, item.dataAceitacao),
+  };
 }
 
 Deno.serve(async (req) => {
@@ -118,9 +174,13 @@ Deno.serve(async (req) => {
           ? new Date(publishedDateRaw).toISOString().slice(0, 10)
           : new Date().toISOString().slice(0, 10);
 
+        const processualData = extractProcessualData(item);
+
         // Abre (ou reaproveita) o Caso correspondente antes de gravar a
-        // publicação, para ela já nascer vinculada e aparecer em "Casos".
-        const caseId = await findOrCreateCaseId(adminClient, integration.user_id, processNumber);
+        // publicação, para ela já nascer vinculada e aparecer em "Casos" —
+        // já com os dados processuais destacados (vara, comarca, valor da
+        // causa, datas), quando a API os fornecer.
+        const caseId = await findOrCreateCaseId(adminClient, integration.user_id, processNumber, processualData);
 
         const { data: inserted, error: insertError } = await adminClient
           .from("publications")
@@ -135,6 +195,7 @@ Deno.serve(async (req) => {
             raw_payload: item,
             imported_automatically: true,
             status: "pending",
+            ...processualData,
           })
           .select("id")
           .maybeSingle();

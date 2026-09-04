@@ -31,6 +31,16 @@ export interface Publication {
   tese: string | null;
   status: PublicationStatus;
   imported_automatically: boolean;
+  /** Vara judicial responsável pelo processo. */
+  vara: string | null;
+  /** Comarca (jurisdição/localidade) do processo. */
+  comarca: string | null;
+  /** Valor da causa/processo, em reais. */
+  valor_causa: number | null;
+  /** Data de abertura/distribuição do processo no tribunal. */
+  data_abertura_tribunal: string | null;
+  /** Data de aceitação do processo. */
+  data_aceitacao: string | null;
   created_at: string;
   updated_at: string;
   followups?: PublicationFollowup[];
@@ -50,6 +60,11 @@ export interface CreatePublicationData {
   internal_responsible_role?: PublicationResponsibleRole;
   tese?: string;
   status?: PublicationStatus;
+  vara?: string | null;
+  comarca?: string | null;
+  valor_causa?: number | null;
+  data_abertura_tribunal?: string | null;
+  data_aceitacao?: string | null;
 }
 
 export type UpdatePublicationData = Partial<CreatePublicationData> & { id: string };
@@ -116,6 +131,11 @@ export function useCreatePublication() {
           internal_responsible_role: input.internal_responsible_role || null,
           tese: input.tese || null,
           status: input.status || "pending",
+          vara: input.vara || null,
+          comarca: input.comarca || null,
+          valor_causa: input.valor_causa ?? null,
+          data_abertura_tribunal: input.data_abertura_tribunal || null,
+          data_aceitacao: input.data_aceitacao || null,
         })
         .select()
         .single();

@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Send, Trash2, Scale, Gavel, Users } from "lucide-react";
+import { Loader2, Send, Trash2, Scale, Gavel, Users, Landmark } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -42,6 +42,7 @@ export function PublicationDetailDialog({ publication, onOpenChange }: Publicati
   const { data: followups = [], isLoading } = usePublicationFollowups(publication?.id || null);
   const addFollowup = useAddPublicationFollowup();
   const deleteFollowup = useDeletePublicationFollowup();
+  const currencyFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
   if (!publication) return null;
 
@@ -111,6 +112,47 @@ export function PublicationDetailDialog({ publication, onOpenChange }: Publicati
               )}
             </div>
           </div>
+
+          {(publication.vara || publication.comarca || publication.valor_causa != null ||
+            publication.data_abertura_tribunal || publication.data_aceitacao) && (
+            <div className="rounded-lg border p-3 space-y-3">
+              <p className="text-sm font-semibold flex items-center gap-1.5">
+                <Scale className="w-4 h-4" /> Dados Processuais
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+                <div>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1"><Gavel className="w-3 h-3" /> Vara</p>
+                  <p className="font-medium">{publication.vara || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground flex items-center gap-1"><Landmark className="w-3 h-3" /> Comarca</p>
+                  <p className="font-medium">{publication.comarca || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Valor da Causa</p>
+                  <p className="font-medium">
+                    {publication.valor_causa != null ? currencyFormatter.format(publication.valor_causa) : "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Abertura no Tribunal</p>
+                  <p className="font-medium">
+                    {publication.data_abertura_tribunal
+                      ? format(new Date(publication.data_abertura_tribunal), "dd/MM/yyyy", { locale: ptBR })
+                      : "—"}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-xs text-muted-foreground">Data de Aceitação</p>
+                  <p className="font-medium">
+                    {publication.data_aceitacao
+                      ? format(new Date(publication.data_aceitacao), "dd/MM/yyyy", { locale: ptBR })
+                      : "—"}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
 
           {publication.tese && (
             <div>

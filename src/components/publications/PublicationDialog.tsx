@@ -44,10 +44,16 @@ const emptyForm: CreatePublicationData = {
   internal_responsible_role: undefined,
   tese: "",
   status: "pending",
+  vara: "",
+  comarca: "",
+  valor_causa: null,
+  data_abertura_tribunal: "",
+  data_aceitacao: "",
 };
 
 export function PublicationDialog({ open, onOpenChange, publication }: PublicationDialogProps) {
   const [form, setForm] = useState<CreatePublicationData>(emptyForm);
+  const [valorCausaInput, setValorCausaInput] = useState("");
   const createPublication = useCreatePublication();
   const updatePublication = useUpdatePublication();
   const isEditing = !!publication;
@@ -69,9 +75,16 @@ export function PublicationDialog({ open, onOpenChange, publication }: Publicati
           internal_responsible_role: publication.internal_responsible_role || undefined,
           tese: publication.tese || "",
           status: publication.status,
+          vara: publication.vara || "",
+          comarca: publication.comarca || "",
+          valor_causa: publication.valor_causa,
+          data_abertura_tribunal: publication.data_abertura_tribunal || "",
+          data_aceitacao: publication.data_aceitacao || "",
         });
+        setValorCausaInput(publication.valor_causa != null ? String(publication.valor_causa) : "");
       } else {
         setForm(emptyForm);
+        setValorCausaInput("");
       }
     }
   }, [open, publication]);
@@ -80,10 +93,16 @@ export function PublicationDialog({ open, onOpenChange, publication }: Publicati
     e.preventDefault();
     if (!form.content.trim() || !form.published_date) return;
 
+    const valorCausa = valorCausaInput.trim() ? Number(valorCausaInput.replace(",", ".")) : null;
+    const payload: CreatePublicationData = {
+      ...form,
+      valor_causa: valorCausa !== null && !Number.isNaN(valorCausa) ? valorCausa : null,
+    };
+
     if (isEditing && publication) {
-      await updatePublication.mutateAsync({ id: publication.id, ...form });
+      await updatePublication.mutateAsync({ id: publication.id, ...payload });
     } else {
-      await createPublication.mutateAsync(form);
+      await createPublication.mutateAsync(payload);
     }
     onOpenChange(false);
   };
@@ -249,6 +268,61 @@ export function PublicationDialog({ open, onOpenChange, publication }: Publicati
                     <SelectItem value="operacional">Operacional</SelectItem>
                   </SelectContent>
                 </Select>
+              </div>
+            </div>
+          </div>
+
+          {/* Dados Processuais destacados no sistema */}
+          <div className="rounded-lg border p-4 space-y-3">
+            <p className="text-sm font-semibold text-foreground">Dados Processuais</p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="vara">Vara</Label>
+                <Input
+                  id="vara"
+                  value={form.vara || ""}
+                  onChange={(e) => setForm((f) => ({ ...f, vara: e.target.value }))}
+                  placeholder="Ex: 3ª Vara Cível"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="comarca">Comarca</Label>
+                <Input
+                  id="comarca"
+                  value={form.comarca || ""}
+                  onChange={(e) => setForm((f) => ({ ...f, comarca: e.target.value }))}
+                  placeholder="Ex: Caruaru/PE"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="valor_causa">Valor da Causa</Label>
+                <Input
+                  id="valor_causa"
+                  inputMode="decimal"
+                  value={valorCausaInput}
+                  onChange={(e) => setValorCausaInput(e.target.value)}
+                  placeholder="0,00"
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="data_abertura_tribunal">Abertura no Tribunal</Label>
+                <Input
+                  id="data_abertura_tribunal"
+                  type="date"
+                  value={form.data_abertura_tribunal || ""}
+                  onChange={(e) => setForm((f) => ({ ...f, data_abertura_tribunal: e.target.value }))}
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="data_aceitacao">Data de Aceitação</Label>
+                <Input
+                  id="data_aceitacao"
+                  type="date"
+                  value={form.data_aceitacao || ""}
+                  onChange={(e) => setForm((f) => ({ ...f, data_aceitacao: e.target.value }))}
+                />
               </div>
             </div>
           </div>
