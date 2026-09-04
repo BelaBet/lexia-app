@@ -114,7 +114,7 @@ export function ChecklistDialog({ open, onOpenChange }: ChecklistDialogProps) {
 
   const contextOptions = [
     { value: "general", label: "Obrigação Geral" },
-    { value: "case", label: "Por Caso/Processo" },
+    { value: "case", label: "Por Processo" },
     { value: "client", label: "Por Cliente" },
   ];
 

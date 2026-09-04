@@ -142,8 +142,8 @@ export function SettingsPage() {
             <Separator />
             <div className="flex items-center justify-between">
               <div className="space-y-0.5">
-                <Label>Atualizações de Casos</Label>
-                <p className="text-sm text-muted-foreground">Notificações sobre mudanças em casos</p>
+                <Label>Atualizações de Processos</Label>
+                <p className="text-sm text-muted-foreground">Notificações sobre mudanças em processos</p>
               </div>
               <Switch
                 checked={notifications.cases}

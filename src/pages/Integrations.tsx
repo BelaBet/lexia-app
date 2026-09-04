@@ -36,12 +36,12 @@ export function IntegrationsPage() {
         <PlanCard 
           name="Gratuito" 
           active={!hasRole("premium") && !isSupremo}
-          features={["Até 10 documentos", "5 casos ativos", "Agenda básica"]}
+          features={["Até 10 documentos", "5 processos ativos", "Agenda básica"]}
         />
         <PlanCard 
           name="Premium" 
           active={hasRole("premium") && !isSupremo}
-          features={["Documentos ilimitados", "Casos ilimitados", "Assistente IA completo"]}
+          features={["Documentos ilimitados", "Processos ilimitados", "Assistente IA completo"]}
           highlighted
         />
         <PlanCard 

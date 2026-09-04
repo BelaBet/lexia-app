@@ -28,14 +28,14 @@ export const GUIDE_FLOWS: GuideFlow[] = [
         userPrompt:
           "Preciso redigir uma petição inicial de cobrança. O cliente é João da Silva, que prestou serviços de consultoria para a empresa ABC Ltda. e não recebeu R$ 8.500,00 referentes à nota fiscal 1234, emitida em 10/03/2026.",
         aiResponse:
-          "Entendido. Antes de redigir, confirmo alguns pontos: você quer que eu já monte a petição completa (endereçamento, fatos, direito, pedidos) com esses dados, ou prefere que eu primeiro resuma o caso para você validar as informações? Também preciso saber a comarca/vara e se já há tentativa de cobrança extrajudicial.",
+          "Entendido. Antes de redigir, confirmo alguns pontos: você quer que eu já monte a petição completa (endereçamento, fatos, direito, pedidos) com esses dados, ou prefere que eu primeiro resuma o processo para você validar as informações? Também preciso saber a comarca/vara e se já há tentativa de cobrança extrajudicial.",
       },
       {
         stage: "summary",
         stageLabel: "2. Resumo",
         userPrompt: "Pode resumir o que você entendeu antes de montar a petição.",
         aiResponse:
-          "Resumo do caso: cobrança de R$ 8.500,00 devidos por ABC Ltda. a João da Silva, referentes à NF 1234 (10/03/2026), por serviços de consultoria prestados e não pagos. Ainda faltam: comarca/vara, se houve notificação extrajudicial prévia, e se há contrato assinado entre as partes. Corrija ou complemente qualquer ponto antes de eu seguir para a redação.",
+          "Resumo do processo: cobrança de R$ 8.500,00 devidos por ABC Ltda. a João da Silva, referentes à NF 1234 (10/03/2026), por serviços de consultoria prestados e não pagos. Ainda faltam: comarca/vara, se houve notificação extrajudicial prévia, e se há contrato assinado entre as partes. Corrija ou complemente qualquer ponto antes de eu seguir para a redação.",
       },
       {
         stage: "document",

@@ -35,7 +35,7 @@ const recurrenceLabels = {
 };
 
 const contextLabels = {
-  case: "Por Caso",
+  case: "Por Processo",
   client: "Por Cliente",
   general: "Geral",
 };

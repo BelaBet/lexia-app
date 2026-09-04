@@ -39,7 +39,7 @@ const baseActions: Omit<QuickAction, "onClick">[] = [
   },
   {
     id: "cases",
-    title: "Novo Caso",
+    title: "Novo Processo",
     description: "Cadastre um processo",
     icon: FolderPlus,
     color: "bg-accent text-accent-foreground",
