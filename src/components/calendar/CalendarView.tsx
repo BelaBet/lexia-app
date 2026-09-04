@@ -12,12 +12,28 @@ import {
   Bell, 
   BellOff,
   BellRing,
-  Upload, 
+  Upload,
   Trash2,
   Send,
-  FileText
+  FileText,
+  Pencil,
+  Lock,
+  CheckCircle2,
+  Circle
 } from "lucide-react";
-import { useEvents, useCreateEvent, useDeleteEvent, useUpdateEvent, useSendInvites, CalendarEvent, CreateEventData } from "@/hooks/useEvents";
+import {
+  useEvents,
+  useCreateEvent,
+  useDeleteEvent,
+  useUpdateEvent,
+  useToggleEventStatus,
+  useSendInvites,
+  isApiCreatedEvent,
+  CalendarEvent,
+  CreateEventData,
+  UpdateEventData,
+  EventTaskStatus,
+} from "@/hooks/useEvents";
 import { useChecklists } from "@/hooks/useChecklists";
 import { useNotifications } from "@/hooks/useNotifications";
 import { openGoogleCalendar, downloadICS } from "@/lib/calendarExport";
@@ -35,6 +51,14 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { toast } from "sonner";
 
 const eventTypeConfig = {
@@ -52,6 +76,9 @@ const taskStatusConfig: Record<string, { label: string; class: string }> = {
   overdue: { label: "Atrasado", class: "bg-destructive/10 text-destructive" },
   cancelled: { label: "Cancelado", class: "bg-muted text-muted-foreground" },
 };
+
+const eventTitleClass = (event: CalendarEvent) =>
+  event.status === "completed" ? "line-through text-red-600 decoration-red-600" : "";
 
 const months = [
   "Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho",
@@ -83,6 +110,8 @@ export function CalendarView() {
   });
   const [newParticipant, setNewParticipant] = useState<Participant>({ name: "", email: "" });
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [editForm, setEditForm] = useState<UpdateEventData>({ id: "" });
 
   const { data: events = [], isLoading } = useEvents();
   const { data: checklists = [] } = useChecklists();
@@ -105,6 +134,7 @@ export function CalendarView() {
   const createEvent = useCreateEvent();
   const deleteEvent = useDeleteEvent();
   const updateEvent = useUpdateEvent();
+  const toggleEventStatus = useToggleEventStatus();
   const sendInvites = useSendInvites();
   const { 
     requestPermission, 
@@ -248,6 +278,36 @@ export function CalendarView() {
   const copyMeetingLink = (link: string) => {
     navigator.clipboard.writeText(link);
     toast.success("Link copiado para a área de transferência!");
+  };
+
+  const openEditDialog = (event: CalendarEvent) => {
+    setEditingEvent(event);
+    setEditForm({
+      id: event.id,
+      title: event.title,
+      description: event.description || "",
+      event_date: event.event_date,
+      event_time: event.event_time,
+      type: event.type,
+      location: event.location || "",
+      meeting_link: event.meeting_link || "",
+      notification_enabled: event.notification_enabled,
+      notification_minutes_before: event.notification_minutes_before || 30,
+      status: event.status || undefined,
+    });
+  };
+
+  const handleUpdateEvent = async () => {
+    if (!editForm.title || !editForm.event_date || !editForm.event_time) return;
+    await updateEvent.mutateAsync(editForm);
+    setEditingEvent(null);
+  };
+
+  const handleToggleCompleted = (event: CalendarEvent) => {
+    toggleEventStatus.mutate({
+      id: event.id,
+      status: event.status === "completed" ? "pending" : "completed",
+    });
   };
 
   const days = getDaysInMonth();
@@ -450,12 +510,28 @@ export function CalendarView() {
                       </button>
                     )}
                     <button
-                      onClick={() => deleteEvent.mutate(event.id)}
+                      onClick={() => openEditDialog(event)}
                       className="p-1 hover:bg-muted rounded"
-                      title="Excluir"
+                      title="Editar evento"
                     >
-                      <X className="w-3 h-3" />
+                      <Pencil className="w-3 h-3" />
                     </button>
+                    {isApiCreatedEvent(event) ? (
+                      <span
+                        className="p-1 text-muted-foreground"
+                        title="Evento criado automaticamente pela integração — não pode ser excluído manualmente"
+                      >
+                        <Lock className="w-3 h-3" />
+                      </span>
+                    ) : (
+                      <button
+                        onClick={() => deleteEvent.mutate(event)}
+                        className="p-1 hover:bg-muted rounded"
+                        title="Excluir"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    )}
                   </div>
                   <div className="flex items-start justify-between mb-2">
                     <span className="text-xs font-medium">
@@ -465,7 +541,23 @@ export function CalendarView() {
                       {format(parseISO(event.event_date), "dd MMM", { locale: ptBR })}
                     </span>
                   </div>
-                  <p className="font-medium text-sm mb-2">{event.title}</p>
+                  <p className={`font-medium text-sm mb-2 flex items-center gap-1.5 ${eventTitleClass(event)}`}>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleCompleted(event);
+                      }}
+                      className="shrink-0"
+                      title={event.status === "completed" ? "Marcar como pendente" : "Marcar como concluído"}
+                    >
+                      {event.status === "completed" ? (
+                        <CheckCircle2 className="w-4 h-4 text-success" />
+                      ) : (
+                        <Circle className="w-4 h-4 text-muted-foreground" />
+                      )}
+                    </button>
+                    <span>{event.title}</span>
+                  </p>
                   {event.status && (
                     <button
                       onClick={(e) => {
@@ -872,19 +964,50 @@ export function CalendarView() {
                             }`}
                           >
                             <div className="flex items-start justify-between mb-2">
-                              <div>
-                                <p className="font-medium text-base">{event.title}</p>
-                                <p className="text-xs text-muted-foreground mt-1">
-                                  {eventTypeConfig[event.type as keyof typeof eventTypeConfig]?.label || event.type}
-                                </p>
+                              <div className="flex items-start gap-2">
+                                <button
+                                  onClick={() => handleToggleCompleted(event)}
+                                  className="shrink-0 mt-0.5"
+                                  title={event.status === "completed" ? "Marcar como pendente" : "Marcar como concluído"}
+                                >
+                                  {event.status === "completed" ? (
+                                    <CheckCircle2 className="w-4 h-4 text-success" />
+                                  ) : (
+                                    <Circle className="w-4 h-4 text-muted-foreground" />
+                                  )}
+                                </button>
+                                <div>
+                                  <p className={`font-medium text-base ${eventTitleClass(event)}`}>{event.title}</p>
+                                  <p className="text-xs text-muted-foreground mt-1">
+                                    {eventTypeConfig[event.type as keyof typeof eventTypeConfig]?.label || event.type}
+                                  </p>
+                                </div>
                               </div>
-                              <button
-                                onClick={() => deleteEvent.mutate(event.id)}
-                                className="p-1 hover:bg-muted rounded transition-colors"
-                                title="Excluir evento"
-                              >
-                                <Trash2 className="w-4 h-4 text-destructive" />
-                              </button>
+                              <div className="flex items-center gap-1">
+                                <button
+                                  onClick={() => openEditDialog(event)}
+                                  className="p-1 hover:bg-muted rounded transition-colors"
+                                  title="Editar evento"
+                                >
+                                  <Pencil className="w-4 h-4" />
+                                </button>
+                                {isApiCreatedEvent(event) ? (
+                                  <span
+                                    className="p-1 text-muted-foreground"
+                                    title="Evento criado automaticamente pela integração — não pode ser excluído manualmente"
+                                  >
+                                    <Lock className="w-4 h-4" />
+                                  </span>
+                                ) : (
+                                  <button
+                                    onClick={() => deleteEvent.mutate(event)}
+                                    className="p-1 hover:bg-muted rounded transition-colors"
+                                    title="Excluir evento"
+                                  >
+                                    <Trash2 className="w-4 h-4 text-destructive" />
+                                  </button>
+                                )}
+                              </div>
                             </div>
 
                             {event.status && (
@@ -1013,6 +1136,145 @@ export function CalendarView() {
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Edit Event Dialog */}
+      <Dialog open={!!editingEvent} onOpenChange={(open) => !open && setEditingEvent(null)}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-serif">Editar Evento</DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div>
+              <Label htmlFor="edit-title">Título *</Label>
+              <Input
+                id="edit-title"
+                value={editForm.title || ""}
+                onChange={(e) => setEditForm({ ...editForm, title: e.target.value })}
+                placeholder="Título do evento"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="edit-description">Descrição</Label>
+              <Textarea
+                id="edit-description"
+                value={editForm.description || ""}
+                onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+                placeholder="Descrição do evento"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-date">Data *</Label>
+                <Input
+                  id="edit-date"
+                  type="date"
+                  value={editForm.event_date || ""}
+                  onChange={(e) => setEditForm({ ...editForm, event_date: e.target.value })}
+                />
+              </div>
+              <div>
+                <Label htmlFor="edit-time">Horário *</Label>
+                <Input
+                  id="edit-time"
+                  type="time"
+                  value={editForm.event_time || ""}
+                  onChange={(e) => setEditForm({ ...editForm, event_time: e.target.value })}
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <Label htmlFor="edit-type">Tipo</Label>
+                <Select
+                  value={editForm.type}
+                  onValueChange={(value) => setEditForm({ ...editForm, type: value })}
+                >
+                  <SelectTrigger id="edit-type">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(eventTypeConfig).map(([value, { label }]) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="edit-status">Status</Label>
+                <Select
+                  value={editForm.status || undefined}
+                  onValueChange={(value) => setEditForm({ ...editForm, status: value as EventTaskStatus })}
+                >
+                  <SelectTrigger id="edit-status">
+                    <SelectValue placeholder="Sem status" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {Object.entries(taskStatusConfig).map(([value, { label }]) => (
+                      <SelectItem key={value} value={value}>{label}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            <div>
+              <Label htmlFor="edit-location">Local</Label>
+              <Input
+                id="edit-location"
+                value={editForm.location || ""}
+                onChange={(e) => setEditForm({ ...editForm, location: e.target.value })}
+                placeholder="Local do evento"
+              />
+            </div>
+
+            <div>
+              <Label htmlFor="edit-meeting-link">Link da reunião</Label>
+              <Input
+                id="edit-meeting-link"
+                value={editForm.meeting_link || ""}
+                onChange={(e) => setEditForm({ ...editForm, meeting_link: e.target.value })}
+                placeholder="https://..."
+              />
+            </div>
+
+            <div className="flex items-center justify-between">
+              <Label htmlFor="edit-notification">Notificação</Label>
+              <Switch
+                id="edit-notification"
+                checked={!!editForm.notification_enabled}
+                onCheckedChange={(checked) => setEditForm({ ...editForm, notification_enabled: checked })}
+              />
+            </div>
+
+            {editingEvent && isApiCreatedEvent(editingEvent) && (
+              <p className="text-xs text-muted-foreground flex items-center gap-1.5">
+                <Lock className="w-3 h-3" />
+                Este evento foi criado automaticamente pela integração e não pode ser excluído manualmente.
+              </p>
+            )}
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setEditingEvent(null)}
+                className="legal-button-secondary"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleUpdateEvent}
+                disabled={!editForm.title || updateEvent.isPending}
+                className="legal-button-primary disabled:opacity-50"
+              >
+                Salvar
+              </button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
