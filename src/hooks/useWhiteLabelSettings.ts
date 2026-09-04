@@ -19,7 +19,7 @@ export const DEFAULT_BRANDING: Pick<
   "brand_name" | "tagline" | "logo_url" | "primary_color" | "sidebar_color"
 > = {
   brand_name: "LexIA",
-  tagline: "Assistente Jurídico Inteligente",
+  tagline: "Gestor Inteligente de Processos",
   logo_url: null,
   primary_color: "#B8860B",
   sidebar_color: "#152238",
