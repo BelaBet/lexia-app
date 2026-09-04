@@ -9,11 +9,11 @@ interface MobileNavProps { activeTab: string; onTabChange: (tab: string) => void
 
 const items = [
   ["dashboard", "Dashboard"],
-  ["documents", "Documentos"],
-  ["assistant", "Assistente IA"],
+  ["publications", "Publicações"],
   ["cases", "Processos"],
   ["calendar", "Agenda"],
-  ["publications", "Publicações"],
+  ["documents", "Documentos"],
+  ["assistant", "Assistente IA"],
   ["financial-counter", "Contador Financeiro"],
   ["checklists", "Checklists"],
   ["pdf-reader", "Leitor PDF"],
