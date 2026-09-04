@@ -69,6 +69,14 @@ const eventTypeConfig = {
   prazo_interno: { label: "Prazo Interno (Publicação)", class: "bg-warning/10 text-warning border-l-warning" },
 };
 
+const eventDotColor: Record<string, string> = {
+  hearing: "bg-primary",
+  deadline: "bg-destructive",
+  meeting: "bg-success",
+  prazo_externo: "bg-destructive",
+  prazo_interno: "bg-warning",
+};
+
 const taskStatusConfig: Record<string, { label: string; class: string }> = {
   pending: { label: "Pendente", class: "bg-warning/10 text-warning" },
   in_progress: { label: "Em Andamento", class: "bg-primary/10 text-primary" },
@@ -324,6 +332,11 @@ export function CalendarView() {
     .sort((a, b) => new Date(a.due_date!).getTime() - new Date(b.due_date!).getTime())
     .slice(0, 3);
 
+  const pastEvents = events
+    .filter((e) => startOfDay(parseISO(e.event_date)) < today)
+    .sort((a, b) => parseISO(b.event_date).getTime() - parseISO(a.event_date).getTime())
+    .slice(0, 10);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -410,24 +423,31 @@ export function CalendarView() {
                   onClick={() => day && setSelectedDay(day)}
                   className={`aspect-square p-2 rounded-lg text-center relative ${
                     day ? "hover:bg-muted cursor-pointer transition-colors" : ""
-                  } ${isCurrentDay ? "bg-primary text-primary-foreground" : ""}`}
+                  } ${
+                    isCurrentDay
+                      ? "bg-primary text-primary-foreground"
+                      : hasItems
+                        ? "bg-muted/50 ring-1 ring-inset ring-border"
+                        : ""
+                  }`}
                 >
                   {day && (
                     <>
                       <span className="text-sm">{format(day, "d")}</span>
                       {hasItems && (
                         <div className="absolute bottom-1 left-1/2 -translate-x-1/2 flex gap-0.5">
-                          {dayEvents.slice(0, 2).map((event, i) => (
+                          {dayEvents.slice(0, 3).map((event, i) => (
                             <div
                               key={`event-${i}`}
-                              className="w-1.5 h-1.5 rounded-full bg-warning"
-                              title={eventTypeConfig[event.type as keyof typeof eventTypeConfig]?.label}
+                              className={`w-2 h-2 rounded-full ${eventDotColor[event.type] || "bg-warning"}`}
+                              title={eventTypeConfig[event.type as keyof typeof eventTypeConfig]?.label || event.type}
                             />
                           ))}
                           {dayChecklists.slice(0, 2).map((_, i) => (
                             <div
                               key={`checklist-${i}`}
-                              className="w-1.5 h-1.5 rounded-full bg-warning"
+                              className="w-2 h-2 rounded-full bg-muted-foreground"
+                              title="Checklist com prazo"
                             />
                           ))}
                         </div>
@@ -654,6 +674,54 @@ export function CalendarView() {
             </div>
           )}
         </div>
+      </div>
+
+      {/* Histórico de Eventos */}
+      <div className="legal-card">
+        <h3 className="font-serif text-xl font-semibold mb-4 flex items-center gap-2">
+          <Clock className="w-5 h-5 text-muted-foreground" />
+          Histórico de Eventos
+        </h3>
+
+        {pastEvents.length === 0 ? (
+          <p className="text-muted-foreground text-sm">Nenhum evento passado registrado ainda.</p>
+        ) : (
+          <div className="space-y-2">
+            {pastEvents.map((event) => (
+              <button
+                key={event.id}
+                onClick={() => setSelectedDay(parseISO(event.event_date))}
+                className={`w-full flex items-center justify-between gap-3 p-3 rounded-lg border-l-4 text-left hover:bg-muted/50 transition-colors ${
+                  eventTypeConfig[event.type as keyof typeof eventTypeConfig]?.class || eventTypeConfig.meeting.class
+                }`}
+              >
+                <div className="min-w-0 flex items-center gap-2">
+                  {event.status === "completed" ? (
+                    <CheckCircle2 className="w-4 h-4 text-success shrink-0" />
+                  ) : (
+                    <Circle className="w-4 h-4 text-muted-foreground shrink-0" />
+                  )}
+                  <div className="min-w-0">
+                    <p className={`font-medium text-sm truncate ${eventTitleClass(event)}`}>{event.title}</p>
+                    <p className="text-xs text-muted-foreground">
+                      {eventTypeConfig[event.type as keyof typeof eventTypeConfig]?.label || event.type} · {event.event_time}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  {event.status && (
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${taskStatusConfig[event.status]?.class || "bg-muted text-muted-foreground"}`}>
+                      {taskStatusConfig[event.status]?.label || event.status}
+                    </span>
+                  )}
+                  <span className="text-xs text-muted-foreground whitespace-nowrap">
+                    {format(parseISO(event.event_date), "dd MMM yyyy", { locale: ptBR })}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* New Event Dialog */}
