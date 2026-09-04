@@ -18,7 +18,7 @@ const SECTIONS: ChecklistSection[] = [
     ],
   },
   {
-    title: "Dados do Caso",
+    title: "Dados do Processo",
     items: [
       "Tipo de ação/serviço solicitado",
       "Parte contrária (nome e qualificação, se houver)",
@@ -34,7 +34,7 @@ const SECTIONS: ChecklistSection[] = [
       "RG e CPF (cópia)",
       "Comprovante de residência",
       "Procuração assinada",
-      "Contrato ou documento que originou o caso",
+      "Contrato ou documento que originou o processo",
       "Comprovantes de pagamento, se houver",
       "Outros documentos relevantes",
     ],
@@ -65,7 +65,7 @@ export function generateIntakeChecklistPdf(): void {
   doc.setFontSize(9);
   doc.setTextColor(90, 90, 90);
   doc.text(
-    "Preencha antes de enviar as informações ao sistema. Isso ajuda a organizar o caso e evita retrabalho.",
+    "Preencha antes de enviar as informações ao sistema. Isso ajuda a organizar o processo e evita retrabalho.",
     margin,
     y,
   );

@@ -14,11 +14,11 @@ export function StatsCards() {
   const { data: cases = [] } = useCases();
   const { data: events = [] } = useEvents();
 
-  // "Processos Abertos" = casos ainda não encerrados (status diferente de
-  // "closed"), refletindo os dados de cada caso puxados via API de
+  // "Processos Abertos" = processos ainda não encerrados (status diferente
+  // de "closed"), refletindo os dados de cada processo puxados via API de
   // monitoramento de processos (JusBrasil/WebJur/Escavador) de cada empresa.
   const openCases = cases.filter((c) => c.status !== "closed").length;
-  // "Processos Baixados" = casos com baixa/encerramento no tribunal
+  // "Processos Baixados" = processos com baixa/encerramento no tribunal
   // (status "closed"), mesma origem de dados.
   const archivedCases = cases.filter((c) => c.status === "closed").length;
   

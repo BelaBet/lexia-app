@@ -19,7 +19,7 @@ const PLANS = {
     features: [
       "5 usuários inclusos",
       "Assistente IA ilimitado",
-      "Gestão completa de casos",
+      "Gestão completa de processos",
       "Geração de documentos",
       "Calendário integrado",
       "Suporte prioritário",
@@ -132,7 +132,7 @@ export default function Sales() {
             <span className="text-primary">Inteligência Artificial</span>
           </h1>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Automatize tarefas, gerencie casos e documentos com a IA jurídica mais avançada do mercado.
+            Automatize tarefas, gerencie processos e documentos com a IA jurídica mais avançada do mercado.
           </p>
         </div>
 

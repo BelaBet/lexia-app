@@ -32,7 +32,7 @@ const features = [
   { icon: Users, text: "Integração com ClickUp" },
   { icon: Check, text: "Criação de documentos jurídicos" },
   { icon: Check, text: "Calendário de eventos" },
-  { icon: Check, text: "Gestão de casos e clientes" },
+  { icon: Check, text: "Gestão de processos e clientes" },
   { icon: Check, text: "Suporte prioritário" },
   { icon: Check, text: "Atualizações exclusivas" },
 ];

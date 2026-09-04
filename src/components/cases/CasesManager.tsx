@@ -198,7 +198,7 @@ export function CasesManager() {
               <FolderOpen className="w-6 h-6 text-gold-warm" />
             </div>
             <div>
-              <h2 className="font-serif text-2xl font-semibold">Gestão de Casos</h2>
+              <h2 className="font-serif text-2xl font-semibold">Gestão de Processos</h2>
               <p className="text-muted-foreground">Organize e acompanhe seus processos</p>
             </div>
           </div>
@@ -216,7 +216,7 @@ export function CasesManager() {
               className="legal-button-primary flex items-center gap-2"
             >
               <Plus className="w-5 h-5" />
-              Novo Caso
+              Novo Processo
             </button>
           </div>
         </div>
@@ -449,14 +449,14 @@ export function CasesManager() {
         <div className="legal-card flex flex-col items-center justify-center h-48">
           <FolderOpen className="w-12 h-12 text-muted-foreground/30 mb-4" />
           <p className="text-muted-foreground">
-            {searchTerm || activeFilterCount > 0 ? "Nenhum caso encontrado com os filtros aplicados" : "Nenhum caso cadastrado"}
+            {searchTerm || activeFilterCount > 0 ? "Nenhum processo encontrado com os filtros aplicados" : "Nenhum processo cadastrado"}
           </p>
           {!searchTerm && activeFilterCount === 0 && (
             <button
               onClick={() => setIsDialogOpen(true)}
               className="mt-4 text-gold-warm hover:text-gold-dark transition-colors"
             >
-              Cadastrar primeiro caso
+              Cadastrar primeiro processo
             </button>
           )}
           {activeFilterCount > 0 && (
@@ -500,7 +500,7 @@ export function CasesManager() {
                       }}
                       className="text-destructive"
                     >
-                      Excluir caso
+                      Excluir processo
                     </DropdownMenuItem>
                   </DropdownMenuContent>
                 </DropdownMenu>
@@ -546,7 +546,7 @@ export function CasesManager() {
                 <div className="flex items-center gap-4">
                   <SyncToClickUpButton 
                     title={caseItem.title} 
-                    description={`Caso: ${caseItem.case_number}\nCliente: ${caseItem.client}\nTipo: ${caseItem.type}`}
+                    description={`Processo: ${caseItem.case_number}\nCliente: ${caseItem.client}\nTipo: ${caseItem.type}`}
                     type="case"
                   />
                   <span className="flex items-center gap-1">
@@ -568,7 +568,7 @@ export function CasesManager() {
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle className="font-serif">Novo Caso</DialogTitle>
+            <DialogTitle className="font-serif">Novo Processo</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <div>
@@ -689,13 +689,13 @@ export function CasesManager() {
               disabled={!newCase.case_number || !newCase.title || !newCase.client || createCase.isPending}
               className="legal-button-gold w-full disabled:opacity-50"
             >
-              {createCase.isPending ? "Criando..." : "Criar Caso"}
+              {createCase.isPending ? "Criando..." : "Criar Processo"}
             </button>
           </div>
         </DialogContent>
       </Dialog>
 
-      {/* Detalhe do Caso: destaca os dados processuais (vara, comarca, valor
+      {/* Detalhe do Processo: destaca os dados processuais (vara, comarca, valor
           da causa, datas de abertura/aceitação e parte diversa) */}
       <Dialog open={!!selectedCase} onOpenChange={(open) => !open && setSelectedCase(null)}>
         <DialogContent className="max-w-lg">

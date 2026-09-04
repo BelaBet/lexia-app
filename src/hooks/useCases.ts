@@ -82,9 +82,9 @@ export function useCreateCase() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cases"] });
-      toast.success("Caso criado com sucesso!");
+      toast.success("Processo criado com sucesso!");
     },
-    onError: (error) => toast.error(error.message || "Erro ao criar caso"),
+    onError: (error) => toast.error(error.message || "Erro ao criar processo"),
   });
 }
 
@@ -102,9 +102,9 @@ export function useUpdateCase() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cases"] });
-      toast.success("Caso atualizado!");
+      toast.success("Processo atualizado!");
     },
-    onError: (error) => toast.error(error.message || "Erro ao atualizar caso"),
+    onError: (error) => toast.error(error.message || "Erro ao atualizar processo"),
   });
 }
 
@@ -118,8 +118,8 @@ export function useDeleteCase() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["cases"] });
-      toast.success("Caso excluído!");
+      toast.success("Processo excluído!");
     },
-    onError: (error) => toast.error(error.message || "Erro ao excluir caso"),
+    onError: (error) => toast.error(error.message || "Erro ao excluir processo"),
   });
 }

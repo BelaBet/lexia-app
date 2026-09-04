@@ -101,10 +101,10 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
   },
   {
     id: "checklist-prazos-caso",
-    title: "Checklist de prazos de um caso",
+    title: "Checklist de prazos de um processo",
     category: "Prazos",
     prompt:
-      "A partir da descrição do caso que vou fazer, monte uma lista dos principais prazos que preciso acompanhar (recursais, de manifestação, prescricionais) com a base legal de cada um.",
+      "A partir da descrição do processo que vou fazer, monte uma lista dos principais prazos que preciso acompanhar (recursais, de manifestação, prescricionais) com a base legal de cada um.",
   },
   {
     id: "procuracao",

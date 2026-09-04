@@ -46,7 +46,7 @@ export function SyncToClickUpButton({
       description?: string;
       due_date?: number;
     } = {
-      name: `[${type === "case" ? "Caso" : "Evento"}] ${title}`,
+      name: `[${type === "case" ? "Processo" : "Evento"}] ${title}`,
     };
 
     if (description) {

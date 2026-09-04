@@ -202,7 +202,7 @@ export function TemplateDialog({ open, onOpenChange, template }: TemplateDialogP
 
   const contextOptions = [
     { value: "general", label: "Obrigação Geral" },
-    { value: "case", label: "Por Caso/Processo" },
+    { value: "case", label: "Por Processo" },
     { value: "client", label: "Por Cliente" },
   ];
 

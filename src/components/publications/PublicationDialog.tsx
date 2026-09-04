@@ -333,7 +333,7 @@ export function PublicationDialog({ open, onOpenChange, publication }: Publicati
               id="tese"
               value={form.tese}
               onChange={(e) => setForm((f) => ({ ...f, tese: e.target.value }))}
-              placeholder="Anote a tese/argumento jurídico que será utilizado neste caso..."
+              placeholder="Anote a tese/argumento jurídico que será utilizado neste processo..."
               rows={3}
             />
           </div>

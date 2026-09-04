@@ -107,7 +107,7 @@ export function ClickUpSettings() {
             <h4 className="font-medium text-lg">Funcionalidade Premium</h4>
             <p className="text-muted-foreground text-sm max-w-md mx-auto">
               A integração com ClickUp está disponível apenas para assinantes do plano Supremo. 
-              Sincronize tarefas, prazos e casos automaticamente.
+              Sincronize tarefas, prazos e processos automaticamente.
             </p>
           </div>
           <Button className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600">
