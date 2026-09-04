@@ -20,6 +20,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { findOrCreateCaseId, ProcessualData } from "../_shared/findOrCreateCase.ts";
+import { syncDeadlineEvents, attachDocumentIfAvailable } from "../_shared/syncPublicationExtras.ts";
 
 // TODO: confirmar com a documentação da conta JusBrasil ativa (Consulta
 // Processual / Distribuição). Estrutura provável, a ajustar:
@@ -48,6 +49,12 @@ interface JusbrasilProcessItem {
   dataAbertura?: string;
   data_aceitacao?: string;
   dataAceitacao?: string;
+  prazo_externo?: string;
+  prazoExterno?: string;
+  prazo?: string;
+  deadline?: string;
+  prazo_interno?: string;
+  prazoInterno?: string;
   [key: string]: unknown;
 }
 
@@ -131,6 +138,16 @@ function extractProcessualData(item: JusbrasilProcessItem): ProcessualData {
   };
 }
 
+// Extrai os prazos externo e interno, quando a API já os fornecer, para que
+// os eventos correspondentes já nasçam na Agenda junto com a publicação —
+// TODO: confirmar os nomes de campo reais quando houver payload de exemplo.
+function extractDeadlines(item: JusbrasilProcessItem): { external: string | null; internal: string | null } {
+  return {
+    external: firstDate(item.prazo_externo, item.prazoExterno, item.prazo, item.deadline),
+    internal: firstDate(item.prazo_interno, item.prazoInterno),
+  };
+}
+
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
     return new Response(JSON.stringify({ error: "Método não permitido" }), { status: 405 });
@@ -175,6 +192,7 @@ Deno.serve(async (req) => {
           : new Date().toISOString().slice(0, 10);
 
         const processualData = extractProcessualData(item);
+        const deadlines = extractDeadlines(item);
 
         // Abre (ou reaproveita) o Caso correspondente antes de gravar a
         // publicação, para ela já nascer vinculada e aparecer em "Casos" —
@@ -192,6 +210,8 @@ Deno.serve(async (req) => {
             process_number: processNumber,
             case_id: caseId,
             external_id: externalId,
+            external_deadline: deadlines.external,
+            internal_deadline: deadlines.internal,
             raw_payload: item,
             imported_automatically: true,
             status: "pending",
@@ -206,6 +226,20 @@ Deno.serve(async (req) => {
         }
         if (inserted) {
           imported += 1;
+
+          // Prazo(s) já viram evento na Agenda, e o documento do processo
+          // (quando o payload já o fornecer) é baixado e anexado à
+          // publicação — nenhum dos dois depende de ação manual depois.
+          await syncDeadlineEvents(adminClient, integration.user_id, {
+            id: inserted.id,
+            case_id: caseId,
+            process_number: processNumber,
+            content,
+            external_deadline: deadlines.external,
+            internal_deadline: deadlines.internal,
+          });
+          await attachDocumentIfAvailable(adminClient, inserted.id, item);
+
           await adminClient.from("notifications").insert({
             user_id: integration.user_id,
             title: "Nova publicação importada via JusBrasil",

@@ -106,6 +106,73 @@ export function usePublicationFollowups(publicationId: string | null) {
   });
 }
 
+export interface PublicationAttachment {
+  id: string;
+  publication_id: string;
+  file_name: string;
+  file_path: string;
+  file_size: number | null;
+  file_type: string | null;
+  source: "manual" | "api";
+  created_at: string;
+}
+
+// Cria/atualiza na Agenda os eventos correspondentes aos prazos externo e
+// interno da publicação, para que eles apareçam automaticamente lá (além de
+// em Publicações), sem depender de lançamento manual. Cada prazo vira um
+// evento próprio (identificado por publication_id + type), reaproveitado se
+// já existir; se o prazo for removido, o evento correspondente é apagado.
+async function syncPublicationDeadlineEvents(
+  userId: string,
+  publication: Pick<
+    Publication,
+    "id" | "case_id" | "process_number" | "content" | "external_deadline" | "internal_deadline"
+  >,
+) {
+  const deadlines: Array<{ type: string; date: string | null; label: string; priority: "high" | "medium" }> = [
+    { type: "prazo_externo", date: publication.external_deadline, label: "Prazo externo", priority: "high" },
+    { type: "prazo_interno", date: publication.internal_deadline, label: "Prazo interno", priority: "medium" },
+  ];
+
+  const identifier = publication.process_number || publication.content.slice(0, 60);
+
+  for (const deadline of deadlines) {
+    const { data: existing } = await supabase
+      .from("events")
+      .select("id")
+      .eq("publication_id", publication.id)
+      .eq("type", deadline.type)
+      .maybeSingle();
+
+    if (!deadline.date) {
+      // Prazo removido/limpo: remove o evento correspondente, se houver.
+      if (existing) {
+        await supabase.from("events").delete().eq("id", existing.id);
+      }
+      continue;
+    }
+
+    if (existing) {
+      await supabase.from("events").update({ event_date: deadline.date }).eq("id", existing.id);
+    } else {
+      await supabase.from("events").insert({
+        user_id: userId,
+        title: `${deadline.label}: ${identifier}`,
+        description: publication.content.slice(0, 500),
+        event_date: deadline.date,
+        event_time: "09:00:00",
+        type: deadline.type,
+        case_id: publication.case_id,
+        publication_id: publication.id,
+        status: "pending",
+        priority: deadline.priority,
+        notification_enabled: true,
+        notification_minutes_before: 60 * 24,
+      });
+    }
+  }
+}
+
 export function useCreatePublication() {
   const queryClient = useQueryClient();
 
@@ -141,10 +208,15 @@ export function useCreatePublication() {
         .single();
 
       if (error) throw error;
-      return data as Publication;
+
+      const publication = data as Publication;
+      await syncPublicationDeadlineEvents(user.id, publication);
+
+      return publication;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["publications"] });
+      queryClient.invalidateQueries({ queryKey: ["events"] });
       toast.success("Publicação cadastrada com sucesso!");
     },
     onError: (error) => {
@@ -167,10 +239,16 @@ export function useUpdatePublication() {
         .single();
 
       if (error) throw error;
-      return data as Publication;
+
+      const publication = data as Publication;
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) await syncPublicationDeadlineEvents(user.id, publication);
+
+      return publication;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["publications"] });
+      queryClient.invalidateQueries({ queryKey: ["events"] });
       toast.success("Publicação atualizada!");
     },
     onError: (error) => {
@@ -243,4 +321,88 @@ export function useDeletePublicationFollowup() {
       toast.error("Erro ao remover followup");
     },
   });
+}
+
+export function usePublicationAttachments(publicationId: string | null) {
+  return useQuery({
+    queryKey: ["publication_attachments", publicationId],
+    enabled: !!publicationId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("publication_attachments")
+        .select("*")
+        .eq("publication_id", publicationId as string)
+        .order("created_at", { ascending: false });
+
+      if (error) throw error;
+      return (data || []) as PublicationAttachment[];
+    },
+  });
+}
+
+export function useUploadPublicationAttachment() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ publicationId, file }: { publicationId: string; file: File }) => {
+      const filePath = `${publicationId}/${Date.now()}_${file.name}`;
+
+      const { error: uploadError } = await supabase.storage
+        .from("publication-attachments")
+        .upload(filePath, file);
+      if (uploadError) throw uploadError;
+
+      const { data, error } = await supabase
+        .from("publication_attachments")
+        .insert({
+          publication_id: publicationId,
+          file_name: file.name,
+          file_path: filePath,
+          file_size: file.size,
+          file_type: file.type,
+          source: "manual",
+        })
+        .select()
+        .single();
+
+      if (error) throw error;
+      return data as PublicationAttachment;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["publication_attachments", variables.publicationId] });
+      toast.success("Documento anexado!");
+    },
+    onError: (error) => {
+      console.error("Error uploading publication attachment:", error);
+      toast.error("Erro ao anexar documento");
+    },
+  });
+}
+
+export function useDeletePublicationAttachment() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, filePath }: { id: string; publicationId: string; filePath: string }) => {
+      await supabase.storage.from("publication-attachments").remove([filePath]);
+      const { error } = await supabase.from("publication_attachments").delete().eq("id", id);
+      if (error) throw error;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["publication_attachments", variables.publicationId] });
+      toast.success("Documento removido!");
+    },
+    onError: (error) => {
+      console.error("Error deleting publication attachment:", error);
+      toast.error("Erro ao remover documento");
+    },
+  });
+}
+
+export async function getPublicationAttachmentUrl(filePath: string) {
+  const { data, error } = await supabase.storage
+    .from("publication-attachments")
+    .createSignedUrl(filePath, 60 * 10);
+  if (error) throw error;
+  return data.signedUrl;
 }

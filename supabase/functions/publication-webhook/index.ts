@@ -28,6 +28,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
 import { findOrCreateCaseId, ProcessualData } from "../_shared/findOrCreateCase.ts";
+import { syncDeadlineEvents, attachDocumentIfAvailable } from "../_shared/syncPublicationExtras.ts";
 
 type PublicationSource = "jusbrasil" | "webjur" | "escavador" | "manual" | "outro";
 
@@ -134,6 +135,16 @@ function extractProcessualData(payload: Record<string, unknown>): ProcessualData
   };
 }
 
+// Extrai os prazos externo e interno, quando o provedor já os fornecer, para
+// que os eventos correspondentes já nasçam na Agenda junto com a publicação
+// — TODO: confirmar os nomes de campo reais quando houver payload de exemplo.
+function extractDeadlines(payload: Record<string, unknown>): { external: string | null; internal: string | null } {
+  return {
+    external: firstDate(payload.prazo_externo, payload.prazoExterno, payload.prazo, payload.deadline),
+    internal: firstDate(payload.prazo_interno, payload.prazoInterno),
+  };
+}
+
 const sourceLabels: Record<string, string> = {
   jusbrasil: "JusBrasil",
   webjur: "WebJur",
@@ -202,6 +213,7 @@ Deno.serve(async (req) => {
   const publishedDate = extractPublicationDate(payload);
   const processNumber = extractProcessNumber(payload);
   const processualData = extractProcessualData(payload);
+  const deadlines = extractDeadlines(payload);
 
   // Abre (ou reaproveita) o Caso correspondente antes de gravar a
   // publicação, para ela já nascer vinculada e aparecer em "Casos" — já com
@@ -219,6 +231,8 @@ Deno.serve(async (req) => {
       process_number: processNumber,
       case_id: caseId,
       external_id: externalId,
+      external_deadline: deadlines.external,
+      internal_deadline: deadlines.internal,
       raw_payload: payload,
       imported_automatically: true,
       status: "pending",
@@ -240,6 +254,19 @@ Deno.serve(async (req) => {
     .eq("id", integration.id);
 
   if (inserted) {
+    // Prazo(s) já viram evento na Agenda, e o documento do processo (quando
+    // o payload já o fornecer) é baixado e anexado à publicação — nenhum
+    // dos dois depende de ação manual depois.
+    await syncDeadlineEvents(adminClient, userId, {
+      id: inserted.id,
+      case_id: caseId,
+      process_number: processNumber,
+      content,
+      external_deadline: deadlines.external,
+      internal_deadline: deadlines.internal,
+    });
+    await attachDocumentIfAvailable(adminClient, inserted.id, payload);
+
     const { error: notifError } = await adminClient.from("notifications").insert({
       user_id: userId,
       title: `Nova publicação importada via ${sourceLabels[source] || source}`,

@@ -21,6 +21,9 @@ export interface EventAttachment {
   created_at: string;
 }
 
+export type EventTaskStatus = "pending" | "in_progress" | "completed" | "overdue" | "cancelled";
+export type EventTaskPriority = "low" | "medium" | "high" | "urgent";
+
 export interface CalendarEvent {
   id: string;
   title: string;
@@ -34,6 +37,12 @@ export interface CalendarEvent {
   notification_minutes_before: number | null;
   case_id: string | null;
   created_at: string;
+  /** Status de tarefa (pendente/em andamento/concluído/atrasado/cancelado). Nulo = evento sem acompanhamento de tarefa. */
+  status: EventTaskStatus | null;
+  /** Prioridade da tarefa associada ao evento. */
+  priority: EventTaskPriority | null;
+  /** Publicação que originou este evento automaticamente (prazo externo/interno). */
+  publication_id: string | null;
   participants?: EventParticipant[];
   attachments?: EventAttachment[];
 }
@@ -171,6 +180,29 @@ export function useCreateEvent() {
     onError: (error) => {
       console.error("Error creating event:", error);
       toast.error("Erro ao criar evento");
+    },
+  });
+}
+
+export function useUpdateEvent() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, status, priority }: { id: string; status?: EventTaskStatus; priority?: EventTaskPriority }) => {
+      const updates: Record<string, unknown> = {};
+      if (status !== undefined) updates.status = status;
+      if (priority !== undefined) updates.priority = priority;
+
+      const { data, error } = await supabase.from("events").update(updates).eq("id", id).select().single();
+      if (error) throw error;
+      return data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["events"] });
+    },
+    onError: (error) => {
+      console.error("Error updating event:", error);
+      toast.error("Erro ao atualizar tarefa");
     },
   });
 }
