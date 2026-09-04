@@ -28,6 +28,22 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "Configuração do Supabase ausente" }), { status: 500 });
   }
 
+  // Esta função processa TODAS as integrações JusBrasil de TODAS as contas
+  // de uma vez (é o job agendado — veja
+  // supabase/scripts/agendar_busca_ativa_jusbrasil.sql). O `verify_jwt` do
+  // Supabase só garante que o token é válido, não que é o cron chamando —
+  // qualquer usuário autenticado da aplicação também tem um JWT válido. Por
+  // isso, além do verify_jwt, exige explicitamente que o Authorization seja
+  // exatamente a Service Role Key (é o que o agendamento envia), recusando
+  // qualquer chamada feita com o token comum de um usuário — do contrário,
+  // um usuário logado poderia disparar essa rota e ver, na resposta,
+  // user_id e status de busca de OUTRAS contas/empresas.
+  const authHeader = req.headers.get("Authorization") || "";
+  const providedToken = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : "";
+  if (providedToken !== serviceRoleKey) {
+    return new Response(JSON.stringify({ error: "Não autorizado" }), { status: 403 });
+  }
+
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
   const { data: integrations, error: integrationsError } = await adminClient
@@ -42,16 +58,23 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "Erro ao carregar integrações" }), { status: 500 });
   }
 
-  const results: Array<{ user_id: string; imported: number; error?: string }> = [];
+  let processed = 0;
+  let imported = 0;
+  let failed = 0;
 
   for (const integration of integrations || []) {
     if (!integration.api_key || (!integration.monitor_document && !integration.monitor_oab)) continue;
 
     const result = await pollJusbrasilIntegration(adminClient, integration, "poll");
-    results.push({ user_id: integration.user_id, imported: result.imported, error: result.error });
+    processed += 1;
+    imported += result.imported;
+    if (result.error) failed += 1;
   }
 
-  return new Response(JSON.stringify({ success: true, results }), {
+  // A resposta só traz contagens agregadas — nunca a lista de user_id por
+  // conta — já que quem chama essa rota (o agendamento) não precisa (nem
+  // deve) ver dados de qual empresa é qual.
+  return new Response(JSON.stringify({ success: true, processed, imported, failed }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
   });

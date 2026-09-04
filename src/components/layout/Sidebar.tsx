@@ -56,7 +56,7 @@ const navItems = [
   { id: "checklists", label: "Checklists", icon: ListChecks },
   { id: "assistant", label: "Assistente IA", icon: MessageSquare },
   { id: "pdf-reader", label: "Leitor PDF", icon: Upload },
-  { id: "cases", label: "Casos", icon: FolderOpen },
+  { id: "cases", label: "Processos", icon: FolderOpen },
   { id: "calendar", label: "Agenda", icon: Calendar },
   { id: "guide", label: "Guia de Uso", icon: BookOpen },
   { id: "publications", label: "Publicações", icon: FileSearch },

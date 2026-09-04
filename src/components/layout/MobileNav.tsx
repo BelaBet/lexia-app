@@ -11,7 +11,7 @@ const items = [
   ["dashboard", "Dashboard"],
   ["documents", "Documentos"],
   ["assistant", "Assistente IA"],
-  ["cases", "Casos"],
+  ["cases", "Processos"],
   ["calendar", "Agenda"],
   ["publications", "Publicações"],
   ["financial-counter", "Contador Financeiro"],
