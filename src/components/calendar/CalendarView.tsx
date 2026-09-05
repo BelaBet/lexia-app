@@ -250,7 +250,11 @@ export function CalendarView() {
 
   const handleCreateEvent = async () => {
     if (!newEvent.title || !newEvent.event_date || !newEvent.event_time) return;
-    
+    if (newEvent.event_date < todayDateStr) {
+      toast.error("Não é possível criar eventos em datas passadas.");
+      return;
+    }
+
     await createEvent.mutateAsync(newEvent);
     setNewEvent({
       title: "",
@@ -321,6 +325,10 @@ export function CalendarView() {
   const days = getDaysInMonth();
 
   const today = startOfDay(new Date());
+  // Usado para travar a criação de eventos em datas passadas: valor mínimo
+  // do input de data e validação no submit (o input sozinho não impede um
+  // valor inválido digitado/colado diretamente).
+  const todayDateStr = format(new Date(), "yyyy-MM-dd");
   const upcomingEvents = events
     .filter((e) => startOfDay(parseISO(e.event_date)) >= today)
     .sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime())
@@ -758,6 +766,7 @@ export function CalendarView() {
                   <label className="block text-sm font-medium mb-2">Data *</label>
                   <Input
                     type="date"
+                    min={todayDateStr}
                     value={newEvent.event_date}
                     onChange={(e) => setNewEvent({ ...newEvent, event_date: e.target.value })}
                   />
@@ -957,7 +966,7 @@ export function CalendarView() {
             {/* Submit */}
             <button
               onClick={handleCreateEvent}
-              disabled={!newEvent.title || createEvent.isPending}
+              disabled={!newEvent.title || newEvent.event_date < todayDateStr || createEvent.isPending}
               className="legal-button-gold w-full disabled:opacity-50"
             >
               {createEvent.isPending ? "Criando..." : "Criar Evento"}
