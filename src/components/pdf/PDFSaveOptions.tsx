@@ -29,6 +29,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useCreateDocument } from "@/hooks/useDocuments";
+import { getTodayDateStr } from "@/hooks/useEvents";
 import { toast } from "sonner";
 
 interface PDFSaveOptionsProps {
@@ -48,10 +49,7 @@ export function PDFSaveOptions({
   const [showEventDialog, setShowEventDialog] = useState(false);
   const [documentTitle, setDocumentTitle] = useState("");
   const [eventTitle, setEventTitle] = useState("");
-  const [eventDate, setEventDate] = useState(() => {
-    const today = new Date();
-    return today.toISOString().split("T")[0];
-  });
+  const [eventDate, setEventDate] = useState(() => getTodayDateStr());
   const [eventTime, setEventTime] = useState("09:00");
   const [isSaving, setIsSaving] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
@@ -139,11 +137,12 @@ export function PDFSaveOptions({
         .from("event-files")
         .upload(filePath, file);
 
+      let attachmentSaved = false;
       if (uploadError) {
         console.error("Error uploading file:", uploadError);
       } else {
         // Create attachment record
-        await supabase
+        const { error: attachmentError } = await supabase
           .from("event_attachments")
           .insert({
             event_id: event.id,
@@ -152,11 +151,20 @@ export function PDFSaveOptions({
             file_size: file.size,
             file_type: file.type,
           });
+        if (attachmentError) {
+          console.error("Error creating attachment record:", attachmentError);
+        } else {
+          attachmentSaved = true;
+        }
       }
 
       setShowEventDialog(false);
       setEventTitle("");
-      toast.success("Evento criado com anexo!");
+      if (attachmentSaved) {
+        toast.success("Evento criado com anexo!");
+      } else {
+        toast.warning("Evento criado, mas não foi possível anexar o arquivo. Tente anexar novamente pela Agenda.");
+      }
     } catch (error) {
       console.error("Error creating event:", error);
       toast.error("Erro ao criar evento");

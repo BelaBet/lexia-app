@@ -101,6 +101,10 @@ export interface JusbrasilIntegration {
   monitor_oab: string | null;
   jusbrasil_report_id?: string | null;
   price_per_search?: number | null;
+  // Cliente (public.clients) a vincular automaticamente a qualquer processo
+  // encontrado por esta integração — ver migration
+  // 20260905040000_link_client_to_jusbrasil_search.sql (fluxo "Novo Cliente").
+  linked_client_id?: string | null;
 }
 
 function firstString(...values: unknown[]): string | null {
@@ -500,6 +504,18 @@ export async function pollJusbrasilIntegration(
       const deadlines = extractDeadlines(item);
 
       const caseId = await findOrCreateCaseId(adminClient, integration.user_id, processNumber, processualData);
+
+      // Fluxo "Novo Cliente": quando esta integração já nasceu vinculada a
+      // um cliente (busca feita a partir do cadastro do cliente, antes de
+      // qualquer processo existir), vincula automaticamente todo processo
+      // encontrado a esse cliente — sem isso o advogado teria que abrir o
+      // processo depois e convidar o cliente manualmente de novo.
+      if (caseId && integration.linked_client_id) {
+        const { error: linkError } = await adminClient
+          .from("case_clients")
+          .upsert({ case_id: caseId, client_id: integration.linked_client_id }, { onConflict: "case_id,client_id", ignoreDuplicates: true });
+        if (linkError) console.error("Error auto-linking case to client:", linkError);
+      }
 
       const { data: inserted, error: insertError } = await adminClient
         .from("publications")

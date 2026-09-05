@@ -1439,6 +1439,7 @@ export type Database = {
           last_poll_error: string | null
           last_poll_status: string | null
           last_received_at: string | null
+          linked_client_id: string | null
           monitor_document: string | null
           monitor_name: string | null
           monitor_oab: string | null
@@ -1459,6 +1460,7 @@ export type Database = {
           last_poll_error?: string | null
           last_poll_status?: string | null
           last_received_at?: string | null
+          linked_client_id?: string | null
           monitor_document?: string | null
           monitor_name?: string | null
           monitor_oab?: string | null
@@ -1479,6 +1481,7 @@ export type Database = {
           last_poll_error?: string | null
           last_poll_status?: string | null
           last_received_at?: string | null
+          linked_client_id?: string | null
           monitor_document?: string | null
           monitor_name?: string | null
           monitor_oab?: string | null
@@ -1490,7 +1493,15 @@ export type Database = {
           user_id?: string
           webhook_secret?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "publication_integrations_linked_client_id_fkey"
+            columns: ["linked_client_id"]
+            isOneToOne: false
+            referencedRelation: "clients"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       publications: {
         Row: {
@@ -1703,6 +1714,7 @@ export type Database = {
         Args: { _publication_id: string }
         Returns: boolean
       }
+      mark_overdue_events: { Args: never; Returns: undefined }
       search_users_for_sharing: {
         Args: { search_term: string }
         Returns: {

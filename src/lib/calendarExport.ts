@@ -42,7 +42,12 @@ export function generateICSContent(event: CalendarEvent): string {
   const endDate = new Date(startDate.getTime() + 60 * 60 * 1000); // Default 1 hour duration
 
   const formatICSDate = (date: Date) => {
-    return date.toISOString().replace(/-|:|\.\d{3}/g, "").slice(0, -1);
+    // Mantém o "Z" final: toISOString() já está em UTC, e sem o "Z" o
+    // horário vira "floating time" (sem timezone), que muitos calendários
+    // (Outlook, Apple Calendar) interpretam no fuso do dispositivo do
+    // destinatário em vez do horário real do evento — deslocando a hora
+    // exibida (ex.: 14:30 no Brasil apareceria como 17:30).
+    return date.toISOString().replace(/-|:|\.\d{3}/g, "");
   };
 
   const escapeICS = (text: string) => {
@@ -62,7 +67,7 @@ export function generateICSContent(event: CalendarEvent): string {
     "METHOD:PUBLISH",
     "BEGIN:VEVENT",
     `UID:${event.id}@lexia.app`,
-    `DTSTAMP:${formatICSDate(new Date())}Z`,
+    `DTSTAMP:${formatICSDate(new Date())}`,
     `DTSTART:${formatICSDate(startDate)}`,
     `DTEND:${formatICSDate(endDate)}`,
     `SUMMARY:${escapeICS(event.title)}`,
@@ -84,7 +89,7 @@ export function generateICSContent(event: CalendarEvent): string {
   }
 
   // Add reminder/alarm
-  if (event.notification_enabled && event.notification_minutes_before) {
+  if (event.notification_enabled && event.notification_minutes_before != null) {
     lines.push("BEGIN:VALARM");
     lines.push("ACTION:DISPLAY");
     lines.push(`DESCRIPTION:Lembrete: ${escapeICS(event.title)}`);

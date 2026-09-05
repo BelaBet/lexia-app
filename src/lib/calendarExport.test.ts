@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { generateGoogleCalendarUrl, generateICSContent } from "./calendarExport";
 import type { CalendarEvent } from "@/hooks/useEvents";
 
@@ -70,5 +70,37 @@ describe("generateICSContent", () => {
     expect(withAlarm).toContain("BEGIN:VALARM");
     expect(withAlarm).toContain("TRIGGER:-PT30M");
     expect(withoutAlarm).not.toContain("BEGIN:VALARM");
+  });
+
+  it("keeps the VALARM when the reminder is set to 0 minutes before (\"no momento do evento\")", () => {
+    const ics = generateICSContent(
+      makeEvent({ notification_enabled: true, notification_minutes_before: 0 })
+    );
+
+    expect(ics).toContain("BEGIN:VALARM");
+    expect(ics).toContain("TRIGGER:-PT0M");
+  });
+
+  describe("in a UTC-3 browser timezone (e.g. America/Sao_Paulo)", () => {
+    const originalTZ = process.env.TZ;
+
+    beforeEach(() => {
+      process.env.TZ = "America/Sao_Paulo";
+    });
+
+    afterEach(() => {
+      process.env.TZ = originalTZ;
+    });
+
+    it("exports DTSTART/DTEND as real UTC instants (with a trailing Z), not a floating local time", () => {
+      // Evento cadastrado às 14:30 no Brasil (UTC-3) deve virar 17:30 UTC no
+      // .ics — sem o "Z", muitos calendários (Outlook, Apple Calendar)
+      // interpretam o horário no fuso do dispositivo de quem recebe o
+      // convite, deslocando a hora exibida.
+      const ics = generateICSContent(makeEvent({ event_date: "2026-09-15", event_time: "14:30:00" }));
+
+      expect(ics).toContain("DTSTART:20260915T173000Z");
+      expect(ics).toContain("DTEND:20260915T183000Z");
+    });
   });
 });

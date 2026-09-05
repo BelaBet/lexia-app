@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { FolderOpen, Radio, Search, Filter, MoreVertical, Calendar, FileText, User, X, ChevronDown, ClipboardList, Scale, Gavel, Landmark, Users } from "lucide-react";
+import { FolderOpen, Radio, Search, Filter, MoreVertical, Calendar, FileText, User, X, ChevronDown, ClipboardList, Scale, Gavel, Landmark, Users, UserPlus } from "lucide-react";
 import { generateIntakeChecklistPdf } from "@/lib/intakeChecklistPdf";
 import { useCases, useDeleteCase, Case } from "@/hooks/useCases";
 import { useDocuments } from "@/hooks/useDocuments";
@@ -27,6 +27,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { SyncToClickUpButton } from "@/components/integrations/SyncToClickUpButton";
 import ClientPortalPanel from "@/components/cases/ClientPortalPanel";
+import NewClientSearchDialog from "@/components/cases/NewClientSearchDialog";
 
 const statusConfig = {
   active: { label: "Ativo", class: "bg-success/10 text-success" },
@@ -61,6 +62,7 @@ export function CasesManager({ onTabChange }: CasesManagerProps) {
   const [selectedCase, setSelectedCase] = useState<Case | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [portalCase, setPortalCase] = useState<Case | null>(null);
+  const [isNewClientDialogOpen, setIsNewClientDialogOpen] = useState(false);
 
   // Filter states
   const [filters, setFilters] = useState<Filters>({
@@ -177,6 +179,14 @@ export function CasesManager({ onTabChange }: CasesManagerProps) {
               Checklist de Coleta (PDF)
             </button>
             <button
+              onClick={() => setIsNewClientDialogOpen(true)}
+              className="px-6 py-3 rounded-lg font-medium transition-all duration-300 border border-border hover:bg-muted flex items-center gap-2"
+              title="Cadastre o cliente primeiro e já dispare a busca do processo dele pelo nome no JusBrasil"
+            >
+              <UserPlus className="w-5 h-5" />
+              Novo Cliente
+            </button>
+            <button
               onClick={() => onTabChange?.("integrations")}
               className="legal-button-primary flex items-center gap-2"
               title="Processos são criados automaticamente quando localizados via JusBrasil"
@@ -189,7 +199,7 @@ export function CasesManager({ onTabChange }: CasesManagerProps) {
         <p className="text-xs text-muted-foreground mt-3 pt-3 border-t border-border">
           Não é mais possível cadastrar um processo manualmente: todo processo é criado automaticamente
           quando localizado pela integração com o JusBrasil (webhook ou busca ativa, configurados em
-          Integrações).
+          Integrações), ou a partir do cadastro de um cliente em "Novo Cliente".
         </p>
       </div>
 
@@ -546,6 +556,9 @@ export function CasesManager({ onTabChange }: CasesManagerProps) {
           ))}
         </div>
       )}
+
+      {/* Novo Cliente: cadastra o cliente e já busca o processo dele pelo nome */}
+      <NewClientSearchDialog open={isNewClientDialogOpen} onOpenChange={setIsNewClientDialogOpen} />
 
       {/* Espaço do Cliente — Meu Jurídico */}
       <Dialog open={!!portalCase} onOpenChange={(open) => !open && setPortalCase(null)}>
