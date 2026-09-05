@@ -9,7 +9,7 @@ import {
   TrendingUp,
   Calendar
 } from "lucide-react";
-import { format, startOfMonth, endOfMonth, isWithinInterval, isPast, isToday } from "date-fns";
+import { format, startOfMonth, endOfMonth, isWithinInterval, isPast, isToday, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 
 export function ChecklistStats() {
@@ -41,7 +41,10 @@ export function ChecklistStats() {
   const overdue = checklists.filter(c => {
     if (c.status === 'completed' || c.status === 'cancelled') return false;
     if (!c.due_date) return false;
-    return isPast(new Date(c.due_date)) && !isToday(new Date(c.due_date));
+    // due_date é uma coluna DATE (sem timezone) — parseISO evita que o dia
+    // mude por causa do fuso horário local (Brasil é UTC-3, então
+    // `new Date("2026-09-05")` vira 04/09 à noite aqui).
+    return isPast(parseISO(c.due_date)) && !isToday(parseISO(c.due_date));
   }).length;
 
   const thisMonth = checklists.filter(c => {
@@ -57,12 +60,12 @@ export function ChecklistStats() {
     .filter(c => {
       if (c.status === 'completed' || c.status === 'cancelled') return false;
       if (!c.due_date) return false;
-      const dueDate = new Date(c.due_date);
+      const dueDate = parseISO(c.due_date);
       const in7Days = new Date();
       in7Days.setDate(in7Days.getDate() + 7);
       return dueDate >= now && dueDate <= in7Days;
     })
-    .sort((a, b) => new Date(a.due_date!).getTime() - new Date(b.due_date!).getTime())
+    .sort((a, b) => parseISO(a.due_date!).getTime() - parseISO(b.due_date!).getTime())
     .slice(0, 5);
 
   // By priority
@@ -194,7 +197,7 @@ export function ChecklistStats() {
                       )}
                     </div>
                     <div className="text-sm font-medium text-primary">
-                      {format(new Date(checklist.due_date!), "dd/MM", { locale: ptBR })}
+                      {format(parseISO(checklist.due_date!), "dd/MM", { locale: ptBR })}
                     </div>
                   </div>
                 ))}

@@ -311,6 +311,16 @@ export function CalendarView() {
 
   const handleUpdateEvent = async () => {
     if (!editForm.title || !editForm.event_date || !editForm.event_time) return;
+    // Só barra quando a data está de fato sendo alterada para o passado —
+    // editar outros campos de um evento que já tinha uma data passada
+    // continua permitido (o banco aplica a mesma regra, ver migração
+    // 20260905000000_prevent_retroactive_event_backend.sql).
+    const movingDateToThePast =
+      editingEvent && editForm.event_date !== editingEvent.event_date && editForm.event_date < todayDateStr;
+    if (movingDateToThePast) {
+      toast.error("Não é possível mover o evento para uma data passada.");
+      return;
+    }
     await updateEvent.mutateAsync(editForm);
     setEditingEvent(null);
   };
@@ -596,12 +606,12 @@ export function CalendarView() {
                         });
                       }}
                       className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full mb-2 transition-colors ${
-                        taskStatusConfig[event.status]?.class || "bg-muted text-muted-foreground"
+                        taskStatusConfig[event.computed_status || event.status]?.class || "bg-muted text-muted-foreground"
                       }`}
                       title="Clique para marcar como concluído/pendente"
                     >
                       <CheckSquare className="w-3 h-3" />
-                      {taskStatusConfig[event.status]?.label || event.status}
+                      {taskStatusConfig[event.computed_status || event.status]?.label || event.computed_status || event.status}
                     </button>
                   )}
                   <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
@@ -717,9 +727,9 @@ export function CalendarView() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
-                  {event.status && (
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${taskStatusConfig[event.status]?.class || "bg-muted text-muted-foreground"}`}>
-                      {taskStatusConfig[event.status]?.label || event.status}
+                  {event.computed_status && (
+                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${taskStatusConfig[event.computed_status]?.class || "bg-muted text-muted-foreground"}`}>
+                      {taskStatusConfig[event.computed_status]?.label || event.computed_status}
                     </span>
                   )}
                   <span className="text-xs text-muted-foreground whitespace-nowrap">
@@ -1102,6 +1112,14 @@ export function CalendarView() {
                                     <option key={value} value={value}>{label}</option>
                                   ))}
                                 </select>
+                                {event.computed_status === "overdue" && event.status !== "overdue" && (
+                                  <span
+                                    className={`text-xs px-2 py-1 rounded-full ${taskStatusConfig.overdue.class}`}
+                                    title="A data deste evento já passou"
+                                  >
+                                    {taskStatusConfig.overdue.label}
+                                  </span>
+                                )}
                                 {event.priority && (
                                   <span className="text-xs text-muted-foreground">
                                     Prioridade: {event.priority === "urgent" ? "Urgente" : event.priority === "high" ? "Alta" : event.priority === "medium" ? "Média" : "Baixa"}
@@ -1250,6 +1268,7 @@ export function CalendarView() {
                 <Input
                   id="edit-date"
                   type="date"
+                  min={todayDateStr}
                   value={editForm.event_date || ""}
                   onChange={(e) => setEditForm({ ...editForm, event_date: e.target.value })}
                 />
@@ -1345,7 +1364,11 @@ export function CalendarView() {
               </button>
               <button
                 onClick={handleUpdateEvent}
-                disabled={!editForm.title || updateEvent.isPending}
+                disabled={
+                  !editForm.title ||
+                  updateEvent.isPending ||
+                  (!!editingEvent && editForm.event_date !== editingEvent.event_date && (editForm.event_date || "") < todayDateStr)
+                }
                 className="legal-button-primary disabled:opacity-50"
               >
                 Salvar
