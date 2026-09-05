@@ -29,6 +29,8 @@ import {
   useToggleEventStatus,
   useSendInvites,
   isApiCreatedEvent,
+  getTodayDateStr,
+  isRetroactiveEventDateChange,
   CalendarEvent,
   CreateEventData,
   UpdateEventData,
@@ -250,7 +252,7 @@ export function CalendarView() {
 
   const handleCreateEvent = async () => {
     if (!newEvent.title || !newEvent.event_date || !newEvent.event_time) return;
-    if (newEvent.event_date < todayDateStr) {
+    if (isRetroactiveEventDateChange(newEvent.event_date)) {
       toast.error("Não é possível criar eventos em datas passadas.");
       return;
     }
@@ -311,13 +313,7 @@ export function CalendarView() {
 
   const handleUpdateEvent = async () => {
     if (!editForm.title || !editForm.event_date || !editForm.event_time) return;
-    // Só barra quando a data está de fato sendo alterada para o passado —
-    // editar outros campos de um evento que já tinha uma data passada
-    // continua permitido (o banco aplica a mesma regra, ver migração
-    // 20260905000000_prevent_retroactive_event_backend.sql).
-    const movingDateToThePast =
-      editingEvent && editForm.event_date !== editingEvent.event_date && editForm.event_date < todayDateStr;
-    if (movingDateToThePast) {
+    if (isRetroactiveEventDateChange(editForm.event_date, editingEvent?.event_date)) {
       toast.error("Não é possível mover o evento para uma data passada.");
       return;
     }
@@ -335,10 +331,10 @@ export function CalendarView() {
   const days = getDaysInMonth();
 
   const today = startOfDay(new Date());
-  // Usado para travar a criação de eventos em datas passadas: valor mínimo
-  // do input de data e validação no submit (o input sozinho não impede um
-  // valor inválido digitado/colado diretamente).
-  const todayDateStr = format(new Date(), "yyyy-MM-dd");
+  // Valor mínimo dos inputs de data (regra de evento retroativo — ver
+  // isRetroactiveEventDateChange em useEvents.ts, a mesma fonte de verdade
+  // usada na validação de submit e espelhada no gatilho do banco).
+  const todayDateStr = getTodayDateStr();
   const upcomingEvents = events
     .filter((e) => startOfDay(parseISO(e.event_date)) >= today)
     .sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime())
@@ -976,7 +972,7 @@ export function CalendarView() {
             {/* Submit */}
             <button
               onClick={handleCreateEvent}
-              disabled={!newEvent.title || newEvent.event_date < todayDateStr || createEvent.isPending}
+              disabled={!newEvent.title || isRetroactiveEventDateChange(newEvent.event_date) || createEvent.isPending}
               className="legal-button-gold w-full disabled:opacity-50"
             >
               {createEvent.isPending ? "Criando..." : "Criar Evento"}
@@ -1367,7 +1363,7 @@ export function CalendarView() {
                 disabled={
                   !editForm.title ||
                   updateEvent.isPending ||
-                  (!!editingEvent && editForm.event_date !== editingEvent.event_date && (editForm.event_date || "") < todayDateStr)
+                  isRetroactiveEventDateChange(editForm.event_date || "", editingEvent?.event_date)
                 }
                 className="legal-button-primary disabled:opacity-50"
               >

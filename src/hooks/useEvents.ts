@@ -1,7 +1,33 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
-import { parseISO, startOfDay, isBefore } from "date-fns";
+import { parseISO, startOfDay, isBefore, format } from "date-fns";
+
+// REGRA DE NEGÓCIO CENTRAL — evento retroativo: nenhum evento pode ser
+// criado, nem ter sua data movida, para o passado, salvo exceções (papéis
+// admin/supremo, e a integração de publicações via service_role). Esta não
+// é uma regra visual da Agenda: a fonte de verdade é o gatilho
+// `trg_prevent_retroactive_event` no banco (ver migração
+// 20260905000000_prevent_retroactive_event_backend.sql), que rejeita a
+// gravação mesmo se algo pular a UI e chamar a API diretamente. As funções
+// abaixo existem só para a interface poder aplicar a MESMA regra de forma
+// antecipada (evitar um round-trip ao banco só para descobrir que a data é
+// inválida) — qualquer tela que crie ou edite a data de um evento deve
+// usar estas funções em vez de reimplementar a checagem por conta própria.
+
+// Data de hoje no fuso local, no formato usado por `event_date` (yyyy-MM-dd).
+export function getTodayDateStr(): string {
+  return format(new Date(), "yyyy-MM-dd");
+}
+
+// Espelha exatamente a condição do gatilho no banco: só considera
+// retroativo quando a data está de fato mudando para o passado — editar
+// outros campos de um evento que já tinha data passada (ex.: título,
+// status) nunca é bloqueado, porque `newEventDate === previousEventDate`.
+export function isRetroactiveEventDateChange(newEventDate: string, previousEventDate?: string): boolean {
+  if (previousEventDate !== undefined && newEventDate === previousEventDate) return false;
+  return newEventDate < getTodayDateStr();
+}
 
 export interface EventParticipant {
   id: string;
