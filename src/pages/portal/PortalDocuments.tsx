@@ -18,10 +18,16 @@ export default function PortalDocuments() {
   const { data: documents, isLoading } = useCaseDocuments(caseId);
   const uploadMutation = useUploadClientDocument();
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [downloadingId, setDownloadingId] = useState<string | null>(null);
 
   const handleFileSelected = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !caseId) return;
+    if (file.size > 20 * 1024 * 1024) {
+      toast.error("Arquivo muito grande (máximo 20MB)");
+      e.target.value = "";
+      return;
+    }
     try {
       await uploadMutation.mutateAsync({ caseId, file, uploadedBy: "client" });
       toast.success("Documento enviado!");
@@ -32,12 +38,15 @@ export default function PortalDocuments() {
     }
   };
 
-  const handleDownload = async (path: string) => {
+  const handleDownload = async (path: string, id: string) => {
+    setDownloadingId(id);
     try {
       const url = await getClientDocumentDownloadUrl(path);
       window.open(url, "_blank", "noopener,noreferrer");
     } catch (err) {
       toast.error("Erro ao abrir documento", { description: err instanceof Error ? err.message : undefined });
+    } finally {
+      setDownloadingId(null);
     }
   };
 
@@ -74,8 +83,14 @@ export default function PortalDocuments() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <Badge variant="outline">{doc.uploaded_by === "client" ? "Enviado por você" : "Do escritório"}</Badge>
-                  <Button size="icon" variant="ghost" onClick={() => handleDownload(doc.file_path)} title="Baixar">
-                    <Download className="w-4 h-4" />
+                  <Button
+                    size="icon"
+                    variant="ghost"
+                    onClick={() => handleDownload(doc.file_path, doc.id)}
+                    disabled={downloadingId === doc.id}
+                    title="Baixar"
+                  >
+                    {downloadingId === doc.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
                   </Button>
                 </div>
               </CardContent>
