@@ -27,7 +27,7 @@ import {
   Calendar,
   GripVertical
 } from "lucide-react";
-import { format } from "date-fns";
+import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
@@ -188,7 +188,7 @@ export function ChecklistDetailDialog({
             {checklist.due_date && (
               <div className="flex items-center gap-1">
                 <Calendar className="w-4 h-4" />
-                Prazo: {format(new Date(checklist.due_date), "dd/MM/yyyy", { locale: ptBR })}
+                Prazo: {format(parseISO(checklist.due_date), "dd/MM/yyyy", { locale: ptBR })}
               </div>
             )}
             {checklist.case && (
@@ -290,7 +290,7 @@ export function ChecklistDetailDialog({
                     {item.due_date && (
                       <p className="text-xs text-muted-foreground mt-1 flex items-center gap-1">
                         <Calendar className="w-3 h-3" />
-                        {format(new Date(item.due_date), "dd/MM/yyyy", { locale: ptBR })}
+                        {format(parseISO(item.due_date), "dd/MM/yyyy", { locale: ptBR })}
                       </p>
                     )}
                   </div>

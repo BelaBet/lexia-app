@@ -4,7 +4,7 @@
 // supabase/scripts/agendar_busca_ativa_jusbrasil.sql para o agendamento.
 //
 // Para cada integração ativa da fonte "jusbrasil" que tenha uma api_key e
-// pelo menos um identificador de busca (monitor_document = CPF/CNPJ, ou
+// pelo menos um identificador de busca (monitor_name = nome/razão social, ou
 // monitor_oab = número da OAB), esta função consulta o JusBrasil por
 // processos/movimentações novas e importa cada novidade como uma publicação
 // (mesma lógica de deduplicação e notificação do webhook), além de registrar
@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
 
   const { data: integrations, error: integrationsError } = await adminClient
     .from("publication_integrations")
-    .select("id, user_id, api_key, monitor_document, monitor_oab, price_per_search")
+    .select("id, user_id, api_key, monitor_name, monitor_oab, jusbrasil_report_id, price_per_search")
     .eq("source", "jusbrasil")
     .eq("is_active", true)
     .not("api_key", "is", null);
@@ -63,7 +63,7 @@ Deno.serve(async (req) => {
   let failed = 0;
 
   for (const integration of integrations || []) {
-    if (!integration.api_key || (!integration.monitor_document && !integration.monitor_oab)) continue;
+    if (!integration.api_key || (!integration.monitor_name && !integration.monitor_oab)) continue;
 
     const result = await pollJusbrasilIntegration(adminClient, integration, "poll");
     processed += 1;

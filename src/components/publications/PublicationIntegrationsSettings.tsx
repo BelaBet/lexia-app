@@ -73,7 +73,7 @@ function JusbrasilPollingConfig({ integration }: { integration: PublicationInteg
   const updateConfig = useUpdatePublicationIntegrationConfig();
   const triggerManualSearch = useTriggerManualSearch();
   const [apiKey, setApiKey] = useState(integration.api_key || "");
-  const [document, setDocument] = useState(integration.monitor_document || "");
+  const [name, setName] = useState(integration.monitor_name || "");
   const [oab, setOab] = useState(integration.monitor_oab || "");
   const [pricePerSearch, setPricePerSearch] = useState(
     integration.price_per_search != null ? String(integration.price_per_search) : "",
@@ -81,10 +81,10 @@ function JusbrasilPollingConfig({ integration }: { integration: PublicationInteg
 
   useEffect(() => {
     setApiKey(integration.api_key || "");
-    setDocument(integration.monitor_document || "");
+    setName(integration.monitor_name || "");
     setOab(integration.monitor_oab || "");
     setPricePerSearch(integration.price_per_search != null ? String(integration.price_per_search) : "");
-  }, [integration.id, integration.api_key, integration.monitor_document, integration.monitor_oab, integration.price_per_search]);
+  }, [integration.id, integration.api_key, integration.monitor_name, integration.monitor_oab, integration.price_per_search]);
 
   const handleSave = () => {
     const normalizedPrice = pricePerSearch.trim().replace(",", ".");
@@ -92,7 +92,7 @@ function JusbrasilPollingConfig({ integration }: { integration: PublicationInteg
     updateConfig.mutate({
       id: integration.id,
       api_key: apiKey || null,
-      monitor_document: document || null,
+      monitor_name: name || null,
       monitor_oab: oab || null,
       price_per_search: parsedPrice != null && !isNaN(parsedPrice) ? parsedPrice : null,
     });
@@ -105,7 +105,8 @@ function JusbrasilPollingConfig({ integration }: { integration: PublicationInteg
         <p className="text-xs font-semibold text-foreground">Busca ativa diária (além do webhook)</p>
       </div>
       <p className="text-xs text-muted-foreground">
-        Preencha sua chave de API e o CPF/CNPJ e/ou OAB a monitorar. Uma consulta automática roda 1x por dia
+        Preencha sua chave de API e o nome/razão social e/ou OAB a monitorar. O JusBrasil não realiza busca
+        por CPF/CNPJ neste plano — apenas por nome ou razão social. Uma consulta automática roda 1x por dia
         buscando novos processos e prazos, mesmo que o JusBrasil não envie webhook para eles.
       </p>
 
@@ -121,12 +122,12 @@ function JusbrasilPollingConfig({ integration }: { integration: PublicationInteg
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div className="space-y-1">
-          <Label htmlFor={`doc-${integration.id}`} className="text-xs">CPF/CNPJ a monitorar</Label>
+          <Label htmlFor={`name-${integration.id}`} className="text-xs">Nome ou razão social a monitorar</Label>
           <Input
-            id={`doc-${integration.id}`}
-            value={document}
-            onChange={(e) => setDocument(e.target.value)}
-            placeholder="000.000.000-00"
+            id={`name-${integration.id}`}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            placeholder="Nome completo ou razão social"
           />
         </div>
         <div className="space-y-1">
@@ -152,10 +153,15 @@ function JusbrasilPollingConfig({ integration }: { integration: PublicationInteg
           inputMode="decimal"
         />
         <p className="text-[11px] text-muted-foreground">
-          Usado no Contador Financeiro: cada busca ativa (diária) ou busca manual deste CPF/CNPJ/OAB soma esse
+          Usado no Contador Financeiro: cada busca ativa (diária) ou busca manual deste nome/OAB soma esse
           valor ao total cobrado do cliente.
         </p>
       </div>
+
+      <p className="text-[11px] text-muted-foreground">
+        A busca por nome/razão social é assíncrona: a primeira consulta encomenda o processamento no
+        JusBrasil, que pode levar até 72 horas para trazer novos processos.
+      </p>
 
       {integration.last_poll_status === "error" && integration.last_poll_error && (
         <div className="flex items-start gap-1.5 text-xs text-destructive bg-destructive/10 rounded p-2">
@@ -175,7 +181,7 @@ function JusbrasilPollingConfig({ integration }: { integration: PublicationInteg
           variant="secondary"
           className="gap-1.5"
           onClick={() => triggerManualSearch.mutate(integration.id)}
-          disabled={triggerManualSearch.isPending || !integration.api_key || (!integration.monitor_document && !integration.monitor_oab)}
+          disabled={triggerManualSearch.isPending || !integration.api_key || (!integration.monitor_name && !integration.monitor_oab)}
         >
           {triggerManualSearch.isPending ? (
             <Loader2 className="w-3.5 h-3.5 animate-spin" />

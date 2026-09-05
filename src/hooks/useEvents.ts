@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
+import { parseISO, startOfDay, isBefore } from "date-fns";
 
 export interface EventParticipant {
   id: string;
@@ -37,14 +38,36 @@ export interface CalendarEvent {
   notification_minutes_before: number | null;
   case_id: string | null;
   created_at: string;
-  /** Status de tarefa (pendente/em andamento/concluído/atrasado/cancelado). Nulo = evento sem acompanhamento de tarefa. */
+  /** Status de tarefa gravado no banco (pendente/em andamento/concluído/atrasado/cancelado). Nulo = evento sem acompanhamento de tarefa. */
   status: EventTaskStatus | null;
+  /**
+   * Status "verdadeiro" para exibição: igual a `status`, exceto quando o
+   * evento já passou da data (event_date < hoje) e ninguém marcou
+   * manualmente como concluído/cancelado — nesse caso mostra "overdue"
+   * mesmo que o campo `status` no banco ainda esteja "pending"/
+   * "in_progress" (nada atualiza esse campo automaticamente). Use este
+   * campo para exibir o status ao usuário; use `status` para editar.
+   */
+  computed_status: EventTaskStatus | null;
   /** Prioridade da tarefa associada ao evento. */
   priority: EventTaskPriority | null;
   /** Publicação que originou este evento automaticamente (prazo externo/interno). */
   publication_id: string | null;
   participants?: EventParticipant[];
   attachments?: EventAttachment[];
+}
+
+// O campo `status` só muda quando alguém (usuário ou integração) grava um
+// novo valor — nada no banco transiciona automaticamente para "overdue"
+// quando a data passa. Sem isso, um evento de ontem que ninguém tocou
+// continua aparecendo como "Pendente" para sempre em vez de "Atrasado".
+export function getEffectiveEventStatus(
+  event: Pick<CalendarEvent, "status" | "event_date">,
+): EventTaskStatus | null {
+  if (event.status === "completed" || event.status === "cancelled") return event.status;
+  if (!event.status) return event.status;
+  if (isBefore(parseISO(event.event_date), startOfDay(new Date()))) return "overdue";
+  return event.status;
 }
 
 // Evento criado automaticamente via API/integração — usado para decidir
@@ -88,11 +111,13 @@ export function useEvents() {
             supabase.from("event_attachments").select("*").eq("event_id", event.id),
           ]);
           
-          return {
+          const calendarEvent = {
             ...event,
             participants: participantsRes.data || [],
             attachments: attachmentsRes.data || [],
-          } as CalendarEvent;
+          } as Omit<CalendarEvent, "computed_status">;
+
+          return { ...calendarEvent, computed_status: getEffectiveEventStatus(calendarEvent) };
         })
       );
       

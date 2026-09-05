@@ -5,32 +5,44 @@
 // Integrações). Mantendo a lógica num só lugar, os dois fluxos não podem
 // divergir.
 //
-// ENDPOINTS REAIS (confirmado em https://api.jusbrasil.com.br/docs/ — ver
-// BUG-001: a versão anterior deste arquivo usava um endpoint inventado,
-// "/v1/processos/consulta", marcado no próprio código como provisório e
-// nunca confirmado contra a documentação):
+// CORREÇÃO (pedido explícito, confirmado contra
+// https://api.jusbrasil.com.br/docs/autenticacao/api_key.html e o restante
+// da documentação): o contrato do JusBrasil usado aqui NÃO faz busca por
+// CPF/CNPJ — só por NOME ou RAZÃO SOCIAL. A versão anterior deste arquivo
+// (correção do BUG-001) implementava um endpoint de "Consulta processual
+// por CPF/CNPJ" (background-check, host api.jusbrasil.com.br) que, embora
+// documentado, exige um contrato "Consulta PRO" separado que este cliente
+// não tem — na prática a busca por CPF/CNPJ nunca retornava nada. Esse
+// caminho foi REMOVIDO. A busca por nome/razão social agora usa o mesmo
+// produto já validado e testado no CRM de Busca de Processos
+// (_shared/jusbrasilNameSearch.ts — "Consulta Processual por Nome" /
+// relatorio_nome, host op.digesto.com.br, Authorization: Bearer).
 //
-// 1) Consulta por CPF/CNPJ ("Consulta processual por CPF/CNPJ" —
-//    background-check): host `https://api.jusbrasil.com.br`, autenticação
-//    via header `apikey` (NÃO é "Authorization: Bearer"), endpoints
-//    POST /background-check/lawsuits/{civil,criminal,trabalhista}, corpo
-//    `{ documentNumber, pagination: { cursor, size } }`. É síncrono: a
-//    resposta já traz os processos encontrados na hora
-//    (docs: consulta_processual_por_cpf_cnpj/como_consultar.html).
+// ENDPOINTS REAIS usados por este arquivo:
+//
+// 1) Consulta por NOME/RAZÃO SOCIAL ("Consulta Processual por Nome" —
+//    relatorio_nome): assíncrona, paga por "encomenda" (bill_start_update).
+//    Fluxo: cria/atualiza a definição do relatório uma única vez
+//    (create_update_from_terms, guardamos o id em
+//    publication_integrations.jusbrasil_report_id para reaproveitar),
+//    encomenda o processamento (bill_start_update — só quando fizer sentido
+//    cobrar, ver comentário em ensureNameSearchReport) e lê o que já estiver
+//    pronto via export. Pode levar até 72h para novos processos aparecerem
+//    (docs: relatorio_nome/index.html).
 //
 // 2) Consulta por OAB ("Busca de processos por OAB"): host
 //    `https://op.digesto.com.br`, autenticação via
-//    `Authorization: Bearer <token>`. Ao contrário da consulta por
-//    CPF/CNPJ, esta NÃO é uma busca síncrona: é preciso primeiro registrar
-//    a OAB para monitoramento (POST /api/monitoramento/oab/acompanhamento/)
-//    e só depois consultar os processos já vinculados a ela
+//    `Authorization: Bearer <token>`. Também assíncrona: é preciso primeiro
+//    registrar a OAB para monitoramento
+//    (POST /api/monitoramento/oab/acompanhamento/) e só depois consultar os
+//    processos já vinculados a ela
 //    (GET /api/monitoramento/oab/vinculos/processos/oab) — o vínculo de
-//    processos novos é processado de forma assíncrona pelo provedor
-//    (pode não haver nada na primeira consulta, mesmo com a OAB correta).
-//    A API só devolve o número do processo (CNJ) vinculado, sem o
+//    processos novos é processado de forma assíncrona pelo provedor (pode
+//    não haver nada na primeira consulta, mesmo com a OAB correta). A API
+//    só devolve o número do processo (CNJ) vinculado, sem o
 //    conteúdo/movimentação em si — para isso ainda seria necessário uma
-//    consulta processual adicional por CNJ, que este arquivo não faz
-//    (fica fora do escopo desta correção; ver TODO em fetchOabLinkedProcesses).
+//    consulta processual adicional por CNJ, que este arquivo não faz (fica
+//    fora do escopo desta correção; ver TODO em fetchOabLinkedProcesses).
 //    (docs: oab/realizando_a_busca.html, oab/index.html)
 //
 // Também é responsável por registrar o "contador financeiro de pesquisas
@@ -42,11 +54,11 @@
 import { findOrCreateCaseId, ProcessualData } from "./findOrCreateCase.ts";
 import { syncDeadlineEvents, attachDocumentIfAvailable } from "./syncPublicationExtras.ts";
 import { computeFallbackExternalId } from "./externalId.ts";
+import { createNameSearchReport, startNameSearchBilling, fetchNameSearchExport, NameSearchRow } from "./jusbrasilNameSearch.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 
 type AdminClient = SupabaseClient;
 
-const BACKGROUND_CHECK_BASE_URL = "https://api.jusbrasil.com.br";
 const OAB_MONITORING_BASE_URL = "https://op.digesto.com.br";
 
 export interface JusbrasilProcessItem {
@@ -85,8 +97,9 @@ export interface JusbrasilIntegration {
   id: string;
   user_id: string;
   api_key: string | null;
-  monitor_document: string | null;
+  monitor_name: string | null;
   monitor_oab: string | null;
+  jusbrasil_report_id?: string | null;
   price_per_search?: number | null;
 }
 
@@ -144,122 +157,96 @@ function firstNumber(...values: unknown[]): number | null {
 }
 
 // ---------------------------------------------------------------------
-// 1) Consulta por CPF/CNPJ — background-check (síncrono)
+// 1) Consulta por NOME/RAZÃO SOCIAL — relatório assíncrono (reaproveita o
+//    mesmo cliente já usado pelo CRM de Busca de Processos)
 // ---------------------------------------------------------------------
 
-interface BackgroundCheckParty {
-  nome?: string;
-  papel?: string;
-}
-
-interface BackgroundCheckLawyer {
-  nome?: string;
-  oab?: string;
-}
-
-interface BackgroundCheckStatus {
-  data?: string;
-  inferido?: string;
-  normalizado?: string;
-  tribunal?: string;
-}
-
-interface BackgroundCheckLawsuit {
-  tipo_processo?: string;
-  numero_processo?: string;
-  tribunal?: string;
-  UF?: string;
-  comarca?: string;
-  forum?: string;
-  valor_causa?: string | number | null;
-  data_ultima_atualizacao?: string;
-  data_andamento_mais_recente?: string;
-  assunto?: string;
-  natureza?: string;
-  classe_processual?: string;
-  nome_na_capa?: string;
-  link?: string;
-  partes?: BackgroundCheckParty[];
-  advogados?: BackgroundCheckLawyer[];
-  status?: BackgroundCheckStatus;
-  [key: string]: unknown;
-}
-
-interface BackgroundCheckResponse {
-  nome?: string;
-  identificacao?: { valor: string; tipo: string };
-  processos?: BackgroundCheckLawsuit[];
-  pagination?: { endCursor?: string; hasNextPage?: boolean; total?: number };
-}
-
-async function fetchBackgroundCheckLawsuits(
-  apiKey: string,
-  documentNumber: string,
-  kind: "civil" | "criminal" | "trabalhista",
-): Promise<BackgroundCheckLawsuit[]> {
-  const response = await fetch(`${BACKGROUND_CHECK_BASE_URL}/background-check/lawsuits/${kind}`, {
-    method: "POST",
-    headers: {
-      "Content-Type": "application/json",
-      "apikey": apiKey,
-    },
-    body: JSON.stringify({ documentNumber, pagination: { cursor: "", size: 100 } }),
-  });
-
-  if (!response.ok) {
-    throw new Error(`JusBrasil (consulta ${kind} por CPF/CNPJ) respondeu ${response.status}: ${await response.text().catch(() => "")}`);
+// Garante que existe um relatório no JusBrasil para o nome/razão social
+// configurado, reaproveitando o id já salvo em vez de criar um novo a cada
+// execução (criar de novo com o mesmo `id` apenas atualiza os termos —
+// mas não há necessidade de repetir a chamada todo dia se o nome não
+// mudou). Retorna o id do relatório e se ele acabou de ser criado agora.
+async function ensureNameSearchReport(
+  adminClient: AdminClient,
+  integration: JusbrasilIntegration,
+  name: string,
+): Promise<{ reportId: string; justCreated: boolean }> {
+  if (integration.jusbrasil_report_id) {
+    return { reportId: integration.jusbrasil_report_id, justCreated: false };
   }
 
-  const data = (await response.json()) as BackgroundCheckResponse;
-  return Array.isArray(data.processos) ? data.processos : [];
+  const { reportId } = await createNameSearchReport(integration.api_key as string, name, `Busca ativa: ${name}`);
+
+  const { error } = await adminClient
+    .from("publication_integrations")
+    .update({ jusbrasil_report_id: reportId })
+    .eq("id", integration.id);
+  if (error) console.error("Error saving jusbrasil_report_id:", error);
+
+  // Mantém em memória para o restante desta execução (a integração passada
+  // pode ser reutilizada pelo chamador depois de retornar).
+  integration.jusbrasil_report_id = reportId;
+
+  return { reportId, justCreated: true };
 }
 
-// Roda as três frentes documentadas (cível, criminal, trabalhista) em
-// paralelo. Uma integração pode não ter todos os produtos contratados —
-// por isso uma falha isolada (ex.: 403 num produto não contratado) não
-// derruba as outras; só propaga erro se TODAS falharem.
-async function fetchDocumentLawsuits(apiKey: string, documentNumber: string): Promise<BackgroundCheckLawsuit[]> {
-  const digits = documentNumber.replace(/\D/g, "") || documentNumber;
-  const kinds: Array<"civil" | "criminal" | "trabalhista"> = ["civil", "criminal", "trabalhista"];
-  const results = await Promise.allSettled(kinds.map((kind) => fetchBackgroundCheckLawsuits(apiKey, digits, kind)));
+// Busca por nome é PAGA por "encomenda" (bill_start_update) — encomendar
+// todo dia, sem o usuário saber, cobraria da conta JusBrasil dele
+// silenciosamente. Por isso:
+//   - busca MANUAL ("Buscar agora"): sempre encomenda uma atualização —
+//     é uma ação deliberada da pessoa, ela espera que isso tenha custo.
+//   - busca agendada (poll diário): só LÊ o que já estiver pronto no
+//     relatório (export), sem encomendar nada novo — nunca gera cobrança
+//     sozinha. Para builds novos, a pessoa ainda precisa clicar em
+//     "Buscar agora" pelo menos uma vez (ou no futuro, se desejado, um
+//     toggle explícito de "atualização automática paga" poderia ligar
+//     isso — fora do escopo desta correção).
+async function fetchNameSearchNewItems(
+  adminClient: AdminClient,
+  integration: JusbrasilIntegration,
+  name: string,
+  searchType: "manual" | "poll",
+): Promise<JusbrasilProcessItem[]> {
+  const { reportId, justCreated } = await ensureNameSearchReport(adminClient, integration, name);
 
-  const lawsuits: BackgroundCheckLawsuit[] = [];
-  const errors: string[] = [];
-  for (const result of results) {
-    if (result.status === "fulfilled") lawsuits.push(...result.value);
-    else errors.push(result.reason instanceof Error ? result.reason.message : String(result.reason));
+  if (searchType === "manual" || justCreated) {
+    await startNameSearchBilling(integration.api_key as string, reportId);
   }
-  if (lawsuits.length === 0 && errors.length === results.length) {
-    throw new Error(errors.join(" | "));
-  }
-  return lawsuits;
+
+  const rows = await fetchNameSearchExport(integration.api_key as string, reportId);
+  if (rows === null) return []; // ainda processando no JusBrasil (até 72h) — não é erro
+
+  return rows.map(normalizeNameSearchRow);
 }
 
-function buildBackgroundCheckSummary(item: BackgroundCheckLawsuit): string {
+// Mapeia o NameSearchRow (formato interno do CRM de busca por nome) para o
+// formato consumido pelo restante deste pipeline (dedup, criação de caso,
+// prazos, notificação) — evita duplicar a lógica de normalização de coluna
+// já corrigida em _shared/jusbrasilNameSearch.ts.
+function buildNameSearchSummary(row: NameSearchRow): string {
   const parts = [
-    firstString(item.classe_processual, item.natureza),
-    firstString(item.assunto),
-    firstString(item.status?.normalizado, item.status?.inferido),
+    firstString(row.natureza, row.area),
+    firstString(row.status_processual),
+    row.ultima_movimentacao_tipo ? `Última mov.: ${row.ultima_movimentacao_tipo}` : null,
   ].filter((p): p is string => Boolean(p));
   if (parts.length === 0) {
-    return `Processo ${firstString(item.numero_processo) ?? "sem número identificado"} localizado via consulta por CPF/CNPJ.`;
+    return `Processo ${row.process_number ?? "sem número identificado"} localizado via busca por nome/razão social.`;
   }
   return parts.join(" — ");
 }
 
-// Mapeia o formato real da resposta do background-check para o formato
-// interno já consumido por extractProcessualData/extractDeadlines abaixo —
-// evita reescrever o resto do pipeline (dedup, criação de caso, prazos,
-// notificação) para cada fonte.
-function normalizeBackgroundCheckLawsuit(item: BackgroundCheckLawsuit): JusbrasilProcessItem {
+function normalizeNameSearchRow(row: NameSearchRow): JusbrasilProcessItem {
   return {
-    ...item,
-    numero_processo: firstString(item.numero_processo) ?? undefined,
-    conteudo: buildBackgroundCheckSummary(item),
-    data_publicacao: firstString(item.data_andamento_mais_recente, item.data_ultima_atualizacao) ?? undefined,
-    vara: firstString(item.forum) ?? undefined,
-    comarca: firstString(item.comarca) ?? undefined,
-    valor_causa: item.valor_causa == null ? undefined : (firstNumber(item.valor_causa) ?? undefined),
+    numero_processo: row.process_number ?? undefined,
+    conteudo: buildNameSearchSummary(row),
+    data_publicacao: row.ultima_movimentacao_data ?? row.data_distribuicao ?? undefined,
+    vara: row.vara ?? undefined,
+    comarca: row.comarca ?? undefined,
+    foro: row.foro ?? undefined,
+    valor_causa: row.valor ?? undefined,
+    data_distribuicao: row.data_distribuicao ?? undefined,
+    prazo_externo: undefined,
+    raw_data: row.raw_data,
   };
 }
 
@@ -386,22 +373,25 @@ async function fetchOabLinkedProcesses(apiKey: string, oabRaw: string): Promise<
 // Dispatcher + pipeline comum (dedup, caso, prazos, notificação, cobrança)
 // ---------------------------------------------------------------------
 
-async function fetchJusbrasilNewItems(apiKey: string, document: string | null, oab: string | null): Promise<JusbrasilProcessItem[]> {
+async function fetchJusbrasilNewItems(
+  adminClient: AdminClient,
+  integration: JusbrasilIntegration,
+  searchType: "manual" | "poll",
+): Promise<JusbrasilProcessItem[]> {
   const items: JusbrasilProcessItem[] = [];
   const errors: string[] = [];
 
-  if (document) {
+  if (integration.monitor_name) {
     try {
-      const lawsuits = await fetchDocumentLawsuits(apiKey, document);
-      items.push(...lawsuits.map(normalizeBackgroundCheckLawsuit));
+      items.push(...(await fetchNameSearchNewItems(adminClient, integration, integration.monitor_name, searchType)));
     } catch (err) {
       errors.push(err instanceof Error ? err.message : String(err));
     }
   }
 
-  if (oab) {
+  if (integration.monitor_oab) {
     try {
-      items.push(...(await fetchOabLinkedProcesses(apiKey, oab)));
+      items.push(...(await fetchOabLinkedProcesses(integration.api_key as string, integration.monitor_oab)));
     } catch (err) {
       errors.push(err instanceof Error ? err.message : String(err));
     }
@@ -436,12 +426,8 @@ function extractDeadlines(item: JusbrasilProcessItem): { external: string | null
   };
 }
 
-function detectDocumentType(document: string | null, oab: string | null): "cpf" | "cnpj" | "oab" | "outro" {
-  if (document) {
-    const digits = document.replace(/\D/g, "");
-    if (digits.length === 11) return "cpf";
-    if (digits.length === 14) return "cnpj";
-  }
+function detectDocumentType(name: string | null, oab: string | null): "nome" | "razao_social" | "oab" | "outro" {
+  if (name) return "nome";
   if (oab) return "oab";
   return "outro";
 }
@@ -451,7 +437,7 @@ async function recordSearchCharge(
   integration: JusbrasilIntegration,
   searchType: "manual" | "poll",
 ): Promise<void> {
-  const document = integration.monitor_document || integration.monitor_oab || "não informado";
+  const document = integration.monitor_name || integration.monitor_oab || "não informado";
   const unitPrice = integration.price_per_search ?? 0;
 
   const { error } = await adminClient.from("process_search_charges").insert({
@@ -459,7 +445,7 @@ async function recordSearchCharge(
     integration_id: integration.id,
     source: "jusbrasil",
     document,
-    document_type: detectDocumentType(integration.monitor_document, integration.monitor_oab),
+    document_type: detectDocumentType(integration.monitor_name, integration.monitor_oab),
     search_type: searchType,
     unit_price: unitPrice,
     charged_amount: unitPrice,
@@ -473,7 +459,7 @@ export interface PollIntegrationResult {
 }
 
 // Executa a busca ativa para UMA integração: consulta a(s) API(s) real(is)
-// (CPF/CNPJ e/ou OAB, conforme configurado), importa cada
+// (nome/razão social e/ou OAB, conforme configurado), importa cada
 // processo/movimentação novo como publicação (com dedup, dados
 // processuais, prazo->evento na Agenda quando disponível e anexo
 // automático do documento quando disponível) e sempre registra o uso no
@@ -483,12 +469,12 @@ export async function pollJusbrasilIntegration(
   integration: JusbrasilIntegration,
   searchType: "manual" | "poll",
 ): Promise<PollIntegrationResult> {
-  if (!integration.api_key || (!integration.monitor_document && !integration.monitor_oab)) {
-    return { imported: 0, error: "Configure a chave de API e o CPF/CNPJ ou OAB a monitorar antes de buscar." };
+  if (!integration.api_key || (!integration.monitor_name && !integration.monitor_oab)) {
+    return { imported: 0, error: "Configure a chave de API e o nome/razão social ou OAB a monitorar antes de buscar." };
   }
 
   try {
-    const items = await fetchJusbrasilNewItems(integration.api_key, integration.monitor_document, integration.monitor_oab);
+    const items = await fetchJusbrasilNewItems(adminClient, integration, searchType);
     let imported = 0;
 
     for (const item of items) {
@@ -499,14 +485,14 @@ export async function pollJusbrasilIntegration(
         ? new Date(publishedDateRaw).toISOString().slice(0, 10)
         : new Date().toISOString().slice(0, 10);
 
-      // A consulta por CPF/CNPJ não usa cursor/timestamp incremental (traz
-      // sempre o estado atual dos processos do documento) e a consulta por
-      // OAB não tem um id de "evento" — sem um `item.id` reconhecido
-      // (presente apenas na consulta por OAB, via cnj_id), um external_id
-      // nulo faria a deduplicação não se aplicar e reimportaria o mesmo
-      // item a cada execução — por isso, nesse caso, calculamos um id
-      // determinístico a partir do conteúdo do próprio item (ver
-      // _shared/externalId.ts).
+      // Nem a busca por nome/razão social nem a busca por OAB têm um id de
+      // "evento" incremental (a por nome não usa cursor/timestamp — traz o
+      // estado atual do relatório; a por OAB só tem o cnj_id do vínculo,
+      // que já é usado como `item.id` quando disponível). Sem um `item.id`
+      // reconhecido, um external_id nulo faria a deduplicação não se
+      // aplicar e reimportaria o mesmo item a cada execução — por isso,
+      // nesse caso, calculamos um id determinístico a partir do conteúdo do
+      // próprio item (ver _shared/externalId.ts).
       const externalId = firstString(item.id)
         ?? await computeFallbackExternalId(["jusbrasil", integration.user_id, processNumber, publishedDate, content.slice(0, 200)]);
 

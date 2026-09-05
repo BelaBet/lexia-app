@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
   // rodar qualquer busca em nome dele.
   const { data: integration, error: integrationError } = await adminClient
     .from("publication_integrations")
-    .select("id, user_id, source, api_key, monitor_document, monitor_oab, price_per_search")
+    .select("id, user_id, source, api_key, monitor_name, monitor_oab, jusbrasil_report_id, price_per_search")
     .eq("id", integrationId)
     .eq("user_id", user.id)
     .maybeSingle();

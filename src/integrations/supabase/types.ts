@@ -1435,10 +1435,12 @@ export type Database = {
           created_at: string
           id: string
           is_active: boolean
+          jusbrasil_report_id: string | null
           last_poll_error: string | null
           last_poll_status: string | null
           last_received_at: string | null
           monitor_document: string | null
+          monitor_name: string | null
           monitor_oab: string | null
           price_per_autos: number | null
           price_per_name_search: number | null
@@ -1453,10 +1455,12 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          jusbrasil_report_id?: string | null
           last_poll_error?: string | null
           last_poll_status?: string | null
           last_received_at?: string | null
           monitor_document?: string | null
+          monitor_name?: string | null
           monitor_oab?: string | null
           price_per_autos?: number | null
           price_per_name_search?: number | null
@@ -1471,10 +1475,12 @@ export type Database = {
           created_at?: string
           id?: string
           is_active?: boolean
+          jusbrasil_report_id?: string | null
           last_poll_error?: string | null
           last_poll_status?: string | null
           last_received_at?: string | null
           monitor_document?: string | null
+          monitor_name?: string | null
           monitor_oab?: string | null
           price_per_autos?: number | null
           price_per_name_search?: number | null
