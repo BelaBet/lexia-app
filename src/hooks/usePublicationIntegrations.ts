@@ -26,7 +26,14 @@ export function usePublicationIntegrations() {
   return useQuery({
     queryKey: ["publication_integrations"],
     queryFn: async () => {
-      const { data, error } = await supabase.from("publication_integrations").select("*");
+      // Só a integração "principal" por provedor (linked_client_id nulo) —
+      // as linhas criadas pelo fluxo "Novo Cliente" (uma por cliente, ver
+      // useNewClientSearch.ts) são geridas automaticamente por aquele fluxo
+      // e não devem aparecer nem ser editáveis nesta tela.
+      const { data, error } = await supabase
+        .from("publication_integrations")
+        .select("*")
+        .is("linked_client_id", null);
       if (error) throw error;
       return (data || []) as PublicationIntegration[];
     },

@@ -24,6 +24,7 @@ import {
   useCreatePublication,
   useUpdatePublication,
 } from "@/hooks/usePublications";
+import { getTodayDateStr } from "@/hooks/useEvents";
 
 interface PublicationDialogProps {
   open: boolean;
@@ -31,28 +32,30 @@ interface PublicationDialogProps {
   publication?: Publication | null;
 }
 
-const emptyForm: CreatePublicationData = {
-  process_number: "",
-  source: "manual",
-  content: "",
-  published_date: new Date().toISOString().slice(0, 10),
-  external_deadline: "",
-  external_responsible_name: "",
-  external_responsible_role: undefined,
-  internal_deadline: "",
-  internal_responsible_name: "",
-  internal_responsible_role: undefined,
-  tese: "",
-  status: "pending",
-  vara: "",
-  comarca: "",
-  valor_causa: null,
-  data_abertura_tribunal: "",
-  data_aceitacao: "",
-};
+function createEmptyForm(): CreatePublicationData {
+  return {
+    process_number: "",
+    source: "manual",
+    content: "",
+    published_date: getTodayDateStr(),
+    external_deadline: "",
+    external_responsible_name: "",
+    external_responsible_role: undefined,
+    internal_deadline: "",
+    internal_responsible_name: "",
+    internal_responsible_role: undefined,
+    tese: "",
+    status: "pending",
+    vara: "",
+    comarca: "",
+    valor_causa: null,
+    data_abertura_tribunal: "",
+    data_aceitacao: "",
+  };
+}
 
 export function PublicationDialog({ open, onOpenChange, publication }: PublicationDialogProps) {
-  const [form, setForm] = useState<CreatePublicationData>(emptyForm);
+  const [form, setForm] = useState<CreatePublicationData>(createEmptyForm);
   const [valorCausaInput, setValorCausaInput] = useState("");
   const createPublication = useCreatePublication();
   const updatePublication = useUpdatePublication();
@@ -83,7 +86,7 @@ export function PublicationDialog({ open, onOpenChange, publication }: Publicati
         });
         setValorCausaInput(publication.valor_causa != null ? String(publication.valor_causa) : "");
       } else {
-        setForm(emptyForm);
+        setForm(createEmptyForm());
         setValorCausaInput("");
       }
     }

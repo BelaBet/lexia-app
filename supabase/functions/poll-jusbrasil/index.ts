@@ -48,7 +48,7 @@ Deno.serve(async (req) => {
 
   const { data: integrations, error: integrationsError } = await adminClient
     .from("publication_integrations")
-    .select("id, user_id, api_key, monitor_name, monitor_oab, jusbrasil_report_id, price_per_search")
+    .select("id, user_id, api_key, monitor_name, monitor_oab, jusbrasil_report_id, price_per_search, linked_client_id")
     .eq("source", "jusbrasil")
     .eq("is_active", true)
     .not("api_key", "is", null);

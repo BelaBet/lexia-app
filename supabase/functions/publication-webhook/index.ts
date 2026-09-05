@@ -242,11 +242,18 @@ Deno.serve(async (req) => {
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
+  // Filtra pela integração "principal" (linked_client_id nulo): o fluxo
+  // "Novo Cliente" pode criar outras linhas de publication_integrations
+  // para o mesmo user_id+source (uma por cliente, ver
+  // src/hooks/useNewClientSearch.ts), e essas nunca recebem webhook próprio
+  // — sem este filtro, .maybeSingle() passaria a falhar (mais de uma linha)
+  // assim que o advogado usasse "Novo Cliente" mais de uma vez.
   const { data: integration, error: integrationError } = await adminClient
     .from("publication_integrations")
     .select("id, webhook_secret, is_active")
     .eq("user_id", userId)
     .eq("source", source)
+    .is("linked_client_id", null)
     .maybeSingle();
 
   if (integrationError) {

@@ -21,6 +21,7 @@ import {
   useCaseRequestsManage,
   useCaseDocumentsManage,
 } from "@/hooks/useCaseClientPortal";
+import { getTodayDateStr } from "@/hooks/useEvents";
 
 // Painel "Espaço do Cliente — Meu Jurídico" para inserir dentro da tela de
 // um processo, no painel interno do advogado. Uso:
@@ -148,7 +149,7 @@ function TimelineTab({ caseId }: { caseId: string }) {
   const [rawText, setRawText] = useState("");
   const [title, setTitle] = useState("");
   const [summary, setSummary] = useState("");
-  const [eventDate, setEventDate] = useState(new Date().toISOString().slice(0, 10));
+  const [eventDate, setEventDate] = useState(getTodayDateStr());
   const [visibleToClient, setVisibleToClient] = useState(true);
   const [translating, setTranslating] = useState(false);
 
