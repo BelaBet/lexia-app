@@ -24,6 +24,7 @@ import { ProcessSearchManager } from "@/components/process-search/ProcessSearchM
 import { BrandingSettings } from "@/components/settings/BrandingSettings";
 import Sales from "@/pages/Sales";
 import { useAuth } from "@/contexts/AuthContext";
+import { DemoDataBanner } from "@/components/layout/DemoDataBanner";
 const Index = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [pendingCaseId, setPendingCaseId] = useState<string | null>(null);
@@ -39,7 +40,7 @@ const Index = () => {
 
   const renderContent = () => {
     switch (activeTab) {
-      case "dashboard": return <div className="space-y-6"><div><h1 className="font-serif text-3xl font-bold text-foreground">Bem-vindo, {profile?.full_name?.split(" ")[0] || "Advogado"}!</h1><p className="text-muted-foreground mt-1">Seu assistente jurídico inteligente</p></div><StatsCards /><QuickActions onTabChange={setActiveTab} /><div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><RecentDocuments /><UpcomingDeadlines /></div></div>;
+      case "dashboard": return <div className="space-y-6"><div><h1 className="font-serif text-3xl font-bold text-foreground">Bem-vindo, {profile?.full_name?.split(" ")[0] || "Advogado"}!</h1><p className="text-muted-foreground mt-1">Seu assistente jurídico inteligente</p></div><StatsCards /><QuickActions onTabChange={setActiveTab} /><div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><RecentDocuments /><UpcomingDeadlines onTabChange={setActiveTab} /></div></div>;
       case "assistant": return <AIChat onOpenGuide={() => setActiveTab("guide")} />;
       case "pdf-reader": return <PDFReader onOpenGuide={() => setActiveTab("guide")} />;
       case "document-creator": return <DocumentCreator />;
@@ -63,6 +64,6 @@ const Index = () => {
       default: return null;
     }
   };
-  return <div className="min-h-screen bg-background"><MobileNav activeTab={activeTab} onTabChange={setActiveTab} /><Sidebar activeTab={activeTab} onTabChange={setActiveTab} /><main className="min-w-0 p-4 pt-20 md:pt-8 md:ml-64 md:p-8">{renderContent()}</main></div>;
+  return <div className="min-h-screen bg-background"><MobileNav activeTab={activeTab} onTabChange={setActiveTab} /><Sidebar activeTab={activeTab} onTabChange={setActiveTab} /><main className="min-w-0 p-4 pt-20 md:pt-8 md:ml-64 md:p-8"><DemoDataBanner />{renderContent()}</main></div>;
 };
 export default Index;

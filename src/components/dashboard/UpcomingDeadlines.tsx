@@ -21,7 +21,11 @@ interface DeadlineItem {
   time?: string;
 }
 
-export function UpcomingDeadlines() {
+interface UpcomingDeadlinesProps {
+  onTabChange?: (tab: string) => void;
+}
+
+export function UpcomingDeadlines({ onTabChange }: UpcomingDeadlinesProps) {
   const { data: events = [], isLoading: isLoadingEvents } = useEvents();
   const { data: checklists = [], isLoading: isLoadingChecklists } = useChecklists();
   
@@ -105,7 +109,10 @@ export function UpcomingDeadlines() {
       <div className="flex items-center justify-between mb-6">
         <h3 className="font-serif text-xl font-semibold">Próximos Prazos</h3>
         {allDeadlines.length > 4 && (
-          <button className="text-sm text-gold-warm hover:text-gold-dark transition-colors">
+          <button
+            onClick={() => onTabChange?.("calendar")}
+            className="text-sm text-gold-warm hover:text-gold-dark transition-colors"
+          >
             Ver agenda
           </button>
         )}
