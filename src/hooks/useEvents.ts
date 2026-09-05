@@ -267,6 +267,8 @@ export interface UpdateEventData {
   notification_minutes_before?: number;
   status?: EventTaskStatus;
   priority?: EventTaskPriority;
+  /** Processo ao qual este item da agenda está vinculado (ver Calendário Jurídico de Processos). */
+  case_id?: string | null;
 }
 
 export function useUpdateEvent() {

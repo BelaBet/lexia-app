@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { FolderOpen, Radio, Search, Filter, MoreVertical, Calendar, FileText, User, X, ChevronDown, ClipboardList, Scale, Gavel, Landmark, Users, UserPlus } from "lucide-react";
 import { generateIntakeChecklistPdf } from "@/lib/intakeChecklistPdf";
 import { useCases, useDeleteCase, Case } from "@/hooks/useCases";
@@ -55,9 +55,16 @@ interface Filters {
 
 interface CasesManagerProps {
   onTabChange?: (tab: string) => void;
+  /**
+   * Processo a abrir automaticamente ao montar (ex.: veio do botão "Abrir
+   * processo" de um item da Agenda). Ver `onOpenCase` em CalendarView.tsx —
+   * é assim que o vínculo Processo → Evento vira navegação de fato, e não só
+   * um dado guardado no banco.
+   */
+  initialCaseId?: string | null;
 }
 
-export function CasesManager({ onTabChange }: CasesManagerProps) {
+export function CasesManager({ onTabChange, initialCaseId }: CasesManagerProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCase, setSelectedCase] = useState<Case | null>(null);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
@@ -74,6 +81,16 @@ export function CasesManager({ onTabChange }: CasesManagerProps) {
   });
 
   const { data: cases = [], isLoading } = useCases();
+
+  // Abre o processo indicado assim que a lista carregar — só uma vez por
+  // navegação (não reabre se o usuário fechar o diálogo manualmente depois).
+  useEffect(() => {
+    if (initialCaseId && cases.length > 0) {
+      const target = cases.find((c) => c.id === initialCaseId);
+      if (target) setSelectedCase(target);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [initialCaseId, cases.length]);
   const { data: documents = [] } = useDocuments();
   const deleteCase = useDeleteCase();
 

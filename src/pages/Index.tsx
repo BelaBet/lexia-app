@@ -26,7 +26,17 @@ import Sales from "@/pages/Sales";
 import { useAuth } from "@/contexts/AuthContext";
 const Index = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [pendingCaseId, setPendingCaseId] = useState<string | null>(null);
   const { profile } = useAuth();
+
+  // Usado pela Agenda ("Abrir processo" num evento vinculado a um processo)
+  // para navegar até "Processos" já com o processo certo aberto — sem isso,
+  // o vínculo case_id do evento existiria só no banco, nunca na tela.
+  const handleOpenCase = (caseId: string) => {
+    setPendingCaseId(caseId);
+    setActiveTab("cases");
+  };
+
   const renderContent = () => {
     switch (activeTab) {
       case "dashboard": return <div className="space-y-6"><div><h1 className="font-serif text-3xl font-bold text-foreground">Bem-vindo, {profile?.full_name?.split(" ")[0] || "Advogado"}!</h1><p className="text-muted-foreground mt-1">Seu assistente jurídico inteligente</p></div><StatsCards /><QuickActions onTabChange={setActiveTab} /><div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><RecentDocuments /><UpcomingDeadlines /></div></div>;
@@ -34,11 +44,11 @@ const Index = () => {
       case "pdf-reader": return <PDFReader onOpenGuide={() => setActiveTab("guide")} />;
       case "document-creator": return <DocumentCreator />;
       case "documents": return <DocumentsPage />;
-      case "cases": return <CasesManager onTabChange={setActiveTab} />;
+      case "cases": return <CasesManager onTabChange={setActiveTab} initialCaseId={pendingCaseId} />;
       case "process-search": return <ProcessSearchManager />;
       case "checklists": return <ChecklistsManager />;
       case "guide": return <GuidePage />;
-      case "calendar": return <CalendarView />;
+      case "calendar": return <CalendarView onOpenCase={handleOpenCase} />;
       case "publications": return <PublicationsManager />;
       case "financial-counter": return <ProcessSearchFinancialCounter />;
       case "profile": return <ProfilePage />;

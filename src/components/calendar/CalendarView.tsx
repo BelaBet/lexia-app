@@ -1,15 +1,15 @@
-import { useState, useRef, useEffect } from "react";
-import { 
-  Calendar, 
-  ChevronLeft, 
-  ChevronRight, 
-  Plus, 
-  Clock, 
-  MapPin, 
-  X, 
-  Users, 
-  Link2, 
-  Bell, 
+import { useState, useRef, useEffect, useMemo } from "react";
+import {
+  Calendar,
+  ChevronLeft,
+  ChevronRight,
+  Plus,
+  Clock,
+  MapPin,
+  X,
+  Users,
+  Link2,
+  Bell,
   BellOff,
   BellRing,
   Upload,
@@ -19,7 +19,12 @@ import {
   Pencil,
   Lock,
   CheckCircle2,
-  Circle
+  Circle,
+  AlertTriangle,
+  Scale,
+  List as ListIcon,
+  LayoutGrid,
+  ExternalLink,
 } from "lucide-react";
 import {
   useEvents,
@@ -37,10 +42,11 @@ import {
   EventTaskStatus,
 } from "@/hooks/useEvents";
 import { useChecklists } from "@/hooks/useChecklists";
+import { useCases } from "@/hooks/useCases";
 import { useNotifications } from "@/hooks/useNotifications";
 import { openGoogleCalendar, downloadICS } from "@/lib/calendarExport";
 import { SyncToClickUpButton } from "@/components/integrations/SyncToClickUpButton";
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay, isToday, startOfDay, parseISO } from "date-fns";
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay, isToday, startOfDay, parseISO, differenceInCalendarDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CheckSquare } from "lucide-react";
 import {
@@ -63,10 +69,19 @@ import {
 } from "@/components/ui/select";
 import { toast } from "sonner";
 
+// Os 6 tipos do "Calendário Jurídico de Processos": Prazo, Audiência,
+// Tarefa, Procedimento, Reunião e Evento processual. "prazo_externo" e
+// "prazo_interno" continuam existindo como subtipos automáticos (criados
+// pela integração com o JusBrasil — ver syncDeadlineEvents no backend) para
+// distinguir prazo de resposta (externo) de prazo de controle interno do
+// escritório; "deadline" é o mesmo grupo "Prazo" quando criado manualmente.
 const eventTypeConfig = {
   hearing: { label: "Audiência", class: "bg-primary/10 text-primary border-l-primary" },
   deadline: { label: "Prazo", class: "bg-destructive/10 text-destructive border-l-destructive" },
   meeting: { label: "Reunião", class: "bg-success/10 text-success border-l-success" },
+  tarefa: { label: "Tarefa", class: "bg-indigo-500/10 text-indigo-600 border-l-indigo-500" },
+  procedimento: { label: "Procedimento", class: "bg-amber-500/10 text-amber-600 border-l-amber-500" },
+  evento_processual: { label: "Evento Processual", class: "bg-cyan-500/10 text-cyan-600 border-l-cyan-500" },
   prazo_externo: { label: "Prazo Externo (Publicação)", class: "bg-destructive/10 text-destructive border-l-destructive" },
   prazo_interno: { label: "Prazo Interno (Publicação)", class: "bg-warning/10 text-warning border-l-warning" },
 };
@@ -75,9 +90,49 @@ const eventDotColor: Record<string, string> = {
   hearing: "bg-primary",
   deadline: "bg-destructive",
   meeting: "bg-success",
+  tarefa: "bg-indigo-500",
+  procedimento: "bg-amber-500",
+  evento_processual: "bg-cyan-500",
   prazo_externo: "bg-destructive",
   prazo_interno: "bg-warning",
 };
+
+// Agrupamento usado pelos chips de filtro da Agenda — "Prazos" reúne os 3
+// subtipos de prazo (manual + os 2 que chegam automaticamente via API) num
+// só filtro, já que para quem está olhando a agenda o que importa é "isto
+// é um prazo", não qual sistema o criou.
+type AgendaFilterKey = "todos" | "prazos" | "audiencias" | "tarefas" | "reunioes" | "procedimentos" | "criticos" | "sem_processo";
+
+const filterTypeGroups: Record<Exclude<AgendaFilterKey, "todos" | "criticos" | "sem_processo">, string[]> = {
+  prazos: ["deadline", "prazo_externo", "prazo_interno"],
+  audiencias: ["hearing"],
+  tarefas: ["tarefa"],
+  reunioes: ["meeting"],
+  procedimentos: ["procedimento", "evento_processual"],
+};
+
+const agendaFilterLabels: Record<AgendaFilterKey, string> = {
+  todos: "Todos",
+  prazos: "Prazos",
+  audiencias: "Audiências",
+  tarefas: "Tarefas",
+  reunioes: "Reuniões",
+  procedimentos: "Procedimentos",
+  criticos: "Críticos",
+  sem_processo: "Sem processo",
+};
+
+// Considerado "crítico" para o banner de risco: prazo/audiência que vence
+// dentro desta janela (em dias corridos) e ainda não foi concluído/cancelado.
+const CRITICAL_WINDOW_DAYS = 3;
+
+function describeDueDate(dateStr: string): string {
+  const days = differenceInCalendarDays(startOfDay(parseISO(dateStr)), startOfDay(new Date()));
+  if (days < 0) return `venceu há ${Math.abs(days)} dia${Math.abs(days) === 1 ? "" : "s"}`;
+  if (days === 0) return "vence hoje";
+  if (days === 1) return "vence amanhã";
+  return `vence em ${days} dias`;
+}
 
 const taskStatusConfig: Record<string, { label: string; class: string }> = {
   pending: { label: "Pendente", class: "bg-warning/10 text-warning" },
@@ -100,11 +155,18 @@ interface Participant {
   email: string;
 }
 
-export function CalendarView() {
+interface CalendarViewProps {
+  /** Navega até "Processos" já com o processo aberto — usado pelo botão "Abrir processo" nos itens da Agenda. */
+  onOpenCase?: (caseId: string) => void;
+}
+
+export function CalendarView({ onOpenCase }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [dayDetailsFilter, setDayDetailsFilter] = useState<"all" | "events" | "checklists">("all");
+  const [viewMode, setViewMode] = useState<"mes" | "lista">("mes");
+  const [activeFilter, setActiveFilter] = useState<AgendaFilterKey>("todos");
   const [newEvent, setNewEvent] = useState<CreateEventData>({
     title: "",
     description: "",
@@ -115,6 +177,7 @@ export function CalendarView() {
     meeting_link: "",
     notification_enabled: false,
     notification_minutes_before: 30,
+    case_id: undefined,
     participants: [],
     files: [],
   });
@@ -125,6 +188,41 @@ export function CalendarView() {
 
   const { data: events = [], isLoading } = useEvents();
   const { data: checklists = [] } = useChecklists();
+  const { data: cases = [] } = useCases();
+
+  const casesById = useMemo(() => new Map(cases.map((c) => [c.id, c])), [cases]);
+
+  // Item da agenda passa no filtro ativo? "Críticos" e "Sem processo" olham
+  // o evento inteiro (data/vínculo), os demais só o tipo.
+  const matchesFilter = (event: CalendarEvent, filter: AgendaFilterKey): boolean => {
+    if (filter === "todos") return true;
+    if (filter === "criticos") {
+      if (event.computed_status === "completed" || event.computed_status === "cancelled") return false;
+      const days = differenceInCalendarDays(startOfDay(parseISO(event.event_date)), startOfDay(new Date()));
+      return days <= CRITICAL_WINDOW_DAYS;
+    }
+    if (filter === "sem_processo") return !event.case_id;
+    return filterTypeGroups[filter].includes(event.type);
+  };
+
+  // Processos que a Agenda "esqueceu": nenhum item futuro (prazo, audiência,
+  // tarefa etc.) vinculado a eles. É o "Processo X ainda não possui tarefa
+  // atribuída" do conceito de Calendário Jurídico — hoje isso não aparecia
+  // em lugar nenhum do produto.
+  const casesWithoutUpcomingItem = useMemo(() => {
+    const today = startOfDay(new Date());
+    const casesWithFutureItem = new Set(
+      events
+        .filter((e) => e.case_id && startOfDay(parseISO(e.event_date)) >= today && e.computed_status !== "cancelled")
+        .map((e) => e.case_id as string),
+    );
+    return cases.filter((c) => c.status !== "closed" && !casesWithFutureItem.has(c.id));
+  }, [cases, events]);
+
+  const criticalEvents = useMemo(
+    () => events.filter((e) => matchesFilter(e, "criticos")),
+    [events],
+  );
   // Update event date to today when dialog opens
   useEffect(() => {
     if (isDialogOpen) {
@@ -268,6 +366,7 @@ export function CalendarView() {
       meeting_link: "",
       notification_enabled: false,
       notification_minutes_before: 30,
+      case_id: undefined,
       participants: [],
       files: [],
     });
@@ -308,6 +407,7 @@ export function CalendarView() {
       notification_enabled: event.notification_enabled,
       notification_minutes_before: event.notification_minutes_before || 30,
       status: event.status || undefined,
+      case_id: event.case_id || undefined,
     });
   };
 
@@ -335,10 +435,14 @@ export function CalendarView() {
   // isRetroactiveEventDateChange em useEvents.ts, a mesma fonte de verdade
   // usada na validação de submit e espelhada no gatilho do banco).
   const todayDateStr = getTodayDateStr();
-  const upcomingEvents = events
+  const upcomingEventsFiltered = events
     .filter((e) => startOfDay(parseISO(e.event_date)) >= today)
-    .sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime())
-    .slice(0, 5);
+    .filter((e) => matchesFilter(e, activeFilter))
+    .sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
+  // No filtro padrão ("Todos") mantemos a lista curta de sempre; com um
+  // filtro específico ativo, faz sentido mostrar mais itens (é para isso
+  // que a pessoa filtrou).
+  const upcomingEvents = upcomingEventsFiltered.slice(0, activeFilter === "todos" ? 5 : 30);
 
   const upcomingChecklists = checklists
     .filter((c) => c.due_date && c.status !== "completed" && c.status !== "cancelled")
@@ -393,29 +497,157 @@ export function CalendarView() {
         </div>
       </div>
 
+      {/* Banner de risco: prazos críticos e processos sem item vinculado — a
+          Agenda funcionando como gerenciador de risco jurídico, não só como
+          lista de compromissos. */}
+      {(criticalEvents.length > 0 || casesWithoutUpcomingItem.length > 0) && (
+        <div className="legal-card border-l-4 border-l-destructive bg-destructive/5">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
+            <div className="space-y-2 min-w-0">
+              <p className="font-medium text-sm">
+                {criticalEvents.length + casesWithoutUpcomingItem.length} atividade
+                {criticalEvents.length + casesWithoutUpcomingItem.length === 1 ? "" : "s"} exigem atenção
+              </p>
+              <div className="flex flex-wrap gap-2 text-xs">
+                {criticalEvents.length > 0 && (
+                  <button
+                    onClick={() => setActiveFilter("criticos")}
+                    className="px-2 py-1 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
+                  >
+                    {criticalEvents.length} prazo{criticalEvents.length === 1 ? "" : "s"}/compromisso
+                    {criticalEvents.length === 1 ? "" : "s"} crítico{criticalEvents.length === 1 ? "" : "s"} (≤ {CRITICAL_WINDOW_DAYS} dias)
+                  </button>
+                )}
+                {casesWithoutUpcomingItem.length > 0 && (
+                  <span
+                    className="px-2 py-1 rounded-full bg-warning/10 text-warning"
+                    title={casesWithoutUpcomingItem.map((c) => c.title).join(", ")}
+                  >
+                    {casesWithoutUpcomingItem.length} processo{casesWithoutUpcomingItem.length === 1 ? "" : "s"} sem nenhum item futuro na agenda
+                  </span>
+                )}
+              </div>
+              {casesWithoutUpcomingItem.length > 0 && (
+                <p className="text-xs text-muted-foreground truncate">
+                  Ex.: {casesWithoutUpcomingItem.slice(0, 3).map((c) => c.title).join(" · ")}
+                  {casesWithoutUpcomingItem.length > 3 ? ` e mais ${casesWithoutUpcomingItem.length - 3}` : ""}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Chips de filtro — mesmo agrupamento usado na View de Lista e no banner de risco acima. */}
+      <div className="flex flex-wrap items-center gap-2">
+        {(Object.keys(agendaFilterLabels) as AgendaFilterKey[]).map((key) => (
+          <button
+            key={key}
+            onClick={() => setActiveFilter(key)}
+            className={`px-3 py-1.5 rounded-full text-xs font-medium border transition-colors ${
+              activeFilter === key
+                ? "bg-primary text-primary-foreground border-primary"
+                : "bg-transparent text-muted-foreground border-border hover:bg-muted"
+            }`}
+          >
+            {agendaFilterLabels[key]}
+          </button>
+        ))}
+      </div>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Calendar */}
         <div className="lg:col-span-2 legal-card">
           <div className="flex items-center justify-between mb-6">
             <h3 className="font-serif text-xl font-semibold">
-              {months[currentDate.getMonth()]} {currentDate.getFullYear()}
+              {viewMode === "mes" ? `${months[currentDate.getMonth()]} ${currentDate.getFullYear()}` : "Lista de itens da Agenda"}
             </h3>
-            <div className="flex gap-2">
-              <button
-                onClick={prevMonth}
-                className="p-2 hover:bg-muted rounded-lg transition-colors"
-              >
-                <ChevronLeft className="w-5 h-5" />
-              </button>
-              <button
-                onClick={nextMonth}
-                className="p-2 hover:bg-muted rounded-lg transition-colors"
-              >
-                <ChevronRight className="w-5 h-5" />
-              </button>
+            <div className="flex items-center gap-2">
+              <div className="flex rounded-lg border border-border overflow-hidden">
+                <button
+                  onClick={() => setViewMode("mes")}
+                  className={`p-2 transition-colors ${viewMode === "mes" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                  title="Visualização em mês"
+                >
+                  <LayoutGrid className="w-4 h-4" />
+                </button>
+                <button
+                  onClick={() => setViewMode("lista")}
+                  className={`p-2 transition-colors ${viewMode === "lista" ? "bg-primary text-primary-foreground" : "hover:bg-muted"}`}
+                  title="Visualização em lista"
+                >
+                  <ListIcon className="w-4 h-4" />
+                </button>
+              </div>
+              {viewMode === "mes" && (
+                <div className="flex gap-2">
+                  <button
+                    onClick={prevMonth}
+                    className="p-2 hover:bg-muted rounded-lg transition-colors"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <button
+                    onClick={nextMonth}
+                    className="p-2 hover:bg-muted rounded-lg transition-colors"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
             </div>
           </div>
 
+          {viewMode === "lista" ? (
+            <div className="space-y-2 max-h-[520px] overflow-y-auto">
+              {upcomingEventsFiltered.length === 0 ? (
+                <p className="text-muted-foreground text-sm py-8 text-center">Nenhum item da agenda neste filtro.</p>
+              ) : (
+                upcomingEventsFiltered.map((event) => {
+                  const linkedCase = event.case_id ? casesById.get(event.case_id) : null;
+                  const daysToDeadline = differenceInCalendarDays(startOfDay(parseISO(event.event_date)), startOfDay(new Date()));
+                  const isCritical = daysToDeadline <= CRITICAL_WINDOW_DAYS && event.computed_status !== "completed" && event.computed_status !== "cancelled";
+                  return (
+                    <div
+                      key={event.id}
+                      className={`p-3 rounded-lg border-l-4 flex items-start justify-between gap-3 ${
+                        eventTypeConfig[event.type as keyof typeof eventTypeConfig]?.class || eventTypeConfig.meeting.class
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-medium">
+                            {eventTypeConfig[event.type as keyof typeof eventTypeConfig]?.label || event.type}
+                          </span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-full ${isCritical ? "bg-destructive/10 text-destructive" : "bg-muted text-muted-foreground"}`}>
+                            {describeDueDate(event.event_date)}
+                          </span>
+                        </div>
+                        <p className={`font-medium text-sm mt-1 ${eventTitleClass(event)}`}>{event.title}</p>
+                        {linkedCase ? (
+                          <button
+                            onClick={() => onOpenCase?.(linkedCase.id)}
+                            className="flex items-center gap-1 text-xs text-primary hover:underline mt-1"
+                          >
+                            <Scale className="w-3 h-3" />
+                            {linkedCase.case_number} · {linkedCase.client}
+                            <ExternalLink className="w-3 h-3" />
+                          </button>
+                        ) : (
+                          <p className="text-xs text-muted-foreground mt-1">Sem processo vinculado</p>
+                        )}
+                      </div>
+                      <span className="text-xs text-muted-foreground whitespace-nowrap shrink-0">
+                        {format(parseISO(event.event_date), "dd/MM", { locale: ptBR })}
+                      </span>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+          ) : (
+          <>
           <div className="grid grid-cols-7 gap-1 mb-2">
             {["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"].map((day) => (
               <div key={day} className="text-center text-sm font-medium text-muted-foreground py-2">
@@ -472,6 +704,8 @@ export function CalendarView() {
               );
             })}
           </div>
+          </>
+          )}
         </div>
 
         {/* Upcoming Events */}
@@ -592,6 +826,19 @@ export function CalendarView() {
                     </button>
                     <span>{event.title}</span>
                   </p>
+                  {event.case_id && casesById.get(event.case_id) && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onOpenCase?.(event.case_id as string);
+                      }}
+                      className="flex items-center gap-1 text-xs text-primary hover:underline mb-2 -mt-1"
+                    >
+                      <Scale className="w-3 h-3" />
+                      {casesById.get(event.case_id)!.case_number} · {casesById.get(event.case_id)!.client}
+                      <ExternalLink className="w-3 h-3" />
+                    </button>
+                  )}
                   {event.status && (
                     <button
                       onClick={(e) => {
@@ -798,6 +1045,9 @@ export function CalendarView() {
                     <option value="meeting">Reunião</option>
                     <option value="hearing">Audiência</option>
                     <option value="deadline">Prazo</option>
+                    <option value="tarefa">Tarefa</option>
+                    <option value="procedimento">Procedimento</option>
+                    <option value="evento_processual">Evento Processual</option>
                   </select>
                 </div>
                 <div>
@@ -809,6 +1059,26 @@ export function CalendarView() {
                     placeholder="Fórum, escritório..."
                   />
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2 flex items-center gap-2">
+                  <Scale className="w-4 h-4" />
+                  Processo vinculado
+                </label>
+                <select
+                  value={newEvent.case_id || ""}
+                  onChange={(e) => setNewEvent({ ...newEvent, case_id: e.target.value || undefined })}
+                  className="legal-input"
+                >
+                  <option value="">Nenhum</option>
+                  {cases.map((c) => (
+                    <option key={c.id} value={c.id}>{c.case_number} · {c.client}</option>
+                  ))}
+                </select>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Todo item da Agenda deveria pertencer a um processo — sem isso ele não entra no cálculo de risco.
+                </p>
               </div>
             </div>
 
@@ -1064,6 +1334,16 @@ export function CalendarView() {
                                   <p className="text-xs text-muted-foreground mt-1">
                                     {eventTypeConfig[event.type as keyof typeof eventTypeConfig]?.label || event.type}
                                   </p>
+                                  {event.case_id && casesById.get(event.case_id) && (
+                                    <button
+                                      onClick={() => onOpenCase?.(event.case_id as string)}
+                                      className="flex items-center gap-1 text-xs text-primary hover:underline mt-1"
+                                    >
+                                      <Scale className="w-3 h-3" />
+                                      {casesById.get(event.case_id)!.case_number} · {casesById.get(event.case_id)!.client}
+                                      <ExternalLink className="w-3 h-3" />
+                                    </button>
+                                  )}
                                 </div>
                               </div>
                               <div className="flex items-center gap-1">
@@ -1324,6 +1604,29 @@ export function CalendarView() {
                 placeholder="Local do evento"
               />
             </div>
+
+            {!(editingEvent && isApiCreatedEvent(editingEvent)) && (
+              <div>
+                <Label htmlFor="edit-case" className="flex items-center gap-1.5">
+                  <Scale className="w-3.5 h-3.5" />
+                  Processo vinculado
+                </Label>
+                <Select
+                  value={editForm.case_id || "none"}
+                  onValueChange={(value) => setEditForm({ ...editForm, case_id: value === "none" ? null : value })}
+                >
+                  <SelectTrigger id="edit-case">
+                    <SelectValue placeholder="Nenhum" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="none">Nenhum</SelectItem>
+                    {cases.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>{c.case_number} · {c.client}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div>
               <Label htmlFor="edit-meeting-link">Link da reunião</Label>
