@@ -1,4 +1,4 @@
-import { FileText, Upload, MessageSquare, FolderPlus, ClipboardList } from "lucide-react";
+import { FileText, Upload, MessageSquare, FolderOpen, ClipboardList } from "lucide-react";
 import { generateIntakeChecklistPdf } from "@/lib/intakeChecklistPdf";
 
 interface QuickActionsProps {
@@ -39,9 +39,9 @@ const baseActions: Omit<QuickAction, "onClick">[] = [
   },
   {
     id: "cases",
-    title: "Novo Processo",
-    description: "Cadastre um processo",
-    icon: FolderPlus,
+    title: "Meus Processos",
+    description: "Acompanhe seus processos",
+    icon: FolderOpen,
     color: "bg-accent text-accent-foreground",
   },
 ];

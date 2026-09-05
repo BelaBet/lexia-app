@@ -34,7 +34,7 @@ const Index = () => {
       case "pdf-reader": return <PDFReader onOpenGuide={() => setActiveTab("guide")} />;
       case "document-creator": return <DocumentCreator />;
       case "documents": return <DocumentsPage />;
-      case "cases": return <CasesManager />;
+      case "cases": return <CasesManager onTabChange={setActiveTab} />;
       case "process-search": return <ProcessSearchManager />;
       case "checklists": return <ChecklistsManager />;
       case "guide": return <GuidePage />;

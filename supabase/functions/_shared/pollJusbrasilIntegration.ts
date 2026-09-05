@@ -220,7 +220,7 @@ async function fetchNameSearchNewItems(
 }
 
 // Mapeia o NameSearchRow (formato interno do CRM de busca por nome) para o
-// formato consumido pelo restante deste pipeline (dedup, criação de caso,
+// formato consumido pelo restante deste pipeline (dedup, criação de processo,
 // prazos, notificação) — evita duplicar a lógica de normalização de coluna
 // já corrigida em _shared/jusbrasilNameSearch.ts.
 function buildNameSearchSummary(row: NameSearchRow): string {
@@ -316,7 +316,7 @@ async function ensureOabRegistered(apiKey: string, oab: { number: number; region
 // necessário, para cada CNJ novo encontrado aqui, uma chamada adicional a
 // uma consulta processual por CNJ (produto separado, não coberto por esta
 // correção) — hoje o item vira uma publicação "placeholder", suficiente
-// para abrir o Caso e permitir consulta manual do processo pelo número,
+// para abrir o Processo e permitir consulta manual do processo pelo número,
 // mas sem o teor da movimentação.
 async function fetchOabLinkedProcesses(apiKey: string, oabRaw: string): Promise<JusbrasilProcessItem[]> {
   const oab = parseOabInput(oabRaw);
@@ -370,7 +370,7 @@ async function fetchOabLinkedProcesses(apiKey: string, oabRaw: string): Promise<
 }
 
 // ---------------------------------------------------------------------
-// Dispatcher + pipeline comum (dedup, caso, prazos, notificação, cobrança)
+// Dispatcher + pipeline comum (dedup, processo, prazos, notificação, cobrança)
 // ---------------------------------------------------------------------
 
 async function fetchJusbrasilNewItems(
@@ -542,7 +542,7 @@ export async function pollJusbrasilIntegration(
           user_id: integration.user_id,
           title: "Nova publicação importada via JusBrasil",
           message: processNumber
-            ? `Processo ${processNumber}${caseId ? " — caso aberto automaticamente" : ""}`
+            ? `Processo ${processNumber}${caseId ? " — processo aberto automaticamente" : ""}`
             : content.slice(0, 140),
           link_tab: "publications",
         });

@@ -1,7 +1,7 @@
 import { useState } from "react";
-import { FolderOpen, Plus, Search, Filter, MoreVertical, Calendar, FileText, User, X, ChevronDown, ClipboardList, Scale, Gavel, Landmark } from "lucide-react";
+import { FolderOpen, Radio, Search, Filter, MoreVertical, Calendar, FileText, User, X, ChevronDown, ClipboardList, Scale, Gavel, Landmark, Users } from "lucide-react";
 import { generateIntakeChecklistPdf } from "@/lib/intakeChecklistPdf";
-import { useCases, useCreateCase, useDeleteCase, Case, CreateCaseData } from "@/hooks/useCases";
+import { useCases, useDeleteCase, Case } from "@/hooks/useCases";
 import { useDocuments } from "@/hooks/useDocuments";
 import { format, isAfter, isBefore, startOfDay, endOfDay, subDays, subMonths, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -26,6 +26,7 @@ import { Calendar as CalendarComponent } from "@/components/ui/calendar";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { SyncToClickUpButton } from "@/components/integrations/SyncToClickUpButton";
+import ClientPortalPanel from "@/components/cases/ClientPortalPanel";
 
 const statusConfig = {
   active: { label: "Ativo", class: "bg-success/10 text-success" },
@@ -51,24 +52,16 @@ interface Filters {
   dateTo: Date | undefined;
 }
 
-export function CasesManager() {
+interface CasesManagerProps {
+  onTabChange?: (tab: string) => void;
+}
+
+export function CasesManager({ onTabChange }: CasesManagerProps) {
   const [searchTerm, setSearchTerm] = useState("");
   const [selectedCase, setSelectedCase] = useState<Case | null>(null);
-  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [newCase, setNewCase] = useState<CreateCaseData & { valor_causa_input: string }>({
-    case_number: "",
-    title: "",
-    client: "",
-    parte_diversa: "",
-    type: "Cível",
-    vara: "",
-    comarca: "",
-    valor_causa_input: "",
-    data_abertura_tribunal: "",
-    data_aceitacao: "",
-  });
-  
+  const [portalCase, setPortalCase] = useState<Case | null>(null);
+
   // Filter states
   const [filters, setFilters] = useState<Filters>({
     status: [],
@@ -80,7 +73,6 @@ export function CasesManager() {
 
   const { data: cases = [], isLoading } = useCases();
   const { data: documents = [] } = useDocuments();
-  const createCase = useCreateCase();
   const deleteCase = useDeleteCase();
 
   // Count active filters
@@ -126,33 +118,6 @@ export function CasesManager() {
 
     return true;
   });
-
-  const emptyNewCase: CreateCaseData & { valor_causa_input: string } = {
-    case_number: "",
-    title: "",
-    client: "",
-    parte_diversa: "",
-    type: "Cível",
-    vara: "",
-    comarca: "",
-    valor_causa_input: "",
-    data_abertura_tribunal: "",
-    data_aceitacao: "",
-  };
-
-  const handleCreateCase = async () => {
-    if (!newCase.case_number || !newCase.title || !newCase.client) return;
-
-    const { valor_causa_input, ...rest } = newCase;
-    const valor_causa = valor_causa_input.trim() ? Number(valor_causa_input.replace(",", ".")) : null;
-
-    await createCase.mutateAsync({
-      ...rest,
-      valor_causa: valor_causa !== null && !Number.isNaN(valor_causa) ? valor_causa : null,
-    });
-    setNewCase(emptyNewCase);
-    setIsDialogOpen(false);
-  };
 
   const currencyFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -212,14 +177,20 @@ export function CasesManager() {
               Checklist de Coleta (PDF)
             </button>
             <button
-              onClick={() => setIsDialogOpen(true)}
+              onClick={() => onTabChange?.("integrations")}
               className="legal-button-primary flex items-center gap-2"
+              title="Processos são criados automaticamente quando localizados via JusBrasil"
             >
-              <Plus className="w-5 h-5" />
-              Novo Processo
+              <Radio className="w-5 h-5" />
+              Configurar busca no JusBrasil
             </button>
           </div>
         </div>
+        <p className="text-xs text-muted-foreground mt-3 pt-3 border-t border-border">
+          Não é mais possível cadastrar um processo manualmente: todo processo é criado automaticamente
+          quando localizado pela integração com o JusBrasil (webhook ou busca ativa, configurados em
+          Integrações).
+        </p>
       </div>
 
       {/* Search and Filter */}
@@ -449,14 +420,16 @@ export function CasesManager() {
         <div className="legal-card flex flex-col items-center justify-center h-48">
           <FolderOpen className="w-12 h-12 text-muted-foreground/30 mb-4" />
           <p className="text-muted-foreground">
-            {searchTerm || activeFilterCount > 0 ? "Nenhum processo encontrado com os filtros aplicados" : "Nenhum processo cadastrado"}
+            {searchTerm || activeFilterCount > 0
+              ? "Nenhum processo encontrado com os filtros aplicados"
+              : "Nenhum processo cadastrado ainda — assim que um processo for localizado via JusBrasil, ele aparece aqui automaticamente"}
           </p>
           {!searchTerm && activeFilterCount === 0 && (
             <button
-              onClick={() => setIsDialogOpen(true)}
+              onClick={() => onTabChange?.("integrations")}
               className="mt-4 text-gold-warm hover:text-gold-dark transition-colors"
             >
-              Cadastrar primeiro processo
+              Configurar busca no JusBrasil
             </button>
           )}
           {activeFilterCount > 0 && (
@@ -544,8 +517,18 @@ export function CasesManager() {
                   </span>
                 </div>
                 <div className="flex items-center gap-4">
-                  <SyncToClickUpButton 
-                    title={caseItem.title} 
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setPortalCase(caseItem);
+                    }}
+                    title="Espaço do Cliente"
+                    className="flex items-center gap-1 hover:text-gold-warm transition-colors"
+                  >
+                    <Users className="w-4 h-4" />
+                  </button>
+                  <SyncToClickUpButton
+                    title={caseItem.title}
                     description={`Processo: ${caseItem.case_number}\nCliente: ${caseItem.client}\nTipo: ${caseItem.type}`}
                     type="case"
                   />
@@ -564,134 +547,15 @@ export function CasesManager() {
         </div>
       )}
 
-      {/* New Case Dialog */}
-      <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
-        <DialogContent>
+      {/* Espaço do Cliente — Meu Jurídico */}
+      <Dialog open={!!portalCase} onOpenChange={(open) => !open && setPortalCase(null)}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle className="font-serif">Novo Processo</DialogTitle>
+            <DialogTitle className="font-serif">
+              {portalCase?.title} — Espaço do Cliente
+            </DialogTitle>
           </DialogHeader>
-          <div className="space-y-4 mt-4">
-            <div>
-              <label className="block text-sm font-medium mb-2">Número do Processo</label>
-              <input
-                type="text"
-                value={newCase.case_number}
-                onChange={(e) => setNewCase({ ...newCase, case_number: e.target.value })}
-                placeholder="0001234-56.2024.8.26.0100"
-                className="legal-input"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Título</label>
-              <input
-                type="text"
-                value={newCase.title}
-                onChange={(e) => setNewCase({ ...newCase, title: e.target.value })}
-                placeholder="Ação de Indenização por Danos Morais"
-                className="legal-input"
-              />
-            </div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Cliente</label>
-                <input
-                  type="text"
-                  value={newCase.client}
-                  onChange={(e) => setNewCase({ ...newCase, client: e.target.value })}
-                  placeholder="Nome do cliente"
-                  className="legal-input"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-2">Parte Diversa</label>
-                <input
-                  type="text"
-                  value={newCase.parte_diversa}
-                  onChange={(e) => setNewCase({ ...newCase, parte_diversa: e.target.value })}
-                  placeholder="Nome da parte contrária"
-                  className="legal-input"
-                />
-              </div>
-            </div>
-            <div>
-              <label className="block text-sm font-medium mb-2">Tipo</label>
-              <select
-                value={newCase.type}
-                onChange={(e) => setNewCase({ ...newCase, type: e.target.value })}
-                className="legal-input"
-              >
-                {typeOptions.map(type => (
-                  <option key={type} value={type}>{type}</option>
-                ))}
-              </select>
-            </div>
-
-            {/* Dados processuais destacados no sistema */}
-            <div className="rounded-lg border border-border p-4 space-y-4">
-              <p className="text-sm font-semibold text-foreground">Dados Processuais</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Vara</label>
-                  <input
-                    type="text"
-                    value={newCase.vara}
-                    onChange={(e) => setNewCase({ ...newCase, vara: e.target.value })}
-                    placeholder="Ex: 3ª Vara Cível"
-                    className="legal-input"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Comarca</label>
-                  <input
-                    type="text"
-                    value={newCase.comarca}
-                    onChange={(e) => setNewCase({ ...newCase, comarca: e.target.value })}
-                    placeholder="Ex: Caruaru/PE"
-                    className="legal-input"
-                  />
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">Valor da Causa</label>
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={newCase.valor_causa_input}
-                    onChange={(e) => setNewCase({ ...newCase, valor_causa_input: e.target.value })}
-                    placeholder="0,00"
-                    className="legal-input"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Abertura no Tribunal</label>
-                  <input
-                    type="date"
-                    value={newCase.data_abertura_tribunal || ""}
-                    onChange={(e) => setNewCase({ ...newCase, data_abertura_tribunal: e.target.value })}
-                    className="legal-input"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium mb-2">Data de Aceitação</label>
-                  <input
-                    type="date"
-                    value={newCase.data_aceitacao || ""}
-                    onChange={(e) => setNewCase({ ...newCase, data_aceitacao: e.target.value })}
-                    className="legal-input"
-                  />
-                </div>
-              </div>
-            </div>
-
-            <button
-              onClick={handleCreateCase}
-              disabled={!newCase.case_number || !newCase.title || !newCase.client || createCase.isPending}
-              className="legal-button-gold w-full disabled:opacity-50"
-            >
-              {createCase.isPending ? "Criando..." : "Criar Processo"}
-            </button>
-          </div>
+          {portalCase && <ClientPortalPanel caseId={portalCase.id} />}
         </DialogContent>
       </Dialog>
 

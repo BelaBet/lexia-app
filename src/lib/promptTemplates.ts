@@ -100,7 +100,7 @@ export const PROMPT_TEMPLATES: PromptTemplate[] = [
       "Me ajude a calcular um prazo processual. Vou informar o tipo de prazo, a data de início (intimação/citação) e se corre em dias úteis ou corridos, e o tribunal/instância.",
   },
   {
-    id: "checklist-prazos-caso",
+    id: "checklist-prazos-processo",
     title: "Checklist de prazos de um processo",
     category: "Prazos",
     prompt:

@@ -46,10 +46,10 @@ Deno.serve(async (req) => {
 
   const caseId = body.case_id?.trim();
   const rawText = body.raw_text?.trim();
-  if (!caseId || !rawText) return json({ error: "Informe o caso e o texto a traduzir" }, 400);
+  if (!caseId || !rawText) return json({ error: "Informe o processo e o texto a traduzir" }, 400);
 
   // A consulta usa o cliente autenticado (anon key + JWT do usuario), entao
-  // a RLS ja garante que so retorna o caso se o usuario for dono dele.
+  // a RLS ja garante que so retorna o processo se o usuario for dono dele.
   const { data: caseRow, error: caseError } = await supabase
     .from("cases")
     .select("id, case_number")
@@ -58,9 +58,9 @@ Deno.serve(async (req) => {
 
   if (caseError) {
     console.error("humanize-timeline-event: error loading case", caseError);
-    return json({ error: "Erro ao verificar o caso" }, 500);
+    return json({ error: "Erro ao verificar o processo" }, 500);
   }
-  if (!caseRow) return json({ error: "Caso nao encontrado ou sem permissao" }, 404);
+  if (!caseRow) return json({ error: "Processo nao encontrado ou sem permissao" }, 404);
 
   const result = await humanizeForClient(rawText, caseRow.case_number ?? null);
   if (!result) return json({ error: "Nao foi possivel gerar a traducao agora. Tente novamente em instantes." }, 502);
