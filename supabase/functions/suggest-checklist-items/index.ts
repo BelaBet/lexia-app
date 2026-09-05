@@ -90,7 +90,7 @@ serve(async (req) => {
 
 Considere:
 - O contexto (processo, cliente, ou obrigação geral)
-- O tipo de caso/processo quando aplicável
+- O tipo de processo quando aplicável
 - Informações do cliente quando disponíveis
 - Itens já existentes para evitar duplicação
 
@@ -99,7 +99,7 @@ Forneça sugestões práticas, específicas e acionáveis para o contexto juríd
     const userPrompt = `Sugira itens de checklist para:
 
 Contexto: ${context}
-${caseType ? `Tipo de Caso: ${caseType}` : ''}
+${caseType ? `Tipo de Processo: ${caseType}` : ''}
 ${clientInfo ? `Informações do Cliente: ${clientInfo}` : ''}
 ${existingItems?.length ? `Itens já existentes: ${existingItems.join(', ')}` : ''}
 

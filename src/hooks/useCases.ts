@@ -44,49 +44,16 @@ export function useCases() {
   });
 }
 
-export interface CreateCaseData {
-  case_number: string;
-  title: string;
-  client: string;
-  parte_diversa?: string;
-  type?: string;
-  status?: string;
-  vara?: string;
-  comarca?: string;
-  valor_causa?: number | null;
-  data_abertura_tribunal?: string | null;
-  data_aceitacao?: string | null;
-}
-
-export function useCreateCase() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (caseData: CreateCaseData) => {
-      const user = await requireUser();
-      const { data, error } = await supabase.from("cases").insert({
-        case_number: caseData.case_number.trim(),
-        title: caseData.title.trim(),
-        client: caseData.client.trim(),
-        parte_diversa: caseData.parte_diversa?.trim() || null,
-        type: caseData.type || "Cível",
-        status: caseData.status || "active",
-        vara: caseData.vara?.trim() || null,
-        comarca: caseData.comarca?.trim() || null,
-        valor_causa: caseData.valor_causa ?? null,
-        data_abertura_tribunal: caseData.data_abertura_tribunal || null,
-        data_aceitacao: caseData.data_aceitacao || null,
-        user_id: user.id,
-      }).select().single();
-      if (error) throw error;
-      return data;
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["cases"] });
-      toast.success("Processo criado com sucesso!");
-    },
-    onError: (error) => toast.error(error.message || "Erro ao criar processo"),
-  });
-}
+// Não existe mais criação manual de processo pela interface (nem hook de
+// client exposto para isso): por decisão de produto, todo processo na
+// tabela "cases" passa a ser criado exclusivamente pelas integrações
+// automáticas com o JusBrasil (webhook de publicações e busca ativa), que
+// rodam com a service role nas edge functions e não passam pela RLS de
+// INSERT abaixo — por isso a política "Users can create their own cases"
+// foi removida do banco (ver migration
+// 20260905030000_remove_manual_case_creation.sql): nem mesmo uma chamada
+// direta à API do Supabase por um usuário autenticado consegue inserir um
+// processo manualmente a partir de agora.
 
 export function useUpdateCase() {
   const queryClient = useQueryClient();

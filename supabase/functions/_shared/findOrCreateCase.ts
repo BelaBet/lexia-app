@@ -2,10 +2,11 @@ import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.0
 
 // Compartilhado entre publication-webhook e poll-jusbrasil: quando uma nova
 // publicação/processo chega automaticamente da API, o sistema já abre (ou
-// reaproveita) um Caso correspondente em "Casos", para o advogado ver o
-// processo lá — não só na lista de Publicações. O caso é identificado pelo
-// número do processo; se já existir um caso com esse número para o mesmo
-// usuário, a publicação é só vinculada a ele (não duplica).
+// reaproveita) um Processo correspondente em "Processos", para o advogado
+// ver o processo lá — não só na lista de Publicações. O processo é
+// identificado pelo número do processo; se já existir um processo com esse
+// número para o mesmo usuário, a publicação é só vinculada a ele (não
+// duplica).
 
 export interface ProcessualData {
   vara?: string | null;

@@ -1,5 +1,5 @@
 // Convida um cliente para o "Meu Jurídico" (portal do cliente): cadastra
-// (ou reaproveita) o registro em `clients`, vincula ao caso em
+// (ou reaproveita) o registro em `clients`, vincula ao processo em
 // `case_clients` e envia o convite de acesso pelo próprio Supabase Auth
 // (e-mail com link para o cliente definir a senha).
 
@@ -40,12 +40,12 @@ Deno.serve(async (req) => {
   const email = body.email?.trim().toLowerCase();
   const phone = body.phone?.trim() || null;
 
-  if (!caseId || !fullName || !email) return json({ error: "Informe o caso, o nome e o e-mail do cliente" }, 400);
+  if (!caseId || !fullName || !email) return json({ error: "Informe o processo, o nome e o e-mail do cliente" }, 400);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "E-mail inválido" }, 400);
 
   const admin = createClient(supabaseUrl, serviceRoleKey);
 
-  // Confirma que quem está chamando é o dono do caso.
+  // Confirma que quem está chamando é o dono do processo.
   const { data: caseRow, error: caseError } = await admin
     .from("cases")
     .select("id, user_id, title")
@@ -54,9 +54,9 @@ Deno.serve(async (req) => {
 
   if (caseError) {
     console.error("invite-client: error loading case", caseError);
-    return json({ error: "Erro ao verificar o caso" }, 500);
+    return json({ error: "Erro ao verificar o processo" }, 500);
   }
-  if (!caseRow || caseRow.user_id !== user.id) return json({ error: "Caso não encontrado ou sem permissão" }, 404);
+  if (!caseRow || caseRow.user_id !== user.id) return json({ error: "Processo não encontrado ou sem permissão" }, 404);
 
   // Já existe um cadastro deste e-mail como cliente deste advogado?
   const { data: existingClient, error: existingError } = await admin
@@ -93,13 +93,13 @@ Deno.serve(async (req) => {
     clientId = inserted.id;
   }
 
-  // Vincula o cliente a este caso (não duplica se já existir o vínculo).
+  // Vincula o cliente a este processo (não duplica se já existir o vínculo).
   const { error: linkError } = await admin
     .from("case_clients")
     .upsert({ case_id: caseId, client_id: clientId }, { onConflict: "case_id,client_id", ignoreDuplicates: true });
   if (linkError) {
     console.error("invite-client: error linking client to case", linkError);
-    return json({ error: "Erro ao vincular cliente ao caso" }, 500);
+    return json({ error: "Erro ao vincular cliente ao processo" }, 500);
   }
 
   // Se o cliente ainda não tem login no portal, envia o convite por e-mail.
@@ -113,8 +113,8 @@ Deno.serve(async (req) => {
       const alreadyExists = /already been registered|already exists|already registered/i.test(inviteError.message || "");
       if (alreadyExists) {
         // O e-mail já é um usuário do Supabase Auth (ex.: já é cliente em
-        // outro caso, ou já tem conta própria no LexIA) — reaproveita em vez
-        // de falhar.
+        // outro processo, ou já tem conta própria no LexIA) — reaproveita em
+        // vez de falhar.
         const lookupResponse = await fetch(`${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(email)}`, {
           headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` },
         });
