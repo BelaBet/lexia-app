@@ -209,19 +209,67 @@ export function CalendarView({ onOpenCase }: CalendarViewProps) {
   // tarefa etc.) vinculado a eles. É o "Processo X ainda não possui tarefa
   // atribuída" do conceito de Calendário Jurídico — hoje isso não aparecia
   // em lugar nenhum do produto.
+  //
+  // Importante: um item "futuro" pode estar em duas tabelas diferentes —
+  // `events` (Agenda) OU `checklists` (que também tem case_id + due_date e
+  // roda em paralelo, ver "Prazos de Checklists" mais abaixo). Considerar só
+  // `events` geraria falso positivo: um processo com um checklist pendente
+  // mas sem evento na Agenda apareceria como "esquecido" quando na verdade
+  // já tem alguém cuidando dele — só que por outro sistema.
   const casesWithoutUpcomingItem = useMemo(() => {
     const today = startOfDay(new Date());
-    const casesWithFutureItem = new Set(
-      events
-        .filter((e) => e.case_id && startOfDay(parseISO(e.event_date)) >= today && e.computed_status !== "cancelled")
-        .map((e) => e.case_id as string),
-    );
+    const casesWithFutureItem = new Set<string>();
+    events
+      .filter((e) => e.case_id && startOfDay(parseISO(e.event_date)) >= today && e.computed_status !== "cancelled")
+      .forEach((e) => casesWithFutureItem.add(e.case_id as string));
+    checklists
+      .filter((c) => c.case_id && c.due_date && startOfDay(parseISO(c.due_date)) >= today && c.status !== "completed" && c.status !== "cancelled")
+      .forEach((c) => casesWithFutureItem.add(c.case_id as string));
     return cases.filter((c) => c.status !== "closed" && !casesWithFutureItem.has(c.id));
-  }, [cases, events]);
+  }, [cases, events, checklists]);
 
-  const criticalEvents = useMemo(
-    () => events.filter((e) => matchesFilter(e, "criticos")),
-    [events],
+  // Exposição financeira: dois prazos vencendo no mesmo prazo de dias não
+  // representam o mesmo risco se um pertence a um processo de R$ 15 mil e
+  // outro a um de R$ 2 milhões. Por isso os críticos são ordenados por
+  // valor_causa do processo vinculado (maior primeiro) antes da data — só
+  // cai de volta para ordem cronológica quando não há valor cadastrado
+  // (processo criado automaticamente pela API muitas vezes não traz esse
+  // dado, ou processo sem valor_causa preenchido manualmente).
+  const criticalEvents = useMemo(() => {
+    const list = events.filter((e) => matchesFilter(e, "criticos"));
+    return [...list].sort((a, b) => {
+      const valorA = a.case_id ? casesById.get(a.case_id)?.valor_causa ?? null : null;
+      const valorB = b.case_id ? casesById.get(b.case_id)?.valor_causa ?? null : null;
+      if (valorA !== null && valorB !== null && valorA !== valorB) return valorB - valorA;
+      if (valorA !== null && valorB === null) return -1;
+      if (valorA === null && valorB !== null) return 1;
+      return parseISO(a.event_date).getTime() - parseISO(b.event_date).getTime();
+    });
+  }, [events, casesById]);
+
+  // Soma o valor_causa dos processos (contados uma vez cada, mesmo que
+  // tenham mais de um prazo/compromisso crítico) por trás dos itens
+  // críticos — dá a ideia de tamanho do problema em dinheiro, não só em
+  // quantidade de itens.
+  const criticalValueAtRisk = useMemo(() => {
+    const seenCaseIds = new Set<string>();
+    let total = 0;
+    let hasAnyValue = false;
+    for (const event of criticalEvents) {
+      if (!event.case_id || seenCaseIds.has(event.case_id)) continue;
+      seenCaseIds.add(event.case_id);
+      const valor = casesById.get(event.case_id)?.valor_causa;
+      if (valor != null) {
+        total += valor;
+        hasAnyValue = true;
+      }
+    }
+    return hasAnyValue ? total : null;
+  }, [criticalEvents, casesById]);
+
+  const currencyFormatter = useMemo(
+    () => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }),
+    [],
   );
   // Update event date to today when dialog opens
   useEffect(() => {
@@ -438,7 +486,19 @@ export function CalendarView({ onOpenCase }: CalendarViewProps) {
   const upcomingEventsFiltered = events
     .filter((e) => startOfDay(parseISO(e.event_date)) >= today)
     .filter((e) => matchesFilter(e, activeFilter))
-    .sort((a, b) => new Date(a.event_date).getTime() - new Date(b.event_date).getTime());
+    .sort((a, b) => {
+      // No filtro "Críticos", exposição financeira do processo manda mais
+      // que a data (ver criticalEvents acima) — nos demais filtros, ordem
+      // cronológica simples.
+      if (activeFilter === "criticos") {
+        const valorA = a.case_id ? casesById.get(a.case_id)?.valor_causa ?? null : null;
+        const valorB = b.case_id ? casesById.get(b.case_id)?.valor_causa ?? null : null;
+        if (valorA !== null && valorB !== null && valorA !== valorB) return valorB - valorA;
+        if (valorA !== null && valorB === null) return -1;
+        if (valorA === null && valorB !== null) return 1;
+      }
+      return new Date(a.event_date).getTime() - new Date(b.event_date).getTime();
+    });
   // No filtro padrão ("Todos") mantemos a lista curta de sempre; com um
   // filtro específico ativo, faz sentido mostrar mais itens (é para isso
   // que a pessoa filtrou).
@@ -508,6 +568,9 @@ export function CalendarView({ onOpenCase }: CalendarViewProps) {
               <p className="font-medium text-sm">
                 {criticalEvents.length + casesWithoutUpcomingItem.length} atividade
                 {criticalEvents.length + casesWithoutUpcomingItem.length === 1 ? "" : "s"} exigem atenção
+                {criticalValueAtRisk !== null && (
+                  <span className="text-destructive"> · {currencyFormatter.format(criticalValueAtRisk)} em causas em risco</span>
+                )}
               </p>
               <div className="flex flex-wrap gap-2 text-xs">
                 {criticalEvents.length > 0 && (
@@ -632,6 +695,9 @@ export function CalendarView({ onOpenCase }: CalendarViewProps) {
                           >
                             <Scale className="w-3 h-3" />
                             {linkedCase.case_number} · {linkedCase.client}
+                            {linkedCase.valor_causa != null && (
+                              <span className="text-muted-foreground">· {currencyFormatter.format(linkedCase.valor_causa)}</span>
+                            )}
                             <ExternalLink className="w-3 h-3" />
                           </button>
                         ) : (
