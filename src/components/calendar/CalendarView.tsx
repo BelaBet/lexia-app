@@ -1351,24 +1351,40 @@ export function CalendarView() {
               </p>
             )}
 
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setEditingEvent(null)}
-                className="legal-button-secondary"
-              >
-                Cancelar
-              </button>
-              <button
-                onClick={handleUpdateEvent}
-                disabled={
-                  !editForm.title ||
-                  updateEvent.isPending ||
-                  isRetroactiveEventDateChange(editForm.event_date || "", editingEvent?.event_date)
-                }
-                className="legal-button-primary disabled:opacity-50"
-              >
-                Salvar
-              </button>
+            <div className="flex justify-between items-center pt-2">
+              {editingEvent && !isApiCreatedEvent(editingEvent) ? (
+                <button
+                  onClick={() => {
+                    deleteEvent.mutate(editingEvent);
+                    setEditingEvent(null);
+                  }}
+                  className="text-destructive hover:underline text-sm flex items-center gap-1.5"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Excluir evento
+                </button>
+              ) : (
+                <span />
+              )}
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setEditingEvent(null)}
+                  className="legal-button-secondary"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleUpdateEvent}
+                  disabled={
+                    !editForm.title ||
+                    updateEvent.isPending ||
+                    isRetroactiveEventDateChange(editForm.event_date || "", editingEvent?.event_date)
+                  }
+                  className="legal-button-primary disabled:opacity-50"
+                >
+                  Salvar
+                </button>
+              </div>
             </div>
           </div>
         </DialogContent>

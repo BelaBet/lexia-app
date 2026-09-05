@@ -122,32 +122,25 @@ export function useEvents() {
   return useQuery({
     queryKey: ["events"],
     queryFn: async () => {
+      // Participantes e anexos vêm embutidos na mesma consulta (join via
+      // PostgREST) em vez de uma consulta separada por evento — evitava um
+      // problema de N+1 (100 eventos = ~201 consultas).
       const { data: events, error } = await supabase
         .from("events")
-        .select("*")
+        .select("*, participants:event_participants(*), attachments:event_attachments(*)")
         .order("event_date", { ascending: true });
 
       if (error) throw error;
-      
-      // Fetch participants and attachments for each event
-      const eventsWithDetails = await Promise.all(
-        (events || []).map(async (event) => {
-          const [participantsRes, attachmentsRes] = await Promise.all([
-            supabase.from("event_participants").select("*").eq("event_id", event.id),
-            supabase.from("event_attachments").select("*").eq("event_id", event.id),
-          ]);
-          
-          const calendarEvent = {
-            ...event,
-            participants: participantsRes.data || [],
-            attachments: attachmentsRes.data || [],
-          } as Omit<CalendarEvent, "computed_status">;
 
-          return { ...calendarEvent, computed_status: getEffectiveEventStatus(calendarEvent) };
-        })
-      );
-      
-      return eventsWithDetails;
+      return (events || []).map((event) => {
+        const calendarEvent = {
+          ...event,
+          participants: event.participants || [],
+          attachments: event.attachments || [],
+        } as Omit<CalendarEvent, "computed_status">;
+
+        return { ...calendarEvent, computed_status: getEffectiveEventStatus(calendarEvent) };
+      });
     },
   });
 }
@@ -182,6 +175,16 @@ export function useCreateEvent() {
 
       if (eventError) throw eventError;
 
+      // Criar evento, participantes e anexos são operações separadas (o
+      // Supabase não expõe uma transação multi-tabela para o client, e
+      // upload de arquivo no Storage nunca poderia fazer parte de uma
+      // transação SQL de qualquer forma). O evento em si já está criado
+      // com sucesso neste ponto — se participantes/anexos falharem, isso
+      // não é desfeito (não há o que fazer sobre o evento em si), mas o
+      // usuário precisa SABER que algo ficou faltando, em vez de receber
+      // um "Evento criado com sucesso!" que esconde a falha parcial.
+      const partialErrors: string[] = [];
+
       // Add participants if any
       if (eventData.participants && eventData.participants.length > 0) {
         const participantsToInsert = eventData.participants.map((p) => ({
@@ -196,20 +199,23 @@ export function useCreateEvent() {
 
         if (participantsError) {
           console.error("Error adding participants:", participantsError);
+          partialErrors.push("os participantes");
         }
       }
 
       // Upload files if any
       if (eventData.files && eventData.files.length > 0) {
+        let failedFiles = 0;
         for (const file of eventData.files) {
           const filePath = `${user.id}/${event.id}/${Date.now()}_${file.name}`;
-          
+
           const { error: uploadError } = await supabase.storage
             .from("event-files")
             .upload(filePath, file);
 
           if (uploadError) {
             console.error("Error uploading file:", uploadError);
+            failedFiles += 1;
             continue;
           }
 
@@ -225,15 +231,21 @@ export function useCreateEvent() {
 
           if (attachmentError) {
             console.error("Error saving attachment:", attachmentError);
+            failedFiles += 1;
           }
         }
+        if (failedFiles > 0) partialErrors.push(`${failedFiles} arquivo(s)`);
       }
 
-      return event;
+      return { event, partialErrors };
     },
-    onSuccess: () => {
+    onSuccess: ({ partialErrors }) => {
       queryClient.invalidateQueries({ queryKey: ["events"] });
-      toast.success("Evento criado com sucesso!");
+      if (partialErrors.length > 0) {
+        toast.warning(`Evento criado, mas houve um problema ao salvar ${partialErrors.join(" e ")}. Verifique o evento.`);
+      } else {
+        toast.success("Evento criado com sucesso!");
+      }
     },
     onError: (error) => {
       console.error("Error creating event:", error);
