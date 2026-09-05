@@ -737,6 +737,7 @@ export type Database = {
       }
       documents: {
         Row: {
+          case_id: string | null
           content: string | null
           created_at: string
           id: string
@@ -748,6 +749,7 @@ export type Database = {
           user_id: string | null
         }
         Insert: {
+          case_id?: string | null
           content?: string | null
           created_at?: string
           id?: string
@@ -759,6 +761,7 @@ export type Database = {
           user_id?: string | null
         }
         Update: {
+          case_id?: string | null
           content?: string | null
           created_at?: string
           id?: string
@@ -769,7 +772,15 @@ export type Database = {
           updated_at?: string
           user_id?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "documents_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       event_attachments: {
         Row: {
@@ -1708,6 +1719,13 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      admin_set_user_role: {
+        Args: {
+          p_new_role: Database["public"]["Enums"]["app_role"]
+          p_target_user_id: string
+        }
+        Returns: undefined
+      }
       check_and_log_rate_limit: {
         Args: {
           p_function: string

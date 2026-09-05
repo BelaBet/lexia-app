@@ -31,8 +31,18 @@ export function StatsCards() {
     return diffDays >= 0 && diffDays <= 7;
   }).length;
 
+  // BUG-02 (corrigido): faltava excluir prazos já concluídos/cancelados —
+  // um prazo marcado como cumprido continuava podendo aparecer como
+  // "Próximo: X dias" só por ter uma data futura, o que é enganoso (o
+  // trabalho ali já acabou). Mesma regra que CalendarView já aplica aos
+  // "críticos" da Agenda: completed/cancelled nunca contam como pendente.
   const nextDeadline = events
-    .filter((e) => DEADLINE_EVENT_TYPES.has(e.type) && differenceInCalendarDays(parseISO(e.event_date), today) >= 0)
+    .filter((e) =>
+      DEADLINE_EVENT_TYPES.has(e.type) &&
+      differenceInCalendarDays(parseISO(e.event_date), today) >= 0 &&
+      e.computed_status !== "completed" &&
+      e.computed_status !== "cancelled",
+    )
     .sort((a, b) => parseISO(a.event_date).getTime() - parseISO(b.event_date).getTime())[0];
 
   const nextDeadlineDays = nextDeadline

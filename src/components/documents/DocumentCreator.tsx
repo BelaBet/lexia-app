@@ -1,6 +1,7 @@
 import { useState } from "react";
-import { FileText, Plus, Wand2, Save, Download, ChevronRight } from "lucide-react";
+import { FileText, Plus, Wand2, Save, Download, ChevronRight, Scale } from "lucide-react";
 import { useCreateDocument, useUpdateDocument, Document } from "@/hooks/useDocuments";
+import { useCases } from "@/hooks/useCases";
 import { toast } from "sonner";
 
 const documentTypes = [
@@ -192,15 +193,18 @@ export function DocumentCreator() {
   const [title, setTitle] = useState("");
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentDocId, setCurrentDocId] = useState<string | null>(null);
+  const [selectedCaseId, setSelectedCaseId] = useState<string>("");
 
   const createDocument = useCreateDocument();
   const updateDocument = useUpdateDocument();
+  const { data: cases = [] } = useCases();
 
   const handleTypeSelect = (typeId: string) => {
     setSelectedType(typeId);
     setTitle("");
     setDocumentContent("");
     setCurrentDocId(null);
+    setSelectedCaseId("");
   };
 
   const generateWithAI = async () => {
@@ -226,6 +230,7 @@ export function DocumentCreator() {
         title,
         content: documentContent,
         status: "draft",
+        case_id: selectedCaseId || null,
       });
     } else {
       const result = await createDocument.mutateAsync({
@@ -233,6 +238,7 @@ export function DocumentCreator() {
         type: typeName,
         content: documentContent,
         status: "draft",
+        case_id: selectedCaseId || null,
       });
       setCurrentDocId(result.id);
     }
@@ -306,7 +312,22 @@ export function DocumentCreator() {
                   placeholder="Ex: Ação de Cobrança, Contrato de Locação..."
                   className="legal-input"
                 />
-                
+
+                <label className="block text-sm font-medium mb-2 mt-4 flex items-center gap-1.5">
+                  <Scale className="w-4 h-4" />
+                  Processo vinculado (opcional)
+                </label>
+                <select
+                  value={selectedCaseId}
+                  onChange={(e) => setSelectedCaseId(e.target.value)}
+                  className="legal-input"
+                >
+                  <option value="">Nenhum</option>
+                  {cases.map((c) => (
+                    <option key={c.id} value={c.id}>{c.case_number} · {c.client}</option>
+                  ))}
+                </select>
+
                 <button
                   onClick={generateWithAI}
                   disabled={!title || isGenerating}

@@ -39,9 +39,20 @@ Deno.serve(async (req) => {
   const targetIsSupremo = targetRoles?.some((r) => r.role === "supremo") ?? false;
   if (targetIsSupremo && !isSupremo) return json({ error: "Somente Supremo pode alterar outro Supremo" }, 403);
 
-  const { error: deleteError } = await adminClient.from("user_roles").delete().eq("user_id", targetUserId);
-  if (deleteError) return json({ error: "Não foi possível atualizar as roles" }, 500);
-  const { error: insertError } = await adminClient.from("user_roles").insert({ user_id: targetUserId, role: newRole });
-  if (insertError) return json({ error: "Não foi possível definir a nova role" }, 500);
+  // BUG-04 (corrigido): antes isto era um delete() seguido de um insert()
+  // como duas chamadas separadas — se o delete tivesse sucesso e o insert
+  // falhasse (rede, conflito, etc.), o usuário-alvo ficava sem NENHUMA role
+  // gravada, um estado inconsistente que poderia até bloquear seu acesso.
+  // A função admin_set_user_role() no banco faz o delete+insert dentro de
+  // uma única transação (chamada de função = uma transação implícita), então
+  // ou as duas operações acontecem juntas, ou nenhuma acontece.
+  const { error: roleError } = await adminClient.rpc("admin_set_user_role", {
+    p_target_user_id: targetUserId,
+    p_new_role: newRole,
+  });
+  if (roleError) {
+    console.error("Error setting user role:", roleError);
+    return json({ error: "Não foi possível atualizar a role" }, 500);
+  }
   return json({ success: true, userId: targetUserId, role: newRole });
 });
