@@ -26,22 +26,32 @@ export async function syncDeadlineEvents(
   ];
 
   for (const deadline of deadlines) {
-    const { data: existing } = await adminClient
+    const { data: existing, error: findError } = await adminClient
       .from("events")
       .select("id")
       .eq("publication_id", publication.id)
       .eq("type", deadline.type)
       .maybeSingle();
 
+    if (findError) {
+      console.error("Error checking existing deadline event:", findError);
+      continue;
+    }
+
     if (!deadline.date) {
       if (existing) {
-        await adminClient.from("events").delete().eq("id", existing.id);
+        const { error: deleteError } = await adminClient.from("events").delete().eq("id", existing.id);
+        if (deleteError) console.error("Error deleting deadline event:", deleteError);
       }
       continue;
     }
 
     if (existing) {
-      await adminClient.from("events").update({ event_date: deadline.date }).eq("id", existing.id);
+      const { error: updateError } = await adminClient
+        .from("events")
+        .update({ event_date: deadline.date })
+        .eq("id", existing.id);
+      if (updateError) console.error("Error updating deadline event:", updateError);
     } else {
       const { error } = await adminClient.from("events").insert({
         user_id: userId,

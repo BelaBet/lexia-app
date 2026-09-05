@@ -135,27 +135,51 @@ async function syncPublicationDeadlineEvents(
   ];
 
   const identifier = publication.process_number || publication.content.slice(0, 60);
+  // Erros aqui não devem derrubar o salvamento da publicação em si (já
+  // gravada com sucesso quando esta função é chamada) — mas também não
+  // podem ser engolidos: sem isso, a publicação parece salva com sucesso
+  // enquanto a Agenda silenciosamente fica sem o prazo correspondente
+  // (ex.: o próprio gatilho de evento retroativo pode rejeitar um prazo
+  // que já venceu). Cada falha vira um aviso explícito ao usuário.
+  const syncErrors: string[] = [];
 
   for (const deadline of deadlines) {
-    const { data: existing } = await supabase
+    const { data: existing, error: findError } = await supabase
       .from("events")
       .select("id")
       .eq("publication_id", publication.id)
       .eq("type", deadline.type)
       .maybeSingle();
 
+    if (findError) {
+      console.error("Error checking existing deadline event:", findError);
+      syncErrors.push(deadline.label);
+      continue;
+    }
+
     if (!deadline.date) {
       // Prazo removido/limpo: remove o evento correspondente, se houver.
       if (existing) {
-        await supabase.from("events").delete().eq("id", existing.id);
+        const { error: deleteError } = await supabase.from("events").delete().eq("id", existing.id);
+        if (deleteError) {
+          console.error("Error deleting deadline event:", deleteError);
+          syncErrors.push(deadline.label);
+        }
       }
       continue;
     }
 
     if (existing) {
-      await supabase.from("events").update({ event_date: deadline.date }).eq("id", existing.id);
+      const { error: updateError } = await supabase
+        .from("events")
+        .update({ event_date: deadline.date })
+        .eq("id", existing.id);
+      if (updateError) {
+        console.error("Error updating deadline event:", updateError);
+        syncErrors.push(deadline.label);
+      }
     } else {
-      await supabase.from("events").insert({
+      const { error: insertError } = await supabase.from("events").insert({
         user_id: userId,
         title: `${deadline.label}: ${identifier}`,
         description: publication.content.slice(0, 500),
@@ -169,7 +193,17 @@ async function syncPublicationDeadlineEvents(
         notification_enabled: true,
         notification_minutes_before: 60 * 24,
       });
+      if (insertError) {
+        console.error("Error creating deadline event:", insertError);
+        syncErrors.push(deadline.label);
+      }
     }
+  }
+
+  if (syncErrors.length > 0) {
+    toast.warning(
+      `Publicação salva, mas houve um problema ao sincronizar ${syncErrors.join(" e ")} na Agenda. Verifique manualmente.`,
+    );
   }
 }
 
