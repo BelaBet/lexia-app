@@ -91,14 +91,14 @@ export function ProfilePage() {
           <CardContent>
             <div className="space-y-4">
               <Separator />
-              <div className="flex items-center justify-between">
-                <span className="text-sm text-muted-foreground flex items-center gap-2">
+              <div className="flex items-start justify-between gap-2">
+                <span className="text-sm text-muted-foreground flex items-center gap-2 shrink-0">
                   <Shield className="w-4 h-4" />
                   Nível de Acesso
                 </span>
-                <div className="flex gap-1">
-                  {roles.map((r, i) => (
-                    <span key={i}>{getRoleBadge(r.role)}</span>
+                <div className="flex flex-wrap gap-1 justify-end">
+                  {Array.from(new Set(roles.map((r) => r.role))).map((role) => (
+                    <span key={role}>{getRoleBadge(role)}</span>
                   ))}
                 </div>
               </div>
