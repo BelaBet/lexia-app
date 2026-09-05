@@ -88,44 +88,108 @@ export interface NameSearchRow {
   raw_data: Record<string, unknown>;
 }
 
-// Mapeia os nomes de coluna documentados pelo JusBrasil para os campos do
-// nosso banco. Vários nomes alternativos são aceitos porque a
-// documentação usa termos em português com pequenas variações e não havia,
-// no momento em que este código foi escrito, um payload de exemplo real
-// para confirmar a grafia exata — ajustar aqui assim que a primeira busca
-// real vier, se necessário.
-const FIELD_ALIASES: Record<keyof Omit<NameSearchRow, "raw_data">, string[]> = {
+// Mapeia os nomes de coluna REAIS retornados pelo export de relatório por
+// nome, confirmados em https://api.jusbrasil.com.br/docs/relatorio_nome/extras_comandos.html
+// ("Exportar dados dos processos de um relatório por nome"): "Processo",
+// "Area", "Tribunal", "Data distribuição", "Valor", "Natureza", "Comarca",
+// "Foro", "Vara", "Advogados (parte ativa)", "OAB advogado",
+// "Última mov. data", "Última mov. tipo", "Transitado julg.", "Sentença",
+// "Acordo", "Arquivado" (a doc avisa que essa lista é "dentre outras", ou
+// seja, não é exaustiva — os demais campos abaixo sem uma coluna confirmada
+// ficam com aliases "best effort" e um TODO).
+//
+// CORRIGIDO: a versão anterior usava aliases inventados sem um payload real
+// para conferir — vários não batem com os nomes reais documentados e nunca
+// teriam sido encontrados: "data de distribuição" (real: "Data distribuição",
+// sem o "de"), "advogados+oabs"/"advogados e oabs" (na real são DUAS
+// colunas separadas: "Advogados (parte ativa)" e "OAB advogado"),
+// "última movimentação (data/tipo)" (real: "Última mov. data"/"Última mov.
+// tipo", abreviado), "sentença (data)"/"sentença (texto)" (real: uma única
+// coluna "Sentença", sem separação data/texto), e "status"/"status
+// (suspenso/apreendido/penhorado)" (a real não tem uma coluna "status"
+// única — são três colunas booleanas separadas: "Transitado julg.",
+// "Acordo", "Arquivado", combinadas abaixo em buildStatusProcessual).
+const FIELD_ALIASES: Record<keyof Omit<NameSearchRow, "raw_data" | "advogados" | "status_processual">, string[]> = {
   process_number: ["numero_processo", "numero do processo", "número do processo", "processo"],
   tribunal: ["tribunal"],
-  data_distribuicao: ["data_distribuicao", "data de distribuição"],
+  data_distribuicao: ["data_distribuicao", "data distribuição", "data de distribuição"],
   area: ["area", "área"],
   natureza: ["natureza"],
   valor: ["valor", "valor da causa"],
   partes_ativas: ["partes_ativas", "partes ativas"],
   partes_passivas: ["partes_passivas", "partes passivas"],
-  advogados: ["advogados", "advogados+oabs", "advogados e oabs"],
   comarca: ["comarca"],
   foro: ["foro"],
   vara: ["vara"],
-  ultima_movimentacao_data: ["data_ultima_movimentacao", "última movimentação (data)", "data da última movimentação"],
-  ultima_movimentacao_tipo: ["tipo_ultima_movimentacao", "última movimentação (tipo)"],
+  ultima_movimentacao_data: ["ultima mov. data", "última mov. data", "data_ultima_movimentacao", "última movimentação (data)", "data da última movimentação"],
+  ultima_movimentacao_tipo: ["ultima mov. tipo", "última mov. tipo", "tipo_ultima_movimentacao", "última movimentação (tipo)"],
   ultima_movimentacao_texto: ["texto_ultima_movimentacao", "última movimentação (texto)"],
   juiz: ["juiz"],
   total_movimentacoes: ["total_movimentacoes", "total de movimentações"],
   sentenca_data: ["data_sentenca", "sentença (data)"],
-  sentenca_texto: ["texto_sentenca", "sentença (texto)"],
-  status_processual: ["status", "status (suspenso/apreendido/penhorado)"],
+  sentenca_texto: ["sentenca", "sentença", "texto_sentenca", "sentença (texto)"],
   data_extincao: ["data_extincao", "data de extinção"],
   url_detalhes: ["url_detalhes", "url de detalhes"],
 };
 
+// Colunas confirmadas para advogados (duas colunas separadas, não uma só) e
+// para os três indicadores booleanos combinados em status_processual.
+const ADVOGADOS_NOME_ALIASES = ["advogados (parte ativa)", "advogados", "advogados+oabs", "advogados e oabs"];
+const ADVOGADOS_OAB_ALIASES = ["oab advogado", "oab do advogado", "oab advogados"];
+const STATUS_FLAG_ALIASES: Array<{ label: string; aliases: string[] }> = [
+  { label: "Transitado em julgado", aliases: ["transitado julg.", "transitado julgado", "transitado em julgado"] },
+  { label: "Acordo", aliases: ["acordo"] },
+  { label: "Arquivado", aliases: ["arquivado"] },
+];
+
+// Normaliza removendo acentos e espaços duplicados, além de minúsculas —
+// os nomes de coluna documentados usam acentuação (ex.: "última", "área")
+// que precisa bater independente de eventual variação de acentuação da API.
+function normalizeColumnName(value: string): string {
+  return value
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase()
+    .trim()
+    .replace(/\s+/g, " ");
+}
+
 function findColumnIndex(columns: string[], aliases: string[]): number {
-  const normalized = columns.map((c) => c.toLowerCase().trim());
+  const normalized = columns.map(normalizeColumnName);
   for (const alias of aliases) {
-    const idx = normalized.indexOf(alias.toLowerCase().trim());
+    const idx = normalized.indexOf(normalizeColumnName(alias));
     if (idx !== -1) return idx;
   }
   return -1;
+}
+
+// "Transitado julg.", "Acordo" e "Arquivado" são colunas booleanas
+// separadas na API (não existe uma única coluna "status") — combinamos as
+// que vierem verdadeiras numa string legível para status_processual.
+function buildStatusProcessual(columns: string[], rowValues: unknown[]): string | null {
+  const active: string[] = [];
+  for (const flag of STATUS_FLAG_ALIASES) {
+    const idx = findColumnIndex(columns, flag.aliases);
+    if (idx === -1) continue;
+    const value = rowValues[idx];
+    const isTrue = value === true || value === "true" || value === "sim" || value === "Sim" || value === 1 || value === "1";
+    if (isTrue) active.push(flag.label);
+  }
+  return active.length > 0 ? active.join(", ") : null;
+}
+
+// "Advogados (parte ativa)" e "OAB advogado" são colunas separadas (não uma
+// única coluna combinada) — juntamos os dois valores brutos para não perder
+// nenhuma das duas informações, mantendo os originais em raw_data também.
+function buildAdvogados(columns: string[], rowValues: unknown[]): unknown {
+  const nomeIdx = findColumnIndex(columns, ADVOGADOS_NOME_ALIASES);
+  const oabIdx = findColumnIndex(columns, ADVOGADOS_OAB_ALIASES);
+  const nome = nomeIdx === -1 ? null : rowValues[nomeIdx];
+  const oab = oabIdx === -1 ? null : rowValues[oabIdx];
+  if (nome == null && oab == null) return null;
+  if (oab == null) return nome;
+  if (nome == null) return { oab };
+  return { nome, oab };
 }
 
 function toDateString(value: unknown): string | null {
@@ -134,13 +198,42 @@ function toDateString(value: unknown): string | null {
   return isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
 }
 
+// CORRIGIDO (encontrado em teste massivo desta correção): a versão anterior
+// assumia sempre formato brasileiro ("12.345,67" -> remove todos os pontos,
+// troca vírgula por ponto), o que inflava em 100x qualquer valor que já
+// viesse em formato simples/americano (ex.: "150000.50" virava "15000050").
+// A documentação não garante qual dos dois formatos a coluna "Valor" usa —
+// mesma heurística já usada em _shared/pollJusbrasilIntegration.ts:
+// só trata como separador de milhar brasileiro quando o padrão realmente
+// indica isso (vírgula presente, ou múltiplos pontos / mais de 2 dígitos
+// após o único ponto).
 function toNumber(value: unknown): number | null {
   if (typeof value === "number") return isNaN(value) ? null : value;
-  if (typeof value === "string" && value.trim()) {
-    const n = Number(value.trim().replace(/\./g, "").replace(",", "."));
-    return isNaN(n) ? null : n;
+  if (typeof value !== "string" || !value.trim()) return null;
+
+  const raw = value.trim();
+  const hasComma = raw.includes(",");
+  const hasDot = raw.includes(".");
+  let normalized: string;
+
+  if (hasComma && hasDot) {
+    const lastComma = raw.lastIndexOf(",");
+    const lastDot = raw.lastIndexOf(".");
+    normalized = lastComma > lastDot
+      ? raw.replace(/\./g, "").replace(",", ".")
+      : raw.replace(/,/g, "");
+  } else if (hasComma) {
+    normalized = raw.replace(/\./g, "").replace(",", ".");
+  } else if (hasDot) {
+    const dotCount = (raw.match(/\./g) || []).length;
+    const digitsAfterLastDot = raw.length - raw.lastIndexOf(".") - 1;
+    normalized = (dotCount === 1 && digitsAfterLastDot <= 2) ? raw : raw.replace(/\./g, "");
+  } else {
+    normalized = raw;
   }
-  return null;
+
+  const n = Number(normalized);
+  return isNaN(n) ? null : n;
 }
 
 function toIntOrNull(value: unknown): number | null {
@@ -175,7 +268,7 @@ export function parsePandasExport(json: PandasExport): NameSearchRow[] {
       valor: toNumber(get(FIELD_ALIASES.valor)),
       partes_ativas: get(FIELD_ALIASES.partes_ativas) ?? null,
       partes_passivas: get(FIELD_ALIASES.partes_passivas) ?? null,
-      advogados: get(FIELD_ALIASES.advogados) ?? null,
+      advogados: buildAdvogados(columns, rowValues),
       comarca: toStringOrNull(get(FIELD_ALIASES.comarca)),
       foro: toStringOrNull(get(FIELD_ALIASES.foro)),
       vara: toStringOrNull(get(FIELD_ALIASES.vara)),
@@ -186,7 +279,7 @@ export function parsePandasExport(json: PandasExport): NameSearchRow[] {
       total_movimentacoes: toIntOrNull(get(FIELD_ALIASES.total_movimentacoes)),
       sentenca_data: toDateString(get(FIELD_ALIASES.sentenca_data)),
       sentenca_texto: toStringOrNull(get(FIELD_ALIASES.sentenca_texto)),
-      status_processual: toStringOrNull(get(FIELD_ALIASES.status_processual)),
+      status_processual: buildStatusProcessual(columns, rowValues),
       data_extincao: toDateString(get(FIELD_ALIASES.data_extincao)),
       url_detalhes: toStringOrNull(get(FIELD_ALIASES.url_detalhes)),
       raw_data: rawObject,

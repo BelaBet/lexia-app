@@ -10,8 +10,9 @@ export interface PublicationIntegration {
   source: WebhookSource;
   webhook_secret: string;
   api_key: string | null;
-  monitor_document: string | null;
+  monitor_name: string | null;
   monitor_oab: string | null;
+  jusbrasil_report_id: string | null;
   price_per_search: number | null;
   last_poll_status: string | null;
   last_poll_error: string | null;
@@ -113,7 +114,7 @@ export function useTogglePublicationIntegration() {
 export interface UpdatePublicationIntegrationInput {
   id: string;
   api_key?: string | null;
-  monitor_document?: string | null;
+  monitor_name?: string | null;
   monitor_oab?: string | null;
   price_per_search?: number | null;
 }
