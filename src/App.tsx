@@ -31,6 +31,7 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/pricing" element={<Pricing />} />
+              {/* Espaço do Cliente — Meu Jurídico (login e telas próprias do cliente do escritório) */}
               <Route path="/portal/entrar" element={<PortalAuth />} />
               <Route path="/portal/definir-senha" element={<PortalSetPassword />} />
               <Route path="/portal" element={<PortalLayout />}>
