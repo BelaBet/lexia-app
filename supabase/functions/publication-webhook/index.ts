@@ -37,6 +37,7 @@ import { buildCorsHeaders } from "../_shared/cors.ts";
 import { findOrCreateCaseId, ProcessualData } from "../_shared/findOrCreateCase.ts";
 import { syncDeadlineEvents, attachDocumentIfAvailable } from "../_shared/syncPublicationExtras.ts";
 import { computeFallbackExternalId } from "../_shared/externalId.ts";
+import { loadBlockedRanges, adjustDeadlineToNextBusinessDay } from "../_shared/businessDays.ts";
 
 type PublicationSource = "jusbrasil" | "webjur" | "escavador";
 
@@ -296,8 +297,18 @@ Deno.serve(async (req) => {
 
   let imported = 0;
 
+  // Prazo "priorizado": carrega os bloqueios/feriados desta conta uma
+  // única vez por chamada de webhook e usa para corrigir cada prazo cru
+  // recebido do provedor antes de gravar — ver _shared/businessDays.ts.
+  const blockedRanges = await loadBlockedRanges(adminClient, userId);
+
   for (const row of rows) {
     const caseId = await findOrCreateCaseId(adminClient, userId, row.processNumber, row.processualData);
+
+    // Corrige o prazo cru do provedor para o próximo dia útil quando cair
+    // em feriado/recesso/fim de semana (CPC art. 224 §1º).
+    const externalDeadline = adjustDeadlineToNextBusinessDay(row.externalDeadline ?? null, blockedRanges);
+    const internalDeadline = adjustDeadlineToNextBusinessDay(row.internalDeadline ?? null, blockedRanges);
 
     const { data: inserted, error: insertError } = await adminClient
       .from("publications")
@@ -309,8 +320,8 @@ Deno.serve(async (req) => {
         process_number: row.processNumber,
         case_id: caseId,
         external_id: row.externalId,
-        external_deadline: row.externalDeadline ?? null,
-        internal_deadline: row.internalDeadline ?? null,
+        external_deadline: externalDeadline,
+        internal_deadline: internalDeadline,
         raw_payload: row.rawPayload,
         imported_automatically: true,
         status: "pending",
@@ -332,8 +343,8 @@ Deno.serve(async (req) => {
         case_id: caseId,
         process_number: row.processNumber,
         content: row.content,
-        external_deadline: row.externalDeadline ?? null,
-        internal_deadline: row.internalDeadline ?? null,
+        external_deadline: externalDeadline,
+        internal_deadline: internalDeadline,
       });
       await attachDocumentIfAvailable(adminClient, inserted.id, (row.rawPayload ?? {}) as Record<string, unknown>);
     }

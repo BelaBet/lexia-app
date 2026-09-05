@@ -14,6 +14,36 @@ export type Database = {
   }
   public: {
     Tables: {
+      agenda_blocked_dates: {
+        Row: {
+          created_at: string
+          end_date: string
+          id: string
+          scope: string
+          start_date: string
+          title: string
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string
+          end_date: string
+          id?: string
+          scope?: string
+          start_date: string
+          title: string
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string
+          end_date?: string
+          id?: string
+          scope?: string
+          start_date?: string
+          title?: string
+          user_id?: string | null
+        }
+        Relationships: []
+      }
       api_usage: {
         Row: {
           created_at: string

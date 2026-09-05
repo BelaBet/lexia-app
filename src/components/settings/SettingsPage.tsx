@@ -9,6 +9,7 @@ import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
 import { Bell, Moon, Sun, Globe, Shield, CreditCard, Crown, User } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import { AgendaBlockedDatesCard } from "@/components/settings/AgendaBlockedDatesCard";
 
 export function SettingsPage() {
   const { profile, hasRole } = useAuth();
@@ -154,6 +155,9 @@ export function SettingsPage() {
             </div>
           </CardContent>
         </Card>
+
+        {/* Bloqueios e Feriados da Agenda */}
+        <AgendaBlockedDatesCard />
 
         {/* Aparência */}
         <Card>

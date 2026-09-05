@@ -55,6 +55,7 @@ import { findOrCreateCaseId, ProcessualData } from "./findOrCreateCase.ts";
 import { syncDeadlineEvents, attachDocumentIfAvailable } from "./syncPublicationExtras.ts";
 import { computeFallbackExternalId } from "./externalId.ts";
 import { createNameSearchReport, startNameSearchBilling, fetchNameSearchExport, NameSearchRow } from "./jusbrasilNameSearch.ts";
+import { loadBlockedRanges, adjustDeadlineToNextBusinessDay } from "./businessDays.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 
 type AdminClient = SupabaseClient;
@@ -481,6 +482,12 @@ export async function pollJusbrasilIntegration(
     const items = await fetchJusbrasilNewItems(adminClient, integration, searchType);
     let imported = 0;
 
+    // Prazo "priorizado": carrega os bloqueios/feriados aplicáveis a esta
+    // conta uma única vez por execução (globais + os que o próprio
+    // escritório cadastrou) e usa para corrigir cada prazo recebido cru da
+    // API antes de gravar — ver _shared/businessDays.ts.
+    const blockedRanges = await loadBlockedRanges(adminClient, integration.user_id);
+
     for (const item of items) {
       const content = firstString(item.conteudo, item.resumo) || JSON.stringify(item).slice(0, 4000);
       const processNumber = firstString(item.numero_processo, item.processo);
@@ -501,7 +508,14 @@ export async function pollJusbrasilIntegration(
         ?? await computeFallbackExternalId(["jusbrasil", integration.user_id, processNumber, publishedDate, content.slice(0, 200)]);
 
       const processualData = extractProcessualData(item);
-      const deadlines = extractDeadlines(item);
+      const rawDeadlines = extractDeadlines(item);
+      // Corrige o prazo cru da API para o próximo dia útil quando cair em
+      // feriado/recesso/fim de semana (CPC art. 224 §1º) — o que aparece na
+      // Agenda já é o prazo real, prorrogado corretamente.
+      const deadlines = {
+        external: adjustDeadlineToNextBusinessDay(rawDeadlines.external, blockedRanges),
+        internal: adjustDeadlineToNextBusinessDay(rawDeadlines.internal, blockedRanges),
+      };
 
       const caseId = await findOrCreateCaseId(adminClient, integration.user_id, processNumber, processualData);
 
