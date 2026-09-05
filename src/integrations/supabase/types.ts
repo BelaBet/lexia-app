@@ -176,6 +176,7 @@ export type Database = {
           data_abertura_tribunal: string | null
           data_aceitacao: string | null
           id: string
+          is_demo: boolean
           parte_diversa: string | null
           status: string
           title: string
@@ -193,6 +194,7 @@ export type Database = {
           data_abertura_tribunal?: string | null
           data_aceitacao?: string | null
           id?: string
+          is_demo?: boolean
           parte_diversa?: string | null
           status?: string
           title: string
@@ -210,6 +212,7 @@ export type Database = {
           data_abertura_tribunal?: string | null
           data_aceitacao?: string | null
           id?: string
+          is_demo?: boolean
           parte_diversa?: string | null
           status?: string
           title?: string
@@ -459,6 +462,7 @@ export type Database = {
           description: string | null
           due_date: string | null
           id: string
+          is_demo: boolean
           priority: Database["public"]["Enums"]["checklist_priority"]
           status: Database["public"]["Enums"]["checklist_status"]
           template_id: string | null
@@ -475,6 +479,7 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          is_demo?: boolean
           priority?: Database["public"]["Enums"]["checklist_priority"]
           status?: Database["public"]["Enums"]["checklist_status"]
           template_id?: string | null
@@ -491,6 +496,7 @@ export type Database = {
           description?: string | null
           due_date?: string | null
           id?: string
+          is_demo?: boolean
           priority?: Database["public"]["Enums"]["checklist_priority"]
           status?: Database["public"]["Enums"]["checklist_status"]
           template_id?: string | null
@@ -734,6 +740,7 @@ export type Database = {
           content: string | null
           created_at: string
           id: string
+          is_demo: boolean
           status: string
           title: string
           type: string
@@ -744,6 +751,7 @@ export type Database = {
           content?: string | null
           created_at?: string
           id?: string
+          is_demo?: boolean
           status?: string
           title: string
           type: string
@@ -754,6 +762,7 @@ export type Database = {
           content?: string | null
           created_at?: string
           id?: string
+          is_demo?: boolean
           status?: string
           title?: string
           type?: string
@@ -843,6 +852,7 @@ export type Database = {
           event_date: string
           event_time: string
           id: string
+          is_demo: boolean
           location: string | null
           meeting_link: string | null
           notification_enabled: boolean
@@ -861,6 +871,7 @@ export type Database = {
           event_date: string
           event_time: string
           id?: string
+          is_demo?: boolean
           location?: string | null
           meeting_link?: string | null
           notification_enabled?: boolean
@@ -879,6 +890,7 @@ export type Database = {
           event_date?: string
           event_time?: string
           id?: string
+          is_demo?: boolean
           location?: string | null
           meeting_link?: string | null
           notification_enabled?: boolean
@@ -1554,6 +1566,7 @@ export type Database = {
           internal_responsible_role:
             | Database["public"]["Enums"]["publication_responsible_role"]
             | null
+          is_demo: boolean
           process_number: string | null
           published_date: string
           raw_payload: Json | null
@@ -1585,6 +1598,7 @@ export type Database = {
           internal_responsible_role?:
             | Database["public"]["Enums"]["publication_responsible_role"]
             | null
+          is_demo?: boolean
           process_number?: string | null
           published_date: string
           raw_payload?: Json | null
@@ -1616,6 +1630,7 @@ export type Database = {
           internal_responsible_role?:
             | Database["public"]["Enums"]["publication_responsible_role"]
             | null
+          is_demo?: boolean
           process_number?: string | null
           published_date?: string
           raw_payload?: Json | null
@@ -1717,6 +1732,13 @@ export type Database = {
       }
       cleanup_old_api_usage: { Args: never; Returns: undefined }
       delete_clickup_token: { Args: never; Returns: undefined }
+      delete_demo_data: {
+        Args: never
+        Returns: {
+          deleted_count: number
+          table_name: string
+        }[]
+      }
       get_clickup_token: { Args: never; Returns: string }
       get_document_owner_name: { Args: { p_user_id: string }; Returns: string }
       get_profiles_for_admin: {
