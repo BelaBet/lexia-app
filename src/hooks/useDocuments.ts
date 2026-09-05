@@ -11,6 +11,8 @@ export interface Document {
   created_at: string;
   updated_at: string;
   user_id: string | null;
+  /** Processo ao qual este documento pertence (opcional) — usado para a contagem de documentos por processo em Processos. */
+  case_id: string | null;
 }
 
 async function requireUser() {
@@ -34,7 +36,7 @@ export function useDocuments() {
 export function useCreateDocument() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (doc: { title: string; type: string; content?: string; status?: string }) => {
+    mutationFn: async (doc: { title: string; type: string; content?: string; status?: string; case_id?: string | null }) => {
       const user = await requireUser();
       const title = doc.title.trim();
       if (!title) throw new Error("O título do documento é obrigatório");
@@ -44,6 +46,7 @@ export function useCreateDocument() {
         content: doc.content || null,
         status: doc.status || "draft",
         user_id: user.id,
+        case_id: doc.case_id || null,
       }).select().single();
       if (error) throw error;
       return data;

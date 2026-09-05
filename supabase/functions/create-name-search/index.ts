@@ -40,18 +40,32 @@ Deno.serve(async (req) => {
 
   // Usa a integração JusBrasil já cadastrada em Integrações (mesma api_key
   // do monitoramento) — não pede uma chave nova.
-  const { data: integration, error: integrationError } = await adminClient
+  //
+  // BUG-03 (corrigido): esta consulta esperava no máximo 1 linha
+  // (.maybeSingle()), mas desde o fluxo "Novo Cliente" (ver
+  // useNewClientSearch.ts) uma conta pode ter VÁRIAS integrações JusBrasil
+  // ativas — uma por cliente vinculado (linked_client_id), além de uma
+  // eventual integração geral de monitoramento. Com 2+ linhas,
+  // .maybeSingle() falha (PGRST116) e a busca por nome parava de funcionar
+  // inteiramente para essas contas. A busca por nome não é de um cliente
+  // específico, então preferimos a integração "geral" (sem
+  // linked_client_id); na ausência dela, qualquer uma serve — todas
+  // compartilham a mesma api_key da conta (ver findExistingApiKey em
+  // useNewClientSearch.ts).
+  const { data: integrations, error: integrationError } = await adminClient
     .from("publication_integrations")
-    .select("id, api_key, price_per_name_search")
+    .select("id, api_key, price_per_name_search, linked_client_id")
     .eq("user_id", user.id)
     .eq("source", "jusbrasil")
     .eq("is_active", true)
-    .maybeSingle();
+    .not("api_key", "is", null)
+    .order("created_at", { ascending: true });
 
   if (integrationError) {
     console.error("Error loading jusbrasil integration:", integrationError);
     return json({ error: "Erro ao carregar integração JusBrasil" }, 500);
   }
+  const integration = integrations?.find((i) => !i.linked_client_id) ?? integrations?.[0] ?? null;
   if (!integration?.api_key) {
     return json({ error: "Cadastre e ative sua integração JusBrasil em Integrações antes de buscar por nome." }, 400);
   }

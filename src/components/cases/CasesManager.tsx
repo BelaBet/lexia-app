@@ -140,8 +140,13 @@ export function CasesManager({ onTabChange, initialCaseId }: CasesManagerProps) 
 
   const currencyFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
+  // BUG-01 (corrigido): antes retornava documents.length para qualquer
+  // processo — o parâmetro caseId nunca era usado, então todo card de
+  // processo mostrava a contagem TOTAL de documentos da conta, não a do
+  // processo específico. Documentos não tinham case_id até agora; ver
+  // migração que adiciona documents.case_id.
   const getDocumentCount = (caseId: string) => {
-    return documents.length;
+    return documents.filter((doc) => doc.case_id === caseId).length;
   };
 
   const toggleStatusFilter = (status: string) => {
