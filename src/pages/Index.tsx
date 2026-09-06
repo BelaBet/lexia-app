@@ -59,7 +59,7 @@ const Index = () => {
       case "admin": return <AdminUsersPage />;
       case "settings":
       case "notifications":
-      case "billing": return <SettingsPage />;
+      case "billing": return <SettingsPage onTabChange={setActiveTab} />;
       case "sales": return <Sales />;
       default: return null;
     }

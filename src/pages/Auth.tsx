@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Navigate } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
@@ -8,11 +8,13 @@ import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Scale, Loader2 } from "lucide-react";
+import { InputOTP, InputOTPGroup, InputOTPSlot } from "@/components/ui/input-otp";
+import { Scale, Loader2, Shield } from "lucide-react";
 import { toast } from "sonner";
 import { useWhiteLabelSettings, DEFAULT_BRANDING } from "@/hooks/useWhiteLabelSettings";
+import { useMfaChallengeRequired } from "@/hooks/useMfa";
 export default function Auth() {
-  const { user, signIn, signUp, loading } = useAuth();
+  const { user, signIn, signUp, signOut, loading } = useAuth();
   const { data: branding } = useWhiteLabelSettings();
   const brandName = branding?.brand_name || DEFAULT_BRANDING.brand_name;
   const brandTagline = branding?.tagline || DEFAULT_BRANDING.tagline;
@@ -28,13 +30,111 @@ export default function Auth() {
   const [registerConfirmPassword, setRegisterConfirmPassword] = useState("");
   const [forgotEmail, setForgotEmail] = useState("");
   const [forgotLoading, setForgotLoading] = useState(false);
-  if (loading) {
+
+  // BUG-07 (corrigido): ter um fator TOTP verificado não bastava — nada
+  // no login de fato EXIGIA o segundo fator. A sessão de senha sozinha já
+  // é uma sessão válida (nível "aal1"), então sem esta checagem o usuário
+  // caía direto no app após a senha, com o 2FA apenas "decorativo".
+  // useMfaChallengeRequired checa o AAL; aqui só buscamos o factorId para
+  // montar o desafio quando ele indica que é necessário.
+  const { checking: checkingMfa, required: needsMfaChallenge } = useMfaChallengeRequired(user);
+  const [mfaFactorId, setMfaFactorId] = useState<string | null>(null);
+  const [mfaCode, setMfaCode] = useState("");
+  const [mfaSubmitting, setMfaSubmitting] = useState(false);
+  // mfa.verify() já eleva o AAL da sessão no servidor, mas o hook só
+  // reavalia quando o objeto `user` muda de identidade — este flag evita
+  // mostrar o desafio de novo por um instante logo após verificar com
+  // sucesso, até o próximo re-render natural do AuthContext.
+  const [justVerifiedMfa, setJustVerifiedMfa] = useState(false);
+
+  useEffect(() => {
+    if (!needsMfaChallenge) {
+      setMfaFactorId(null);
+      return;
+    }
+    let cancelled = false;
+    supabase.auth.mfa.listFactors().then(({ data }) => {
+      if (cancelled) return;
+      const factor = data?.totp.find((f) => f.status === "verified");
+      setMfaFactorId(factor?.id ?? null);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [needsMfaChallenge]);
+
+  const handleMfaVerify = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!mfaFactorId || mfaCode.length !== 6) return;
+    setMfaSubmitting(true);
+    const { data: challenge, error: challengeError } = await supabase.auth.mfa.challenge({ factorId: mfaFactorId });
+    if (challengeError) {
+      toast.error("Erro ao gerar desafio", { description: challengeError.message });
+      setMfaSubmitting(false);
+      return;
+    }
+    const { error: verifyError } = await supabase.auth.mfa.verify({
+      factorId: mfaFactorId,
+      challengeId: challenge.id,
+      code: mfaCode,
+    });
+    setMfaSubmitting(false);
+    if (verifyError) {
+      toast.error("Código inválido", { description: "Confira o código do seu app autenticador." });
+      setMfaCode("");
+      return;
+    }
+    setJustVerifiedMfa(true);
+    toast.success("Bem-vindo de volta!");
+  };
+
+  if (loading || checkingMfa) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-background">
         <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
+
+  if (user && needsMfaChallenge && !justVerifiedMfa) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-background via-background to-muted/30 p-4">
+        <Card className="w-full max-w-md border-border/50 shadow-xl">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Shield className="w-5 h-5" />
+              Verificação em duas etapas
+            </CardTitle>
+            <CardDescription>Digite o código gerado pelo seu app autenticador.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <form onSubmit={handleMfaVerify} className="space-y-4">
+              <div className="flex justify-center">
+                <InputOTP maxLength={6} value={mfaCode} onChange={setMfaCode}>
+                  <InputOTPGroup>
+                    <InputOTPSlot index={0} />
+                    <InputOTPSlot index={1} />
+                    <InputOTPSlot index={2} />
+                    <InputOTPSlot index={3} />
+                    <InputOTPSlot index={4} />
+                    <InputOTPSlot index={5} />
+                  </InputOTPGroup>
+                </InputOTP>
+              </div>
+              <Button type="submit" className="w-full" disabled={mfaCode.length !== 6 || mfaSubmitting || !mfaFactorId}>
+                {mfaSubmitting && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                Verificar
+              </Button>
+              <Button type="button" variant="ghost" className="w-full" onClick={() => signOut()}>
+                Sair
+              </Button>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   if (user) {
     return <Navigate to="/" replace />;
   }

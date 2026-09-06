@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, ReactNode } from "react";
+import { createContext, useContext, useEffect, useRef, useState, ReactNode } from "react";
 import { User, Session } from "@supabase/supabase-js";
 import { supabase } from "@/integrations/supabase/client";
 
@@ -38,6 +38,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [roles, setRoles] = useState<UserRole[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Guarda de "resposta desatualizada": fetchProfile/fetchRoles são
+  // assíncronas e disparadas a partir do id do usuário da sessão no
+  // momento da chamada. Sem isto, um logout rápido seguido de login com
+  // outra conta pode fazer a resposta do fetch da conta ANTERIOR chegar
+  // depois da troca e sobrescrever profile/roles com o dado de quem não
+  // é mais o usuário atual — este ref sempre reflete o id mais recente
+  // solicitado, e cada fetch só aplica o resultado se ainda for o atual.
+  const currentUserIdRef = useRef<string | null>(null);
+
   const fetchProfile = async (userId: string) => {
     const { data, error } = await supabase
       .from("profiles")
@@ -45,9 +54,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .eq("user_id", userId)
       .single();
 
-    if (!error && data) {
-      setProfile(data as Profile);
+    if (currentUserIdRef.current !== userId) return;
+
+    if (error) {
+      console.error("Error fetching profile:", error);
+      return;
     }
+    if (data) setProfile(data as Profile);
   };
 
   const fetchRoles = async (userId: string) => {
@@ -56,38 +69,52 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .select("role")
       .eq("user_id", userId);
 
-    if (!error && data) {
-      setRoles(data as UserRole[]);
+    if (currentUserIdRef.current !== userId) return;
+
+    if (error) {
+      console.error("Error fetching roles:", error);
+      return;
     }
+    if (data) setRoles(data as UserRole[]);
   };
 
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
+    // Atualiza session/user/currentUserIdRef de forma síncrona (seguro
+    // chamar direto dentro do callback do onAuthStateChange); o
+    // carregamento de profile/roles é feito à parte, ver loadUserData.
+    const syncSessionState = (session: Session | null) => {
+      setSession(session);
+      setUser(session?.user ?? null);
+      currentUserIdRef.current = session?.user?.id ?? null;
+      if (!session?.user) {
+        setProfile(null);
+        setRoles([]);
+      }
+      setLoading(false);
+    };
 
+    const loadUserData = (userId: string) => {
+      fetchProfile(userId);
+      fetchRoles(userId);
+    };
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange(
+      (_event, session) => {
+        syncSessionState(session);
+        // Documentação do Supabase recomenda NUNCA chamar outros métodos
+        // supabase.* de forma síncrona dentro deste callback (risco de
+        // deadlock, especialmente em TOKEN_REFRESHED) — por isso o
+        // setTimeout(…, 0) escapa do contexto síncrono do listener.
         if (session?.user) {
-          setTimeout(() => {
-            fetchProfile(session.user.id);
-            fetchRoles(session.user.id);
-          }, 0);
-        } else {
-          setProfile(null);
-          setRoles([]);
+          const userId = session.user.id;
+          setTimeout(() => loadUserData(userId), 0);
         }
-        setLoading(false);
       }
     );
 
     supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id);
-        fetchRoles(session.user.id);
-      }
-      setLoading(false);
+      syncSessionState(session);
+      if (session?.user) loadUserData(session.user.id);
     });
 
     return () => subscription.unsubscribe();
