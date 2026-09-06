@@ -155,10 +155,17 @@ export function useFulfillRequest() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async ({ requestId, caseId }: { requestId: string; caseId: string }) => {
+      // caseId também entra no filtro (não só na invalidação do cache
+      // abaixo): a RLS de client_requests já restringe pelo case_id da
+      // própria linha (is_case_client(case_id)), então isto não abre
+      // nenhum acesso que a RLS não desse — mas evita, por bug de
+      // chamada, marcar como cumprida uma solicitação de outro processo
+      // caso requestId e caseId algum dia venham dessincronizados.
       const { error } = await supabase
         .from("client_requests")
         .update({ status: "fulfilled", fulfilled_at: new Date().toISOString() })
-        .eq("id", requestId);
+        .eq("id", requestId)
+        .eq("case_id", caseId);
       if (error) throw error;
     },
     onSuccess: (_data, variables) => {
@@ -205,7 +212,18 @@ export function useUploadClientDocument() {
         file_type: file.type || null,
         request_id: requestId ?? null,
       });
-      if (insertError) throw insertError;
+      if (insertError) {
+        // O arquivo já subiu para o Storage antes deste INSERT falhar —
+        // sem isso, ficaria órfão lá (nunca referenciado por nenhuma linha
+        // de client_documents, nunca aparecendo para limpeza manual). Se a
+        // própria remoção falhar, ainda assim propaga o erro original do
+        // insert (o que importa para quem chamou é saber que o upload não
+        // foi concluído).
+        await supabase.storage.from("client-documents").remove([path]).catch((removeError) => {
+          console.error("Error cleaning up orphaned upload after failed insert:", removeError);
+        });
+        throw insertError;
+      }
 
       if (requestId) {
         await supabase

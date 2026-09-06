@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
@@ -7,29 +7,41 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Bell, Moon, Sun, Globe, Shield, CreditCard, Crown, User } from "lucide-react";
+import { Bell, Moon, Sun, Globe, Shield, CreditCard, Crown, User, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { AgendaBlockedDatesCard } from "@/components/settings/AgendaBlockedDatesCard";
+import { useUserSettings, useSaveUserSettings, DEFAULT_USER_SETTINGS, UserSettings } from "@/hooks/useUserSettings";
+import { applyTheme } from "@/lib/applyTheme";
+import { ChangePasswordDialog } from "@/components/settings/ChangePasswordDialog";
+import { TwoFactorCard } from "@/components/settings/TwoFactorCard";
+import { DeleteAccountDialog } from "@/components/settings/DeleteAccountDialog";
 
-export function SettingsPage() {
+interface SettingsPageProps {
+  onTabChange?: (tab: string) => void;
+}
+
+export function SettingsPage({ onTabChange }: SettingsPageProps) {
   const { profile, hasRole } = useAuth();
   const { toast } = useToast();
-  
-  const [notifications, setNotifications] = useState({
-    email: true,
-    push: false,
-    deadlines: true,
-    cases: true,
-  });
-  
-  const [preferences, setPreferences] = useState({
-    theme: "system",
-    language: "pt-BR",
-  });
+  const { data: savedSettings, isLoading: isLoadingSettings } = useUserSettings();
+  const saveSettings = useSaveUserSettings();
+
+  // Rascunho local editado na tela — sincronizado a partir do que já está
+  // salvo assim que a consulta carrega (BUG-05 corrigido: antes isto nunca
+  // vinha do banco, só existia em memória e "Salvar" era um toast falso).
+  const [draft, setDraft] = useState<UserSettings>(DEFAULT_USER_SETTINGS);
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [isDeleteAccountOpen, setIsDeleteAccountOpen] = useState(false);
+
+  useEffect(() => {
+    if (savedSettings) {
+      setDraft(savedSettings);
+      applyTheme(savedSettings.theme);
+    }
+  }, [savedSettings]);
 
   const isPremium = hasRole("premium");
   const isSupremo = hasRole("supremo");
-  const isAdmin = hasRole("admin");
 
   const getCurrentPlan = () => {
     if (isSupremo) return { name: "Supremo", color: "bg-purple-500/20 text-purple-400 border-purple-500/30" };
@@ -39,10 +51,27 @@ export function SettingsPage() {
 
   const plan = getCurrentPlan();
 
+  const handleThemeChange = (value: string) => {
+    const theme = value as UserSettings["theme"];
+    setDraft((prev) => ({ ...prev, theme }));
+    applyTheme(theme); // pré-visualização imediata, sem esperar salvar
+  };
+
   const handleSave = () => {
-    toast({
-      title: "Configurações salvas",
-      description: "Suas preferências foram atualizadas com sucesso.",
+    saveSettings.mutate(draft, {
+      onSuccess: () => {
+        toast({
+          title: "Configurações salvas",
+          description: "Suas preferências foram atualizadas com sucesso.",
+        });
+      },
+      onError: (error: Error) => {
+        toast({
+          title: "Erro ao salvar configurações",
+          description: error.message || "Tente novamente em instantes.",
+          variant: "destructive",
+        });
+      },
     });
   };
 
@@ -85,7 +114,7 @@ export function SettingsPage() {
               </Badge>
             </div>
             {!isSupremo && (
-              <Button variant="outline" className="w-full">
+              <Button variant="outline" className="w-full" onClick={() => onTabChange?.("sales")}>
                 Fazer Upgrade
               </Button>
             )}
@@ -108,10 +137,9 @@ export function SettingsPage() {
                 <p className="text-sm text-muted-foreground">Receber atualizações por email</p>
               </div>
               <Switch
-                checked={notifications.email}
-                onCheckedChange={(checked) =>
-                  setNotifications({ ...notifications, email: checked })
-                }
+                disabled={isLoadingSettings}
+                checked={draft.notify_email}
+                onCheckedChange={(checked) => setDraft((prev) => ({ ...prev, notify_email: checked }))}
               />
             </div>
             <Separator />
@@ -121,10 +149,9 @@ export function SettingsPage() {
                 <p className="text-sm text-muted-foreground">Receber notificações no navegador</p>
               </div>
               <Switch
-                checked={notifications.push}
-                onCheckedChange={(checked) =>
-                  setNotifications({ ...notifications, push: checked })
-                }
+                disabled={isLoadingSettings}
+                checked={draft.notify_push}
+                onCheckedChange={(checked) => setDraft((prev) => ({ ...prev, notify_push: checked }))}
               />
             </div>
             <Separator />
@@ -134,10 +161,9 @@ export function SettingsPage() {
                 <p className="text-sm text-muted-foreground">Ser avisado sobre prazos próximos</p>
               </div>
               <Switch
-                checked={notifications.deadlines}
-                onCheckedChange={(checked) =>
-                  setNotifications({ ...notifications, deadlines: checked })
-                }
+                disabled={isLoadingSettings}
+                checked={draft.notify_deadlines}
+                onCheckedChange={(checked) => setDraft((prev) => ({ ...prev, notify_deadlines: checked }))}
               />
             </div>
             <Separator />
@@ -147,10 +173,9 @@ export function SettingsPage() {
                 <p className="text-sm text-muted-foreground">Notificações sobre mudanças em processos</p>
               </div>
               <Switch
-                checked={notifications.cases}
-                onCheckedChange={(checked) =>
-                  setNotifications({ ...notifications, cases: checked })
-                }
+                disabled={isLoadingSettings}
+                checked={draft.notify_cases}
+                onCheckedChange={(checked) => setDraft((prev) => ({ ...prev, notify_cases: checked }))}
               />
             </div>
           </CardContent>
@@ -174,12 +199,7 @@ export function SettingsPage() {
                 <Label>Tema</Label>
                 <p className="text-sm text-muted-foreground">Escolha o tema do aplicativo</p>
               </div>
-              <Select
-                value={preferences.theme}
-                onValueChange={(value) =>
-                  setPreferences({ ...preferences, theme: value })
-                }
-              >
+              <Select value={draft.theme} onValueChange={handleThemeChange} disabled={isLoadingSettings}>
                 <SelectTrigger className="w-40">
                   <SelectValue />
                 </SelectTrigger>
@@ -207,10 +227,9 @@ export function SettingsPage() {
                 <p className="text-sm text-muted-foreground">Idioma da interface</p>
               </div>
               <Select
-                value={preferences.language}
-                onValueChange={(value) =>
-                  setPreferences({ ...preferences, language: value })
-                }
+                value={draft.language}
+                onValueChange={(value) => setDraft((prev) => ({ ...prev, language: value as UserSettings["language"] }))}
+                disabled={isLoadingSettings}
               >
                 <SelectTrigger className="w-40">
                   <SelectValue />
@@ -234,6 +253,9 @@ export function SettingsPage() {
           </CardContent>
         </Card>
 
+        {/* Autenticação de Dois Fatores */}
+        <TwoFactorCard />
+
         {/* Privacidade */}
         <Card>
           <CardHeader>
@@ -244,17 +266,13 @@ export function SettingsPage() {
             <CardDescription>Gerencie suas configurações de segurança</CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
-            <Button variant="outline" className="w-full justify-start">
+            <Button variant="outline" className="w-full justify-start" onClick={() => setIsChangePasswordOpen(true)}>
               <User className="w-4 h-4 mr-2" />
               Alterar Senha
             </Button>
-            <Button variant="outline" className="w-full justify-start">
-              <Shield className="w-4 h-4 mr-2" />
-              Autenticação de Dois Fatores
-            </Button>
             <Separator />
             <div className="pt-2">
-              <Button variant="destructive" className="w-full">
+              <Button variant="destructive" className="w-full" onClick={() => setIsDeleteAccountOpen(true)}>
                 Excluir Conta
               </Button>
               <p className="text-xs text-muted-foreground mt-2 text-center">
@@ -265,9 +283,15 @@ export function SettingsPage() {
         </Card>
 
         <div className="flex justify-end">
-          <Button onClick={handleSave}>Salvar Configurações</Button>
+          <Button onClick={handleSave} disabled={saveSettings.isPending || isLoadingSettings}>
+            {saveSettings.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+            Salvar Configurações
+          </Button>
         </div>
       </div>
+
+      <ChangePasswordDialog open={isChangePasswordOpen} onOpenChange={setIsChangePasswordOpen} />
+      <DeleteAccountDialog open={isDeleteAccountOpen} onOpenChange={setIsDeleteAccountOpen} />
     </div>
   );
 }
