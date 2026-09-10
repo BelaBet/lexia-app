@@ -10,7 +10,7 @@ import { AIChat } from "@/components/assistant/AIChat";
 import { PDFReader } from "@/components/pdf/PDFReader";
 import { DocumentCreator } from "@/components/documents/DocumentCreator";
 import { DocumentsPage } from "@/components/documents/DocumentsPage";
-import { CasesManager } from "@/components/cases/CasesManager";
+import { CasesPageNavigator } from "@/components/cases/CasesPageNavigator";
 import { CalendarView } from "@/components/calendar/CalendarView";
 import { ProfilePage } from "@/components/profile/ProfilePage";
 import { FeatureRequestForm } from "@/components/features/FeatureRequestForm";
@@ -43,7 +43,7 @@ const Index = () => {
       case "pdf-reader": return <PDFReader onOpenGuide={() => setActiveTab("guide")} />;
       case "document-creator": return <DocumentCreator />;
       case "documents": return <DocumentsPage />;
-      case "cases": return <CasesManager onTabChange={setActiveTab} />;
+      case "cases": return <CasesPageNavigator onTabChange={setActiveTab} />;
       case "process-search": return <ProcessSearchManagerV2 onOpenCase={handleOpenCase} />;
       case "checklists": return <ChecklistsManager />;
       case "guide": return <GuidePage />;
