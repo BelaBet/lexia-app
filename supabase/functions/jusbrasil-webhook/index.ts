@@ -93,26 +93,22 @@ Deno.serve(async (req) => {
 
   if (req.method !== "POST") return json({ error: "Método não permitido" }, 405);
 
-  const supabaseUrl = Deno.env.get("SUPABASE_URL");
-  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const expectedApiName = Deno.env.get("JUSBRASIL_WEBHOOK_API_NAME")?.trim();
-  if (!supabaseUrl || !serviceRoleKey) return json({ error: "Configuração do Supabase ausente" }, 500);
-  if (!expectedApiName) return json({ error: "Webhook JusBrasil ainda não habilitado no backend" }, 503);
-
   let body: unknown;
   try { body = await req.json(); }
   catch { return json({ error: "JSON inválido" }, 400); }
 
   const events = Array.isArray(body) ? body as JusbrasilEvent[] : [body as JusbrasilEvent];
 
-  // O JusBrasil testa a URL com um array vazio. Aceitamos esse teste sem
-  // escrever nada no banco.
+  // O JusBrasil testa a URL com um array vazio. Este teste deve funcionar
+  // mesmo antes da ativação do api_name, e não toca banco nem provedor.
   if (events.length === 0) return json({ success: true, received: 0, imported: 0 });
 
-  // O campo api_name é configurado na user_company do provedor e é enviado
-  // em todos os eventos. Ele funciona como assinatura compartilhada sem
-  // exigir header HTTP, compatível com a exigência do provedor de webhook
-  // público sem autenticação HTTP.
+  const supabaseUrl = Deno.env.get("SUPABASE_URL");
+  const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const expectedApiName = Deno.env.get("JUSBRASIL_WEBHOOK_API_NAME")?.trim();
+  if (!supabaseUrl || !serviceRoleKey) return json({ error: "Configuração do Supabase ausente" }, 500);
+  if (!expectedApiName) return json({ error: "Webhook JusBrasil ainda não habilitado no backend" }, 503);
+
   if (events.some((event) => event.api_name !== expectedApiName)) {
     return json({ error: "Origem do webhook não reconhecida" }, 401);
   }
@@ -135,8 +131,6 @@ Deno.serve(async (req) => {
       destinations = (data ?? []).map((row) => ({ user_id: row.user_id, integration_id: row.id }));
     }
 
-    // Fallback para processos que já existem na Lex IA. Isso permite rotear
-    // movimentações mesmo em monitoramentos antigos sem source_user_custom.
     if (destinations.length === 0 && event.target_number) {
       const { data } = await admin
         .from("cases")
