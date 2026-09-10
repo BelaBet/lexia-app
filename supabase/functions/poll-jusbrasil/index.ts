@@ -3,16 +3,9 @@
 // agendado (pg_cron + pg_net) uma vez por dia — veja
 // supabase/scripts/agendar_busca_ativa_jusbrasil.sql para o agendamento.
 //
-// Para cada integração ativa da fonte "jusbrasil" que tenha uma api_key e
-// pelo menos um identificador de busca (monitor_name = nome/razão social, ou
-// monitor_oab = número da OAB), esta função consulta o JusBrasil por
-// processos/movimentações novas e importa cada novidade como uma publicação
-// (mesma lógica de deduplicação e notificação do webhook), além de registrar
-// o uso no contador financeiro de pesquisas processuais.
-//
-// A lógica de busca/importação para uma única integração vive em
-// _shared/pollJusbrasilIntegration.ts, compartilhada com a função
-// manual-process-search (busca sob demanda disparada pelo usuário).
+// IMPORTANTE (white-label): a credencial do provedor JusBrasil é central da
+// plataforma e deve existir apenas como secret do backend
+// (JUSBRASIL_API_TOKEN). Não armazenamos nem exigimos api_key por tenant.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { pollJusbrasilIntegration } from "../_shared/pollJusbrasilIntegration.ts";
@@ -24,20 +17,20 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
+  const jusbrasilApiToken = Deno.env.get("JUSBRASIL_API_TOKEN");
+
   if (!supabaseUrl || !serviceRoleKey) {
     return new Response(JSON.stringify({ error: "Configuração do Supabase ausente" }), { status: 500 });
   }
 
+  if (!jusbrasilApiToken) {
+    console.error("JUSBRASIL_API_TOKEN não configurado");
+    return new Response(JSON.stringify({ error: "Integração JusBrasil não configurada" }), { status: 500 });
+  }
+
   // Esta função processa TODAS as integrações JusBrasil de TODAS as contas
-  // de uma vez (é o job agendado — veja
-  // supabase/scripts/agendar_busca_ativa_jusbrasil.sql). O `verify_jwt` do
-  // Supabase só garante que o token é válido, não que é o cron chamando —
-  // qualquer usuário autenticado da aplicação também tem um JWT válido. Por
-  // isso, além do verify_jwt, exige explicitamente que o Authorization seja
-  // exatamente a Service Role Key (é o que o agendamento envia), recusando
-  // qualquer chamada feita com o token comum de um usuário — do contrário,
-  // um usuário logado poderia disparar essa rota e ver, na resposta,
-  // user_id e status de busca de OUTRAS contas/empresas.
+  // de uma vez (é o job agendado). Exige explicitamente a Service Role Key,
+  // impedindo que um usuário autenticado comum dispare a rotina global.
   const authHeader = req.headers.get("Authorization") || "";
   const providedToken = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : "";
   if (providedToken !== serviceRoleKey) {
@@ -48,10 +41,9 @@ Deno.serve(async (req) => {
 
   const { data: integrations, error: integrationsError } = await adminClient
     .from("publication_integrations")
-    .select("id, user_id, api_key, monitor_name, monitor_oab, jusbrasil_report_id, price_per_search, linked_client_id")
+    .select("id, user_id, monitor_name, monitor_oab, jusbrasil_report_id, price_per_search, linked_client_id")
     .eq("source", "jusbrasil")
-    .eq("is_active", true)
-    .not("api_key", "is", null);
+    .eq("is_active", true);
 
   if (integrationsError) {
     console.error("Error loading integrations:", integrationsError);
@@ -63,17 +55,18 @@ Deno.serve(async (req) => {
   let failed = 0;
 
   for (const integration of integrations || []) {
-    if (!integration.api_key || (!integration.monitor_name && !integration.monitor_oab)) continue;
+    if (!integration.monitor_name && !integration.monitor_oab) continue;
 
-    const result = await pollJusbrasilIntegration(adminClient, integration, "poll");
+    const result = await pollJusbrasilIntegration(
+      adminClient,
+      { ...integration, api_key: jusbrasilApiToken },
+      "poll",
+    );
     processed += 1;
     imported += result.imported;
     if (result.error) failed += 1;
   }
 
-  // A resposta só traz contagens agregadas — nunca a lista de user_id por
-  // conta — já que quem chama essa rota (o agendamento) não precisa (nem
-  // deve) ver dados de qual empresa é qual.
   return new Response(JSON.stringify({ success: true, processed, imported, failed }), {
     status: 200,
     headers: { "Content-Type": "application/json" },
