@@ -3,18 +3,16 @@
 // Integrações. Faz a mesma coisa que a busca ativa diária agendada
 // (poll-jusbrasil), mas para uma única integração e imediatamente, e marca
 // o registro do contador financeiro com search_type = "manual" em vez de
-// "poll" (a lógica em si vive em _shared/pollJusbrasilIntegration.ts,
-// compartilhada entre as duas funções).
+// "poll".
 //
 // Exige o usuário autenticado (JWT) e valida que a integração pertence a
-// ele antes de rodar a busca.
-//
-// A credencial do JusBrasil é central da plataforma e vem exclusivamente
-// do secret JUSBRASIL_API_TOKEN. Ela nunca é lida de uma integração/tenant.
+// ele antes de rodar a busca. A credencial do JusBrasil é central da
+// plataforma e nunca é lida da integração/tenant.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
 import { pollJusbrasilIntegration } from "../_shared/pollJusbrasilIntegration.ts";
+import { getJusbrasilApiToken } from "../_shared/jusbrasilToken.ts";
 
 Deno.serve(async (req) => {
   const corsHeaders = buildCorsHeaders(req);
@@ -30,13 +28,9 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const jusbrasilApiToken = Deno.env.get("JUSBRASIL_API_TOKEN");
 
   if (!supabaseUrl || !anonKey || !serviceRoleKey) {
     return json({ error: "Configuração do Supabase ausente" }, 500);
-  }
-  if (!jusbrasilApiToken) {
-    return json({ error: "JUSBRASIL_API_TOKEN não configurado no backend" }, 500);
   }
 
   const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
@@ -54,9 +48,14 @@ Deno.serve(async (req) => {
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-  // Confere que a integração pertence ao usuário autenticado antes de
-  // rodar qualquer busca em nome dele. A api_key não é buscada da tabela:
-  // a plataforma usa o token central mantido em secret no Supabase.
+  let jusbrasilApiToken: string;
+  try {
+    jusbrasilApiToken = await getJusbrasilApiToken(adminClient);
+  } catch (error) {
+    console.error(error);
+    return json({ error: "Integração JusBrasil não configurada no backend" }, 500);
+  }
+
   const { data: integration, error: integrationError } = await adminClient
     .from("publication_integrations")
     .select("id, user_id, source, monitor_name, monitor_oab, jusbrasil_report_id, price_per_search, linked_client_id")
@@ -73,15 +72,11 @@ Deno.serve(async (req) => {
     return json({ error: "Busca manual disponível apenas para integrações JusBrasil" }, 400);
   }
 
-  // Compatibilidade temporária com o pipeline compartilhado: o helper ainda
-  // recebe `api_key`, mas aqui ela é injetada somente em memória a partir do
-  // secret central. Nada é persistido em publication_integrations.
-  const integrationWithCentralToken = {
-    ...integration,
-    api_key: jusbrasilApiToken,
-  };
-
-  const result = await pollJusbrasilIntegration(adminClient, integrationWithCentralToken, "manual");
+  const result = await pollJusbrasilIntegration(
+    adminClient,
+    { ...integration, api_key: jusbrasilApiToken },
+    "manual",
+  );
   if (result.error) return json({ error: result.error, imported: result.imported }, 502);
   return json({ success: true, imported: result.imported });
 });
