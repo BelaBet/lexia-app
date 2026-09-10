@@ -44,7 +44,7 @@ const Index = () => {
       case "document-creator": return <DocumentCreator />;
       case "documents": return <DocumentsPage />;
       case "cases": return <CasesManager onTabChange={setActiveTab} initialCaseId={pendingCaseId} />;
-      case "process-search": return <ProcessSearchManagerV2 />;
+      case "process-search": return <ProcessSearchManagerV2 onOpenCase={handleOpenCase} />;
       case "checklists": return <ChecklistsManager />;
       case "guide": return <GuidePage />;
       case "calendar": return <CalendarView onOpenCase={handleOpenCase} />;
