@@ -11,3 +11,9 @@ verify_jwt = false
 
 [functions.poll-jusbrasil]
 verify_jwt = true
+
+[functions.manual-process-search]
+verify_jwt = true
+
+[functions.jusbrasil-cnj]
+verify_jwt = true
