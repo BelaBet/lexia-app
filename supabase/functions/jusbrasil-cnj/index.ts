@@ -5,30 +5,21 @@ import { normalizeCnj, buildJusbrasilCnjUrl } from "../_shared/jusbrasilCnj.ts";
 
 Deno.serve(async (req) => {
   const corsHeaders = buildCorsHeaders(req);
-  const json = (data: unknown, status = 200) =>
-    new Response(JSON.stringify(data), {
-      status,
-      headers: { ...corsHeaders, "Content-Type": "application/json" },
-    });
+  const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
 
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Método não permitido" }, 405);
 
-  let body: { cnj?: string; dry_run?: boolean };
-  try {
-    body = await req.json();
-  } catch {
-    return json({ error: "JSON inválido" }, 400);
-  }
+  let body: { cnj?: string; dry_run?: boolean; confirm_charge?: boolean };
+  try { body = await req.json(); } catch { return json({ error: "JSON inválido" }, 400); }
 
   const cnj = normalizeCnj(body.cnj ?? "");
   if (!cnj) return json({ error: "CNJ inválido. Informe um número com 20 dígitos." }, 400);
-
   const requestUrl = buildJusbrasilCnjUrl(cnj);
 
-  // Segurança financeira: dry-run é público e não autentica, não acessa o
-  // token e não chama o JusBrasil. Serve para validar a função publicada,
-  // normalização do CNJ e montagem da requisição sem consumir crédito.
   if (body.dry_run !== false) {
     return json({
       success: true,
@@ -36,64 +27,48 @@ Deno.serve(async (req) => {
       cnj,
       provider: "jusbrasil",
       operation: "consulta_cnj",
-      request: { method: "GET", url: requestUrl },
-      message: "Pré-validação concluída. Nenhuma chamada ao JusBrasil foi executada.",
+      message: "CNJ validado. A consulta real ainda não foi executada.",
     });
   }
 
-  // Chamadas reais continuam exigindo usuário autenticado.
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return json({ error: "Autenticação obrigatória" }, 401);
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const anonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  if (!supabaseUrl || !anonKey || !serviceRoleKey) {
-    return json({ error: "Configuração do Supabase ausente" }, 500);
-  }
+  if (!supabaseUrl || !anonKey || !serviceRoleKey) return json({ error: "Configuração do Supabase ausente" }, 500);
 
-  const userClient = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
-  });
+  const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
   const { data: { user }, error: authError } = await userClient.auth.getUser();
   if (authError || !user) return json({ error: "Sessão inválida ou expirada" }, 401);
 
-  // Segundo cadeado: mesmo autenticado, uma chamada real só é aceita quando
-  // o operador habilitar explicitamente a flag no backend.
-  if (Deno.env.get("JUSBRASIL_REAL_CALLS_ENABLED") !== "true") {
-    return json({
-      error: "Chamadas reais ao JusBrasil estão bloqueadas pelo backend",
-      dry_run: false,
-      cnj,
-    }, 403);
+  // Uma chamada paga só pode ocorrer após confirmação explícita enviada pela própria tela da LEXIA.
+  if (body.confirm_charge !== true) {
+    return json({ error: "Confirmação da consulta obrigatória", requires_confirmation: true, cnj }, 409);
   }
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
   let token: string;
-  try {
-    token = await getJusbrasilApiToken(adminClient);
-  } catch (error) {
+  try { token = await getJusbrasilApiToken(adminClient); }
+  catch (error) {
     console.error(error);
     return json({ error: "Integração JusBrasil não configurada" }, 500);
   }
 
   const response = await fetch(requestUrl, {
     method: "GET",
-    headers: {
-      Authorization: `Bearer ${token}`,
-      Accept: "application/json",
-      "Content-Type": "application/json",
-    },
+    headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "Content-Type": "application/json" },
   });
 
   const raw = await response.text();
   let data: unknown = raw;
-  try { data = raw ? JSON.parse(raw) : null; } catch { /* mantém texto bruto */ }
+  try { data = raw ? JSON.parse(raw) : null; } catch {}
 
   if (!response.ok) {
     console.error(`JusBrasil CNJ respondeu ${response.status}`);
     return json({ error: "Erro na consulta JusBrasil", provider_status: response.status, details: data }, 502);
   }
 
-  return json({ success: true, dry_run: false, cnj, data });
+  return json({ success: true, dry_run: false, cnj, provider: "jusbrasil", operation: "consulta_cnj", data });
 });
