@@ -1,4 +1,5 @@
 // Verifica resultado de busca por nome no JusBrasil usando a credencial central da LEXIA.
+// Primeiro consulta a definição do relatório e só tenta exportar após finished_at.
 // Quando o relatório conclui, cada processo encontrado também é criado/atualizado
 // em `cases`, para aparecer automaticamente no menu Processos.
 
@@ -6,6 +7,21 @@ import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
 import { fetchNameSearchExport } from "../_shared/jusbrasilNameSearch.ts";
 import { getJusbrasilApiToken } from "../_shared/jusbrasilToken.ts";
+
+const JUSBRASIL_API_BASE_URL = "https://op.digesto.com.br";
+
+function hasFinishedAt(payload: unknown): boolean {
+  if (!payload || typeof payload !== "object") return false;
+  const finishedAt = (payload as Record<string, unknown>).finished_at;
+  if (finishedAt == null) return false;
+  if (typeof finishedAt === "string") return finishedAt.trim().length > 0;
+  if (typeof finishedAt === "number") return Number.isFinite(finishedAt) && finishedAt > 0;
+  if (typeof finishedAt === "object") {
+    const dateValue = (finishedAt as Record<string, unknown>)["$date"];
+    return dateValue !== null && dateValue !== undefined;
+  }
+  return true;
+}
 
 Deno.serve(async (req) => {
   const corsHeaders = buildCorsHeaders(req);
@@ -42,10 +58,7 @@ Deno.serve(async (req) => {
     .eq("user_id", user.id)
     .maybeSingle();
 
-  if (reportError) {
-    console.error("Error loading report:", reportError);
-    return json({ error: "Erro ao carregar busca" }, 500);
-  }
+  if (reportError) return json({ error: "Erro ao carregar busca" }, 500);
   if (!report) return json({ error: "Busca não encontrada" }, 404);
   if (report.status === "concluido") return json({ success: true, status: "concluido", already_done: true });
   if (!report.jusbrasil_report_id) return json({ error: "Busca ainda não foi iniciada corretamente" }, 400);
@@ -55,14 +68,43 @@ Deno.serve(async (req) => {
   catch { return json({ error: "Integração JusBrasil não configurada no backend" }, 500); }
 
   try {
+    // Etapa 1: consulta o estado real do relatório. Enquanto finished_at for nulo,
+    // NÃO chama /export. Isso evita o 422 "dados no formato solicitado ainda não disponíveis".
+    const definitionResponse = await fetch(
+      `${JUSBRASIL_API_BASE_URL}/api/live_report_def/${report.jusbrasil_report_id}`,
+      { headers: { "Authorization": `Bearer ${apiToken}`, "Accept": "application/json" } },
+    );
+
+    if (!definitionResponse.ok) {
+      throw new Error(`JusBrasil (status do relatório) respondeu ${definitionResponse.status}: ${await definitionResponse.text().catch(() => "")}`);
+    }
+
+    const definition = await definitionResponse.json();
+    if (!hasFinishedAt(definition)) {
+      await adminClient.from("process_search_reports").update({
+        status: "processando",
+        error_message: null,
+        outcome_message: "Relatório em processamento no JusBrasil. Aguardando finalização para liberar os resultados.",
+      }).eq("id", report.id);
+
+      return json({
+        success: true,
+        status: "processando",
+        pending: true,
+        provider_status: "processing",
+        message: "Relatório ainda está sendo processado no JusBrasil. A exportação será feita somente após a finalização.",
+      });
+    }
+
+    // Etapa 2: só exporta quando o próprio JusBrasil informar finished_at.
     const rows = await fetchNameSearchExport(apiToken, report.jusbrasil_report_id);
     if (rows === null) {
       await adminClient.from("process_search_reports").update({
         status: "processando",
         error_message: null,
-        outcome_message: "O JusBrasil ainda está preparando os dados do relatório. Tente novamente mais tarde.",
+        outcome_message: "Relatório finalizado no JusBrasil; dados de exportação ainda estão sendo disponibilizados.",
       }).eq("id", report.id);
-      return json({ success: true, status: "processando", message: "O JusBrasil ainda está preparando os dados. Tente novamente mais tarde." });
+      return json({ success: true, status: "processando", pending: true, provider_status: "finished_waiting_export", message: "O relatório foi finalizado, mas os dados de exportação ainda não estão disponíveis." });
     }
 
     let imported = 0;
@@ -75,12 +117,8 @@ Deno.serve(async (req) => {
         .select("id, case_id")
         .single();
 
-      if (upsertError || !searchResult) {
-        console.error("Error upserting search result row:", upsertError);
-        continue;
-      }
+      if (upsertError || !searchResult) continue;
       imported += 1;
-
       if (!row.process_number) continue;
 
       const { data: existingCase, error: existingCaseError } = await adminClient
@@ -89,28 +127,18 @@ Deno.serve(async (req) => {
         .eq("user_id", user.id)
         .eq("case_number", row.process_number)
         .maybeSingle();
-
-      if (existingCaseError) {
-        console.error("Error checking existing case:", existingCaseError);
-        continue;
-      }
+      if (existingCaseError) continue;
 
       let caseId = existingCase?.id ?? null;
-
       if (!caseId) {
-        const processType = row.area || "Cível";
-        const processTitle = row.natureza
-          ? `${row.natureza} — ${row.process_number}`
-          : `Processo ${row.process_number}`;
-
         const { data: createdCase, error: createCaseError } = await adminClient
           .from("cases")
           .insert({
             user_id: user.id,
             case_number: row.process_number,
-            title: processTitle,
+            title: row.natureza ? `${row.natureza} — ${row.process_number}` : `Processo ${row.process_number}`,
             client: report.search_name || "Parte pesquisada",
-            type: processType,
+            type: row.area || "Cível",
             status: "active",
             vara: row.vara,
             comarca: row.comarca,
@@ -119,35 +147,23 @@ Deno.serve(async (req) => {
           })
           .select("id")
           .single();
-
-        if (createCaseError || !createdCase) {
-          console.error("Error creating case from name search:", createCaseError);
-          continue;
-        }
-
+        if (createCaseError || !createdCase) continue;
         caseId = createdCase.id;
         addedToCases += 1;
       }
 
       if (caseId && searchResult.case_id !== caseId) {
-        const { error: linkError } = await adminClient
-          .from("process_search_results")
-          .update({ case_id: caseId })
-          .eq("id", searchResult.id);
-        if (linkError) console.error("Error linking search result to case:", linkError);
+        await adminClient.from("process_search_results").update({ case_id: caseId }).eq("id", searchResult.id);
       }
     }
 
-    await adminClient
-      .from("process_search_reports")
-      .update({
-        status: "concluido",
-        result_count: imported,
-        completed_at: new Date().toISOString(),
-        outcome_message: `${imported} processo(s) encontrado(s); ${addedToCases} novo(s) adicionado(s) em Processos.`,
-        error_message: null,
-      })
-      .eq("id", report.id);
+    await adminClient.from("process_search_reports").update({
+      status: "concluido",
+      result_count: imported,
+      completed_at: new Date().toISOString(),
+      outcome_message: `${imported} processo(s) encontrado(s); ${addedToCases} novo(s) adicionado(s) em Processos.`,
+      error_message: null,
+    }).eq("id", report.id);
 
     await adminClient.from("notifications").insert({
       user_id: user.id,
@@ -156,38 +172,19 @@ Deno.serve(async (req) => {
       link_tab: "cases",
     });
 
-    return json({
-      success: true,
-      status: "concluido",
-      imported,
-      added_to_cases: addedToCases,
-      message: `${imported} processo(s) encontrado(s). ${addedToCases} novo(s) adicionado(s) automaticamente em Processos.`,
-    });
+    return json({ success: true, status: "concluido", imported, added_to_cases: addedToCases });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     const normalized = message.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-    // O export do JusBrasil devolve 422 enquanto o formato solicitado ainda
-    // está sendo preparado. Isso é estado de processamento, não erro da busca.
+    // Fallback defensivo: se o provedor ainda devolver 422 na exportação,
+    // mantemos como processamento em vez de marcar a busca como erro.
     if (normalized.includes("respondeu 422") && normalized.includes("ainda nao disponiveis")) {
-      await adminClient.from("process_search_reports").update({
-        status: "processando",
-        error_message: null,
-        outcome_message: "O JusBrasil ainda está preparando os dados do relatório. Tente novamente mais tarde.",
-      }).eq("id", report.id);
-      return json({
-        success: true,
-        status: "processando",
-        pending: true,
-        message: "O JusBrasil ainda está preparando os dados do relatório. Nenhuma nova cobrança foi feita. Tente novamente mais tarde.",
-      });
+      await adminClient.from("process_search_reports").update({ status: "processando", error_message: null, outcome_message: "Dados do relatório ainda estão sendo disponibilizados pelo JusBrasil." }).eq("id", report.id);
+      return json({ success: true, status: "processando", pending: true, message: "Dados do relatório ainda estão sendo disponibilizados pelo JusBrasil." });
     }
 
-    console.error("Error checking name search export:", message);
-    await adminClient
-      .from("process_search_reports")
-      .update({ status: "erro", error_message: message.slice(0, 500) })
-      .eq("id", report.id);
+    await adminClient.from("process_search_reports").update({ status: "erro", error_message: message.slice(0, 500) }).eq("id", report.id);
     return json({ error: `Erro ao consultar resultado no JusBrasil: ${message}` }, 502);
   }
 });
