@@ -15,15 +15,22 @@ interface JusbrasilEvent {
   [key: string]: unknown;
 }
 
+type Destination = { user_id: string; integration_id: string | null };
+
 function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
+// O JusBrasil devolve `user_custom` no webhook como `source_user_custom`.
+// Quando mais de uma origem gerou o mesmo evento, os valores podem vir
+// separados por `;`. Na Lex IA usamos o UUID de publication_integrations.
 function sourceIntegrationIds(event: JusbrasilEvent): string[] {
-  return String(event.source_user_custom ?? "")
-    .split(";")
-    .map((v) => v.trim())
-    .filter((v) => isUuid(v));
+  return Array.from(new Set(
+    String(event.source_user_custom ?? "")
+      .split(";")
+      .map((value) => value.trim())
+      .filter((value) => isUuid(value)),
+  ));
 }
 
 function firstString(...values: unknown[]): string | null {
@@ -41,7 +48,13 @@ function firstDate(...values: unknown[]): string {
     : new Date().toISOString().slice(0, 10);
 }
 
-function eventRows(event: JusbrasilEvent): Array<{ content: string; date: string; processNumber: string | null; raw: unknown; eventKey: string }> {
+function eventRows(event: JusbrasilEvent): Array<{
+  content: string;
+  date: string;
+  processNumber: string | null;
+  raw: unknown;
+  eventKey: string;
+}> {
   const processNumber = firstString(event.target_number);
 
   if (event.evt_type === 1 && Array.isArray(event.data)) {
@@ -85,6 +98,58 @@ function eventRows(event: JusbrasilEvent): Array<{ content: string; date: string
   }];
 }
 
+async function resolveDestinations(
+  admin: ReturnType<typeof createClient>,
+  event: JusbrasilEvent,
+): Promise<Destination[]> {
+  const integrationIds = sourceIntegrationIds(event);
+
+  // Rota principal e segura para white-label: o evento volta com o UUID
+  // exato da integração enviado no `user_custom` quando o monitoramento foi
+  // registrado. Assim não existe inferência de tenant por número do processo.
+  if (integrationIds.length > 0) {
+    const { data, error } = await admin
+      .from("publication_integrations")
+      .select("id, user_id")
+      .in("id", integrationIds)
+      .eq("source", "jusbrasil")
+      .eq("is_active", true);
+
+    if (error) {
+      console.error("jusbrasil-webhook: erro ao resolver source_user_custom", error);
+      return [];
+    }
+
+    return (data ?? []).map((row) => ({ user_id: row.user_id, integration_id: row.id }));
+  }
+
+  // Compatibilidade temporária com monitoramentos antigos que foram criados
+  // sem `user_custom`. Para evitar vazamento entre tenants, só fazemos
+  // fallback por CNJ quando existe EXATAMENTE um proprietário possível.
+  if (!event.target_number) return [];
+
+  const { data, error } = await admin
+    .from("cases")
+    .select("user_id")
+    .eq("case_number", event.target_number);
+
+  if (error) {
+    console.error("jusbrasil-webhook: erro no fallback por CNJ", error);
+    return [];
+  }
+
+  const owners = Array.from(new Set((data ?? []).map((row) => row.user_id).filter(Boolean)));
+  if (owners.length !== 1) {
+    console.warn("jusbrasil-webhook: fallback por CNJ recusado por ambiguidade", {
+      target_number: event.target_number,
+      possible_owners: owners.length,
+    });
+    return [];
+  }
+
+  return [{ user_id: owners[0], integration_id: null }];
+}
+
 Deno.serve(async (req) => {
   const json = (data: unknown, status = 200) => new Response(JSON.stringify(data), {
     status,
@@ -94,22 +159,37 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "Método não permitido" }, 405);
 
   let body: unknown;
-  try { body = await req.json(); }
-  catch { return json({ error: "JSON inválido" }, 400); }
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "JSON inválido" }, 400);
+  }
 
+  // A documentação do JusBrasil define o payload de webhook como uma lista.
+  // Mantemos compatibilidade com objeto único, mas normalizamos tudo aqui.
   const events = Array.isArray(body) ? body as JusbrasilEvent[] : [body as JusbrasilEvent];
 
-  // O JusBrasil testa a URL com um array vazio. Este teste deve funcionar
-  // mesmo antes da ativação do api_name, e não toca banco nem provedor.
-  if (events.length === 0) return json({ success: true, received: 0, imported: 0 });
+  // O provedor testa a URL enviando []. Esse handshake é seguro, não toca
+  // banco e deve funcionar antes mesmo de `api_name` estar configurado.
+  if (events.length === 0) {
+    return json({ success: true, received: 0, imported: 0, unrouted: 0 });
+  }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   const expectedApiName = Deno.env.get("JUSBRASIL_WEBHOOK_API_NAME")?.trim();
-  if (!supabaseUrl || !serviceRoleKey) return json({ error: "Configuração do Supabase ausente" }, 500);
-  if (!expectedApiName) return json({ error: "Webhook JusBrasil ainda não habilitado no backend" }, 503);
 
-  if (events.some((event) => event.api_name !== expectedApiName)) {
+  if (!supabaseUrl || !serviceRoleKey) {
+    return json({ error: "Configuração do Supabase ausente" }, 500);
+  }
+  if (!expectedApiName) {
+    return json({ error: "Webhook JusBrasil ainda não habilitado no backend" }, 503);
+  }
+
+  // O `api_name` é configurado no user_company do JusBrasil e enviado em
+  // cada evento. Eventos reais só entram se TODOS os itens do lote tiverem
+  // exatamente o valor configurado no backend.
+  if (events.some((event) => !event.api_name || event.api_name !== expectedApiName)) {
     return json({ error: "Origem do webhook não reconhecida" }, 401);
   }
 
@@ -118,31 +198,15 @@ Deno.serve(async (req) => {
   let unrouted = 0;
 
   for (const event of events) {
-    const integrationIds = sourceIntegrationIds(event);
-    let destinations: Array<{ user_id: string; integration_id: string | null }> = [];
-
-    if (integrationIds.length > 0) {
-      const { data } = await admin
-        .from("publication_integrations")
-        .select("id, user_id")
-        .in("id", integrationIds)
-        .eq("source", "jusbrasil")
-        .eq("is_active", true);
-      destinations = (data ?? []).map((row) => ({ user_id: row.user_id, integration_id: row.id }));
-    }
-
-    if (destinations.length === 0 && event.target_number) {
-      const { data } = await admin
-        .from("cases")
-        .select("user_id")
-        .eq("case_number", event.target_number);
-      destinations = Array.from(new Set((data ?? []).map((row) => row.user_id)))
-        .map((user_id) => ({ user_id, integration_id: null }));
-    }
+    const destinations = await resolveDestinations(admin, event);
 
     if (destinations.length === 0) {
       unrouted += 1;
-      console.warn("jusbrasil-webhook: evento sem destino", { evt_type: event.evt_type, target_number: event.target_number });
+      console.warn("jusbrasil-webhook: evento sem destino seguro", {
+        evt_type: event.evt_type,
+        target_number: event.target_number,
+        has_source_user_custom: Boolean(event.source_user_custom),
+      });
       continue;
     }
 
@@ -183,9 +247,12 @@ Deno.serve(async (req) => {
       }
 
       if (destination.integration_id) {
-        await admin.from("publication_integrations")
+        const { error } = await admin
+          .from("publication_integrations")
           .update({ last_received_at: new Date().toISOString() })
-          .eq("id", destination.integration_id);
+          .eq("id", destination.integration_id)
+          .eq("user_id", destination.user_id);
+        if (error) console.error("jusbrasil-webhook: erro ao atualizar last_received_at", error);
       }
     }
   }
