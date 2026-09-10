@@ -1,4 +1,6 @@
-// Verifica resultado de busca por nome no JusBrasil usando a credencial central da Lex IA.
+// Verifica resultado de busca por nome no JusBrasil usando a credencial central da LEXIA.
+// Quando o relatório conclui, cada processo encontrado também é criado/atualizado
+// em `cases`, para aparecer automaticamente no menu Processos.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
@@ -35,7 +37,7 @@ Deno.serve(async (req) => {
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
   const { data: report, error: reportError } = await adminClient
     .from("process_search_reports")
-    .select("id, user_id, jusbrasil_report_id, status, integration_id")
+    .select("id, user_id, jusbrasil_report_id, status, integration_id, search_name")
     .eq("id", reportId)
     .eq("user_id", user.id)
     .maybeSingle();
@@ -59,30 +61,104 @@ Deno.serve(async (req) => {
     }
 
     let imported = 0;
+    let addedToCases = 0;
+
     for (const row of rows) {
-      const { error: upsertError } = await adminClient
+      const { data: searchResult, error: upsertError } = await adminClient
         .from("process_search_results")
-        .upsert({ report_id: report.id, user_id: user.id, ...row }, { onConflict: "report_id,process_number" });
-      if (upsertError) {
+        .upsert({ report_id: report.id, user_id: user.id, ...row }, { onConflict: "report_id,process_number" })
+        .select("id, case_id")
+        .single();
+
+      if (upsertError || !searchResult) {
         console.error("Error upserting search result row:", upsertError);
         continue;
       }
       imported += 1;
+
+      // Só cria registro em Processos quando existe um número de processo válido.
+      if (!row.process_number) continue;
+
+      const { data: existingCase, error: existingCaseError } = await adminClient
+        .from("cases")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("case_number", row.process_number)
+        .maybeSingle();
+
+      if (existingCaseError) {
+        console.error("Error checking existing case:", existingCaseError);
+        continue;
+      }
+
+      let caseId = existingCase?.id ?? null;
+
+      if (!caseId) {
+        const processType = row.area || "Cível";
+        const processTitle = row.natureza
+          ? `${row.natureza} — ${row.process_number}`
+          : `Processo ${row.process_number}`;
+
+        const { data: createdCase, error: createCaseError } = await adminClient
+          .from("cases")
+          .insert({
+            user_id: user.id,
+            case_number: row.process_number,
+            title: processTitle,
+            client: report.search_name || "Parte pesquisada",
+            type: processType,
+            status: "active",
+            vara: row.vara,
+            comarca: row.comarca,
+            valor_causa: row.valor,
+            data_abertura_tribunal: row.data_distribuicao,
+          })
+          .select("id")
+          .single();
+
+        if (createCaseError || !createdCase) {
+          console.error("Error creating case from name search:", createCaseError);
+          continue;
+        }
+
+        caseId = createdCase.id;
+        addedToCases += 1;
+      }
+
+      if (caseId && searchResult.case_id !== caseId) {
+        const { error: linkError } = await adminClient
+          .from("process_search_results")
+          .update({ case_id: caseId })
+          .eq("id", searchResult.id);
+        if (linkError) console.error("Error linking search result to case:", linkError);
+      }
     }
 
     await adminClient
       .from("process_search_reports")
-      .update({ status: "concluido", result_count: imported, completed_at: new Date().toISOString() })
+      .update({
+        status: "concluido",
+        result_count: imported,
+        completed_at: new Date().toISOString(),
+        outcome_message: `${imported} processo(s) encontrado(s); ${addedToCases} novo(s) adicionado(s) em Processos.`,
+        error_message: null,
+      })
       .eq("id", report.id);
 
     await adminClient.from("notifications").insert({
       user_id: user.id,
       title: "Busca por nome concluída",
-      message: `${imported} processo(s) encontrado(s). Confira no CRM de busca.`,
-      link_tab: "process-search",
+      message: `${imported} processo(s) encontrado(s). ${addedToCases} novo(s) já estão em Processos.`,
+      link_tab: "cases",
     });
 
-    return json({ success: true, status: "concluido", imported });
+    return json({
+      success: true,
+      status: "concluido",
+      imported,
+      added_to_cases: addedToCases,
+      message: `${imported} processo(s) encontrado(s). ${addedToCases} novo(s) adicionado(s) automaticamente em Processos.`,
+    });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("Error checking name search export:", message);
