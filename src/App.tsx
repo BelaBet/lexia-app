@@ -11,6 +11,7 @@ import Auth from "./pages/Auth";
 import Pricing from "./pages/Pricing";
 import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
+import CaseDetails from "./pages/CaseDetails";
 import PortalAuth from "./pages/portal/PortalAuth";
 import PortalSetPassword from "./pages/portal/PortalSetPassword";
 import PortalLayout from "./pages/portal/PortalLayout";
@@ -40,6 +41,14 @@ const App = () => (
                 <Route path="documentos" element={<PortalDocuments />} />
                 <Route path="solicitacoes" element={<PortalRequests />} />
               </Route>
+              <Route
+                path="/processos/:caseId"
+                element={
+                  <ProtectedRoute>
+                    <CaseDetails />
+                  </ProtectedRoute>
+                }
+              />
               <Route
                 path="/"
                 element={
