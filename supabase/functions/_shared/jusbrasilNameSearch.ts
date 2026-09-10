@@ -295,7 +295,7 @@ export async function fetchNameSearchExport(apiKey: string, reportId: string): P
     `${JUSBRASIL_API_BASE_URL}/api/live_report_def/${reportId}/export?report_format=json&report_type=completo`,
     { headers: { "Authorization": `Bearer ${apiKey}` } },
   );
-  if (response.status === 404 || response.status === 202) return null; // ainda processando
+  if (response.status === 404 || response.status === 202 || response.status === 422) return null; // ainda processando / exportação ainda não materializada
   if (!response.ok) {
     throw new Error(`JusBrasil (exportar relatório) respondeu ${response.status}: ${await response.text().catch(() => "")}`);
   }
