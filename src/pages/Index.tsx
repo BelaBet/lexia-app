@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { StatsCards } from "@/components/dashboard/StatsCards";
@@ -28,12 +29,11 @@ import { DemoDataBanner } from "@/components/layout/DemoDataBanner";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
-  const [pendingCaseId, setPendingCaseId] = useState<string | null>(null);
   const { profile } = useAuth();
+  const navigate = useNavigate();
 
   const handleOpenCase = (caseId: string) => {
-    setPendingCaseId(caseId);
-    setActiveTab("cases");
+    navigate(`/processos/${caseId}`);
   };
 
   const renderContent = () => {
@@ -43,7 +43,7 @@ const Index = () => {
       case "pdf-reader": return <PDFReader onOpenGuide={() => setActiveTab("guide")} />;
       case "document-creator": return <DocumentCreator />;
       case "documents": return <DocumentsPage />;
-      case "cases": return <CasesManager onTabChange={setActiveTab} initialCaseId={pendingCaseId} />;
+      case "cases": return <CasesManager onTabChange={setActiveTab} />;
       case "process-search": return <ProcessSearchManagerV2 onOpenCase={handleOpenCase} />;
       case "checklists": return <ChecklistsManager />;
       case "guide": return <GuidePage />;
