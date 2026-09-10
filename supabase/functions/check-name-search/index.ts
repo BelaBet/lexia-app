@@ -57,7 +57,12 @@ Deno.serve(async (req) => {
   try {
     const rows = await fetchNameSearchExport(apiToken, report.jusbrasil_report_id);
     if (rows === null) {
-      return json({ success: true, status: "processando", message: "Ainda processando no JusBrasil. Pode levar até 72 horas — tente novamente mais tarde." });
+      await adminClient.from("process_search_reports").update({
+        status: "processando",
+        error_message: null,
+        outcome_message: "O JusBrasil ainda está preparando os dados do relatório. Tente novamente mais tarde.",
+      }).eq("id", report.id);
+      return json({ success: true, status: "processando", message: "O JusBrasil ainda está preparando os dados. Tente novamente mais tarde." });
     }
 
     let imported = 0;
@@ -76,7 +81,6 @@ Deno.serve(async (req) => {
       }
       imported += 1;
 
-      // Só cria registro em Processos quando existe um número de processo válido.
       if (!row.process_number) continue;
 
       const { data: existingCase, error: existingCaseError } = await adminClient
@@ -161,6 +165,24 @@ Deno.serve(async (req) => {
     });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
+    const normalized = message.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+    // O export do JusBrasil devolve 422 enquanto o formato solicitado ainda
+    // está sendo preparado. Isso é estado de processamento, não erro da busca.
+    if (normalized.includes("respondeu 422") && normalized.includes("ainda nao disponiveis")) {
+      await adminClient.from("process_search_reports").update({
+        status: "processando",
+        error_message: null,
+        outcome_message: "O JusBrasil ainda está preparando os dados do relatório. Tente novamente mais tarde.",
+      }).eq("id", report.id);
+      return json({
+        success: true,
+        status: "processando",
+        pending: true,
+        message: "O JusBrasil ainda está preparando os dados do relatório. Nenhuma nova cobrança foi feita. Tente novamente mais tarde.",
+      });
+    }
+
     console.error("Error checking name search export:", message);
     await adminClient
       .from("process_search_reports")
