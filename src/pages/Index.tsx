@@ -20,19 +20,17 @@ import { ChecklistsManager } from "@/components/checklists/ChecklistsManager";
 import { GuidePage } from "@/components/guide/GuidePage";
 import { PublicationsManager } from "@/components/publications/PublicationsManager";
 import { ProcessSearchFinancialCounter } from "@/components/financial/ProcessSearchFinancialCounter";
-import { ProcessSearchManager } from "@/components/process-search/ProcessSearchManager";
+import { ProcessSearchManagerV2 } from "@/components/process-search/ProcessSearchManagerV2";
 import { BrandingSettings } from "@/components/settings/BrandingSettings";
 import Sales from "@/pages/Sales";
 import { useAuth } from "@/contexts/AuthContext";
 import { DemoDataBanner } from "@/components/layout/DemoDataBanner";
+
 const Index = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [pendingCaseId, setPendingCaseId] = useState<string | null>(null);
   const { profile } = useAuth();
 
-  // Usado pela Agenda ("Abrir processo" num evento vinculado a um processo)
-  // para navegar até "Processos" já com o processo certo aberto — sem isso,
-  // o vínculo case_id do evento existiria só no banco, nunca na tela.
   const handleOpenCase = (caseId: string) => {
     setPendingCaseId(caseId);
     setActiveTab("cases");
@@ -46,7 +44,7 @@ const Index = () => {
       case "document-creator": return <DocumentCreator />;
       case "documents": return <DocumentsPage />;
       case "cases": return <CasesManager onTabChange={setActiveTab} initialCaseId={pendingCaseId} />;
-      case "process-search": return <ProcessSearchManager />;
+      case "process-search": return <ProcessSearchManagerV2 />;
       case "checklists": return <ChecklistsManager />;
       case "guide": return <GuidePage />;
       case "calendar": return <CalendarView onOpenCase={handleOpenCase} />;
@@ -61,9 +59,11 @@ const Index = () => {
       case "notifications":
       case "billing": return <SettingsPage onTabChange={setActiveTab} />;
       case "sales": return <Sales />;
-      default: return null;
+      default: return <div className="rounded-lg border p-6"><h2 className="text-lg font-semibold">Página não encontrada</h2><p className="mt-1 text-sm text-muted-foreground">Volte ao Dashboard pelo menu lateral.</p></div>;
     }
   };
+
   return <div className="min-h-screen bg-background"><MobileNav activeTab={activeTab} onTabChange={setActiveTab} /><Sidebar activeTab={activeTab} onTabChange={setActiveTab} /><main className="min-w-0 p-4 pt-20 md:pt-8 md:ml-64 md:p-8"><DemoDataBanner />{renderContent()}</main></div>;
 };
+
 export default Index;
