@@ -17,3 +17,6 @@ verify_jwt = true
 
 [functions.jusbrasil-cnj]
 verify_jwt = true
+
+[functions.jusbrasil-webhook]
+verify_jwt = false
