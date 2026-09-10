@@ -18,6 +18,60 @@ const statusMeta: Record<string, { label: string; className: string }> = {
   erro: { label: "Erro", className: "bg-red-500/10 text-red-700" },
 };
 
+type StoredPreview = {
+  total_procs?: number;
+  total_cost?: number;
+  partes?: Array<{
+    id?: number | null;
+    nome?: string;
+    checked?: boolean;
+    total_procs_variacoes?: number;
+    parte_max_total?: number;
+    variacoes?: unknown[];
+  }>;
+};
+
+function normalizeStoredPreview(report: any): NameSearchPreviewResponse | null {
+  const raw = report?.preview_data as StoredPreview | null | undefined;
+  if (!raw || !Array.isArray(raw.partes)) return null;
+
+  const parts = raw.partes.map((part, partIndex) => ({
+    id: part?.id ?? null,
+    name: part?.nome || report.search_name || `Parte ${partIndex + 1}`,
+    checked: part?.checked !== false,
+    total: Number(part?.total_procs_variacoes ?? part?.parte_max_total ?? 0) || 0,
+    variations: Array.isArray(part?.variacoes)
+      ? part.variacoes.map((variation: any, index: number) => {
+          if (Array.isArray(variation)) {
+            return {
+              name: String(variation?.[0] ?? `Variação ${index + 1}`),
+              total: Number(variation?.[1] ?? variation?.[2] ?? 0) || 0,
+              variation_id: variation?.[3] ?? null,
+              checked: variation?.[4] !== false,
+            };
+          }
+          return {
+            name: String(variation?.nome ?? variation?.name ?? `Variação ${index + 1}`),
+            total: Number(variation?.total ?? variation?.total_procs ?? 0) || 0,
+            variation_id: variation?.id ?? variation?.variation_id ?? null,
+            checked: variation?.checked !== false,
+          };
+        }).filter((variation) => variation.name)
+      : [],
+  }));
+
+  return {
+    success: true,
+    report_id: report.id,
+    provider_report_id: String(report.jusbrasil_report_id ?? ""),
+    search_name: report.search_name ?? "",
+    total_procs: Number(raw.total_procs ?? report.result_count ?? 0) || 0,
+    estimated_cost: Number(raw.total_cost ?? report.estimated_cost ?? 0) || 0,
+    parts,
+    message: report.outcome_message || "Prévia recuperada do histórico.",
+  };
+}
+
 export function ProcessSearchManagerV2() {
   const [name, setName] = useState("");
   const [preview, setPreview] = useState<NameSearchPreviewResponse | null>(null);
@@ -46,6 +100,19 @@ export function ProcessSearchManagerV2() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao preparar a prévia");
     }
+  };
+
+  const openSavedPreview = (report: any) => {
+    const restored = normalizeStoredPreview(report);
+    if (!restored) {
+      toast.error("Esta prévia não possui os dados necessários para ser reaberta.");
+      return;
+    }
+    setPreview(restored);
+    setName(restored.search_name);
+    setExcludedVariationIds([]);
+    window.requestAnimationFrame(() => window.scrollTo({ top: 0, behavior: "smooth" }));
+    toast.success("Prévia reaberta. Revise as variações e confirme quando desejar.");
   };
 
   const toggleVariation = (id: number | null, checked: boolean) => {
@@ -167,9 +234,22 @@ export function ProcessSearchManagerV2() {
           {!isLoading && !isError && reports.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma busca ainda.</p>}
           {!isLoading && !isError && reports.map((report) => {
             const meta = statusMeta[String(report.status)] ?? { label: String(report.status || "Status desconhecido"), className: "bg-muted text-muted-foreground" };
-            const extended = report as typeof report & { outcome_message?: string | null; estimated_cost?: number | null };
+            const extended = report as typeof report & { outcome_message?: string | null; estimated_cost?: number | null; preview_data?: unknown; jusbrasil_report_id?: string | null };
+            const isPreview = report.status === "preview";
             return (
-              <div key={report.id} className="rounded-lg border p-3">
+              <div
+                key={report.id}
+                className={`rounded-lg border p-3 ${isPreview ? "cursor-pointer transition-colors hover:bg-muted/40" : ""}`}
+                role={isPreview ? "button" : undefined}
+                tabIndex={isPreview ? 0 : undefined}
+                onClick={isPreview ? () => openSavedPreview(extended) : undefined}
+                onKeyDown={isPreview ? (event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    openSavedPreview(extended);
+                  }
+                } : undefined}
+              >
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{report.search_name || "Busca sem nome"}</p>
@@ -179,8 +259,9 @@ export function ProcessSearchManagerV2() {
                   <Badge variant="secondary" className={meta.className}>{meta.label}</Badge>
                 </div>
                 {extended.outcome_message && <div className="mt-3 rounded-md border bg-muted/40 p-3 text-sm">{extended.outcome_message}</div>}
+                {isPreview && <p className="mt-2 text-xs font-medium text-blue-700">Clique para reabrir a prévia, revisar as variações e confirmar.</p>}
                 {report.status === "processando" && (
-                  <Button size="sm" variant="outline" className="mt-3" onClick={() => handleCheck(report.id)} disabled={checkSearch.isPending}>
+                  <Button size="sm" variant="outline" className="mt-3" onClick={(event) => { event.stopPropagation(); handleCheck(report.id); }} disabled={checkSearch.isPending}>
                     <RefreshCw className="mr-2 h-3 w-3" />Verificar resultado
                   </Button>
                 )}
