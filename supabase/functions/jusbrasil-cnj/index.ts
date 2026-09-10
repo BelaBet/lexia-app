@@ -1,14 +1,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
 import { getJusbrasilApiToken } from "../_shared/jusbrasilToken.ts";
-
-const BASE_URL = "https://op.digesto.com.br/api/base-judicial/tribproc";
-
-function normalizeCnj(value: string): string | null {
-  const digits = value.replace(/\D/g, "");
-  if (digits.length !== 20) return null;
-  return `${digits.slice(0, 7)}-${digits.slice(7, 9)}.${digits.slice(9, 13)}.${digits.slice(13, 14)}.${digits.slice(14, 16)}.${digits.slice(16)}`;
-}
+import { normalizeCnj, buildJusbrasilCnjUrl } from "../_shared/jusbrasilCnj.ts";
 
 Deno.serve(async (req) => {
   const corsHeaders = buildCorsHeaders(req);
@@ -47,7 +40,7 @@ Deno.serve(async (req) => {
   const cnj = normalizeCnj(body.cnj ?? "");
   if (!cnj) return json({ error: "CNJ inválido. Informe um número com 20 dígitos." }, 400);
 
-  const requestUrl = `${BASE_URL}/${encodeURIComponent(cnj)}?tipo_numero=5`;
+  const requestUrl = buildJusbrasilCnjUrl(cnj);
 
   // Segurança financeira: por padrão esta rota NUNCA chama o JusBrasil.
   // O dry-run permite validar autenticação, formato do CNJ e montagem da
