@@ -4,11 +4,12 @@
 // supabase/scripts/agendar_busca_ativa_jusbrasil.sql para o agendamento.
 //
 // IMPORTANTE (white-label): a credencial do provedor JusBrasil é central da
-// plataforma e deve existir apenas como secret do backend
-// (JUSBRASIL_API_TOKEN). Não armazenamos nem exigimos api_key por tenant.
+// plataforma. Ela é resolvida pelo backend (Edge Secret ou Vault) e nunca é
+// lida da tabela publication_integrations.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { pollJusbrasilIntegration } from "../_shared/pollJusbrasilIntegration.ts";
+import { getJusbrasilApiToken } from "../_shared/jusbrasilToken.ts";
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
@@ -17,15 +18,9 @@ Deno.serve(async (req) => {
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const jusbrasilApiToken = Deno.env.get("JUSBRASIL_API_TOKEN");
 
   if (!supabaseUrl || !serviceRoleKey) {
     return new Response(JSON.stringify({ error: "Configuração do Supabase ausente" }), { status: 500 });
-  }
-
-  if (!jusbrasilApiToken) {
-    console.error("JUSBRASIL_API_TOKEN não configurado");
-    return new Response(JSON.stringify({ error: "Integração JusBrasil não configurada" }), { status: 500 });
   }
 
   // Esta função processa TODAS as integrações JusBrasil de TODAS as contas
@@ -38,6 +33,14 @@ Deno.serve(async (req) => {
   }
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+  let jusbrasilApiToken: string;
+  try {
+    jusbrasilApiToken = await getJusbrasilApiToken(adminClient);
+  } catch (error) {
+    console.error(error);
+    return new Response(JSON.stringify({ error: "Integração JusBrasil não configurada" }), { status: 500 });
+  }
 
   const { data: integrations, error: integrationsError } = await adminClient
     .from("publication_integrations")
@@ -57,6 +60,9 @@ Deno.serve(async (req) => {
   for (const integration of integrations || []) {
     if (!integration.monitor_name && !integration.monitor_oab) continue;
 
+    // Compatibilidade interna temporária: o helper compartilhado ainda
+    // tipa a credencial como api_key, mas ela nasce sempre do token central
+    // e nunca da empresa/tenant.
     const result = await pollJusbrasilIntegration(
       adminClient,
       { ...integration, api_key: jusbrasilApiToken },
