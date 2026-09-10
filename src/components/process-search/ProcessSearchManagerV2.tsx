@@ -7,15 +7,16 @@ import { Badge } from "@/components/ui/badge";
 import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { CnjSearchCard } from "@/components/process-search/CnjSearchCard";
+import { CompletedSearchResults } from "@/components/process-search/CompletedSearchResults";
 import { useSearchReports, useCheckNameSearch } from "@/hooks/useProcessSearch";
 import { useConfirmNameSearch, usePreviewNameSearch, type NameSearchPreviewResponse } from "@/hooks/useNameSearchFlow";
 
 const statusMeta: Record<string, { label: string; className: string }> = {
-  preview: { label: "Prévia — aguardando confirmação", className: "bg-blue-500/10 text-blue-700" },
-  criando: { label: "Criando busca...", className: "bg-gray-500/10 text-gray-600" },
+  preview: { label: "Prévia disponível", className: "bg-blue-500/10 text-blue-700" },
+  criando: { label: "Busca solicitada", className: "bg-gray-500/10 text-gray-600" },
   processando: { label: "Processando no JusBrasil", className: "bg-yellow-500/10 text-yellow-700" },
   concluido: { label: "Concluída", className: "bg-green-500/10 text-green-700" },
-  erro: { label: "Erro", className: "bg-red-500/10 text-red-700" },
+  erro: { label: "Falha na busca", className: "bg-red-500/10 text-red-700" },
 };
 
 type StoredPreview = {
@@ -72,10 +73,15 @@ function normalizeStoredPreview(report: any): NameSearchPreviewResponse | null {
   };
 }
 
-export function ProcessSearchManagerV2() {
+interface ProcessSearchManagerV2Props {
+  onOpenCase?: (caseId: string) => void;
+}
+
+export function ProcessSearchManagerV2({ onOpenCase }: ProcessSearchManagerV2Props) {
   const [name, setName] = useState("");
   const [preview, setPreview] = useState<NameSearchPreviewResponse | null>(null);
   const [excludedVariationIds, setExcludedVariationIds] = useState<Array<number | null>>([]);
+  const [expandedReportId, setExpandedReportId] = useState<string | null>(null);
   const { data: reports = [], isLoading, isError, error } = useSearchReports();
   const previewSearch = usePreviewNameSearch();
   const confirmSearch = useConfirmNameSearch();
@@ -143,6 +149,7 @@ export function ProcessSearchManagerV2() {
     try {
       const res = await checkSearch.mutateAsync(reportId);
       toast.success(res.message || `Status: ${res.status}`);
+      if (res.status === "concluido") setExpandedReportId(reportId);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : "Erro ao verificar busca");
     }
@@ -233,9 +240,13 @@ export function ProcessSearchManagerV2() {
           {isError && <div className="rounded-md border border-red-500/30 bg-red-500/5 p-3 text-sm text-red-700">Não foi possível carregar o histórico. {error instanceof Error ? error.message : ""}</div>}
           {!isLoading && !isError && reports.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma busca ainda.</p>}
           {!isLoading && !isError && reports.map((report) => {
-            const meta = statusMeta[String(report.status)] ?? { label: String(report.status || "Status desconhecido"), className: "bg-muted text-muted-foreground" };
+            const hasNoResults = report.status === "concluido" && Number(report.result_count ?? 0) === 0;
+            const meta = hasNoResults
+              ? { label: "Nenhum processo encontrado", className: "bg-gray-500/10 text-gray-700" }
+              : statusMeta[String(report.status)] ?? { label: String(report.status || "Status desconhecido"), className: "bg-muted text-muted-foreground" };
             const extended = report as typeof report & { outcome_message?: string | null; estimated_cost?: number | null; preview_data?: unknown; jusbrasil_report_id?: string | null };
             const isPreview = report.status === "preview";
+            const canShowResults = report.status === "concluido" && Number(report.result_count ?? 0) > 0;
             return (
               <div
                 key={report.id}
@@ -265,6 +276,12 @@ export function ProcessSearchManagerV2() {
                     <RefreshCw className="mr-2 h-3 w-3" />Verificar resultado
                   </Button>
                 )}
+                {canShowResults && (
+                  <Button size="sm" variant="outline" className="mt-3" onClick={() => setExpandedReportId((current) => current === report.id ? null : report.id)}>
+                    {expandedReportId === report.id ? "Ocultar resultados" : "Ver resultados"}
+                  </Button>
+                )}
+                {expandedReportId === report.id && canShowResults && <CompletedSearchResults reportId={report.id} onOpenCase={onOpenCase} />}
                 {report.error_message && <p className="mt-2 text-xs text-red-700">{report.error_message}</p>}
               </div>
             );
