@@ -7,7 +7,6 @@ export interface JusbrasilCnjResponse {
   cnj: string;
   provider?: string;
   operation?: string;
-  request?: { method: string; url: string };
   message?: string;
   data?: unknown;
   error?: string;
@@ -15,9 +14,9 @@ export interface JusbrasilCnjResponse {
 
 export function useJusbrasilCnj() {
   return useMutation({
-    mutationFn: async ({ cnj, dryRun = true }: { cnj: string; dryRun?: boolean }) => {
+    mutationFn: async ({ cnj, dryRun = true, confirmCharge = false }: { cnj: string; dryRun?: boolean; confirmCharge?: boolean }) => {
       const { data, error } = await supabase.functions.invoke("jusbrasil-cnj", {
-        body: { cnj, dry_run: dryRun },
+        body: { cnj, dry_run: dryRun, confirm_charge: confirmCharge },
       });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
