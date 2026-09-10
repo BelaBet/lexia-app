@@ -81,15 +81,22 @@ export function ProcessSearchManagerV2() {
           {!isLoading && !isError && reports.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma busca ainda.</p>}
           {!isLoading && !isError && reports.map((report) => {
             const meta = statusMeta[String(report.status)] ?? { label: String(report.status || "Status desconhecido"), className: "bg-muted text-muted-foreground" };
+            const outcomeMessage = (report as typeof report & { outcome_message?: string | null }).outcome_message;
             return (
               <div key={report.id} className="rounded-lg border p-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="min-w-0">
                     <p className="truncate text-sm font-medium">{report.search_name || "Busca sem nome"}</p>
                     <p className="text-xs text-muted-foreground">{report.result_count ?? 0} processo(s)</p>
+                    <p className="text-xs text-muted-foreground">Solicitada em {new Date(report.requested_at).toLocaleString("pt-BR")}</p>
                   </div>
                   <Badge variant="secondary" className={meta.className}>{meta.label}</Badge>
                 </div>
+                {outcomeMessage && (
+                  <div className="mt-3 rounded-md border bg-muted/40 p-3 text-sm">
+                    {outcomeMessage}
+                  </div>
+                )}
                 {report.status === "processando" && (
                   <Button size="sm" variant="outline" className="mt-3" onClick={() => handleCheck(report.id)} disabled={checkSearch.isPending}>
                     <RefreshCw className="mr-2 h-3 w-3" />Verificar resultado
