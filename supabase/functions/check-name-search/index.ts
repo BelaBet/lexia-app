@@ -1,12 +1,9 @@
-// "Verificar resultado" — chamado pela tela do CRM para tentar buscar o
-// export do relatório no JusBrasil. Se ainda não estiver pronto, apenas
-// informa que precisa aguardar (a busca pode levar até 72h). Quando pronto,
-// importa cada processo como um card novo em process_search_results
-// (status inicial "novo" no Kanban) e marca o relatório como concluído.
+// Verifica resultado de busca por nome no JusBrasil usando a credencial central da Lex IA.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
 import { fetchNameSearchExport } from "../_shared/jusbrasilNameSearch.ts";
+import { getJusbrasilApiToken } from "../_shared/jusbrasilToken.ts";
 
 Deno.serve(async (req) => {
   const corsHeaders = buildCorsHeaders(req);
@@ -29,16 +26,13 @@ Deno.serve(async (req) => {
   if (authError || !user) return json({ error: "Sessão inválida ou expirada" }, 401);
 
   let body: { report_id?: string };
-  try {
-    body = await req.json();
-  } catch {
-    return json({ error: "JSON inválido" }, 400);
-  }
+  try { body = await req.json(); }
+  catch { return json({ error: "JSON inválido" }, 400); }
+
   const reportId = body.report_id;
   if (!reportId) return json({ error: "report_id é obrigatório" }, 400);
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
-
   const { data: report, error: reportError } = await adminClient
     .from("process_search_reports")
     .select("id, user_id, jusbrasil_report_id, status, integration_id")
@@ -54,16 +48,12 @@ Deno.serve(async (req) => {
   if (report.status === "concluido") return json({ success: true, status: "concluido", already_done: true });
   if (!report.jusbrasil_report_id) return json({ error: "Busca ainda não foi iniciada corretamente" }, 400);
 
-  const { data: integration } = await adminClient
-    .from("publication_integrations")
-    .select("api_key")
-    .eq("id", report.integration_id)
-    .maybeSingle();
-
-  if (!integration?.api_key) return json({ error: "Integração JusBrasil não encontrada ou sem chave" }, 400);
+  let apiToken: string;
+  try { apiToken = await getJusbrasilApiToken(adminClient); }
+  catch { return json({ error: "Integração JusBrasil não configurada no backend" }, 500); }
 
   try {
-    const rows = await fetchNameSearchExport(integration.api_key, report.jusbrasil_report_id);
+    const rows = await fetchNameSearchExport(apiToken, report.jusbrasil_report_id);
     if (rows === null) {
       return json({ success: true, status: "processando", message: "Ainda processando no JusBrasil. Pode levar até 72 horas — tente novamente mais tarde." });
     }
@@ -72,14 +62,7 @@ Deno.serve(async (req) => {
     for (const row of rows) {
       const { error: upsertError } = await adminClient
         .from("process_search_results")
-        .upsert(
-          {
-            report_id: report.id,
-            user_id: user.id,
-            ...row,
-          },
-          { onConflict: "report_id,process_number" },
-        );
+        .upsert({ report_id: report.id, user_id: user.id, ...row }, { onConflict: "report_id,process_number" });
       if (upsertError) {
         console.error("Error upserting search result row:", upsertError);
         continue;
