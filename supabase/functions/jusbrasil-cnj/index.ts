@@ -14,6 +14,34 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Método não permitido" }, 405);
 
+  let body: { cnj?: string; dry_run?: boolean };
+  try {
+    body = await req.json();
+  } catch {
+    return json({ error: "JSON inválido" }, 400);
+  }
+
+  const cnj = normalizeCnj(body.cnj ?? "");
+  if (!cnj) return json({ error: "CNJ inválido. Informe um número com 20 dígitos." }, 400);
+
+  const requestUrl = buildJusbrasilCnjUrl(cnj);
+
+  // Segurança financeira: dry-run é público e não autentica, não acessa o
+  // token e não chama o JusBrasil. Serve para validar a função publicada,
+  // normalização do CNJ e montagem da requisição sem consumir crédito.
+  if (body.dry_run !== false) {
+    return json({
+      success: true,
+      dry_run: true,
+      cnj,
+      provider: "jusbrasil",
+      operation: "consulta_cnj",
+      request: { method: "GET", url: requestUrl },
+      message: "Pré-validação concluída. Nenhuma chamada ao JusBrasil foi executada.",
+    });
+  }
+
+  // Chamadas reais continuam exigindo usuário autenticado.
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return json({ error: "Autenticação obrigatória" }, 401);
 
@@ -30,35 +58,8 @@ Deno.serve(async (req) => {
   const { data: { user }, error: authError } = await userClient.auth.getUser();
   if (authError || !user) return json({ error: "Sessão inválida ou expirada" }, 401);
 
-  let body: { cnj?: string; dry_run?: boolean };
-  try {
-    body = await req.json();
-  } catch {
-    return json({ error: "JSON inválido" }, 400);
-  }
-
-  const cnj = normalizeCnj(body.cnj ?? "");
-  if (!cnj) return json({ error: "CNJ inválido. Informe um número com 20 dígitos." }, 400);
-
-  const requestUrl = buildJusbrasilCnjUrl(cnj);
-
-  // Segurança financeira: por padrão esta rota NUNCA chama o JusBrasil.
-  // O dry-run permite validar autenticação, formato do CNJ e montagem da
-  // requisição sem consumir consulta/crédito no provedor.
-  if (body.dry_run !== false) {
-    return json({
-      success: true,
-      dry_run: true,
-      cnj,
-      provider: "jusbrasil",
-      operation: "consulta_cnj",
-      request: { method: "GET", url: requestUrl },
-      message: "Pré-validação concluída. Nenhuma chamada ao JusBrasil foi executada.",
-    });
-  }
-
-  // Segundo cadeado: mesmo com dry_run=false, uma chamada real só é aceita
-  // quando o operador habilitar explicitamente a flag no backend.
+  // Segundo cadeado: mesmo autenticado, uma chamada real só é aceita quando
+  // o operador habilitar explicitamente a flag no backend.
   if (Deno.env.get("JUSBRASIL_REAL_CALLS_ENABLED") !== "true") {
     return json({
       error: "Chamadas reais ao JusBrasil estão bloqueadas pelo backend",
