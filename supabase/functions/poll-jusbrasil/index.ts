@@ -4,12 +4,10 @@
 // supabase/scripts/agendar_busca_ativa_jusbrasil.sql para o agendamento.
 //
 // IMPORTANTE (white-label): a credencial do provedor JusBrasil é central da
-// plataforma. Ela é resolvida pelo backend (Edge Secret ou Vault) e nunca é
-// lida da tabela publication_integrations.
+// plataforma. Esta função não recebe, lê nem persiste api_key por tenant.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
-import { pollJusbrasilIntegration } from "../_shared/pollJusbrasilIntegration.ts";
-import { getJusbrasilApiToken } from "../_shared/jusbrasilToken.ts";
+import { pollJusbrasilCentral } from "../_shared/pollJusbrasilCentral.ts";
 
 Deno.serve(async (req) => {
   if (req.method !== "POST") {
@@ -23,9 +21,6 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "Configuração do Supabase ausente" }), { status: 500 });
   }
 
-  // Esta função processa TODAS as integrações JusBrasil de TODAS as contas
-  // de uma vez (é o job agendado). Exige explicitamente a Service Role Key,
-  // impedindo que um usuário autenticado comum dispare a rotina global.
   const authHeader = req.headers.get("Authorization") || "";
   const providedToken = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : "";
   if (providedToken !== serviceRoleKey) {
@@ -33,14 +28,6 @@ Deno.serve(async (req) => {
   }
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
-
-  let jusbrasilApiToken: string;
-  try {
-    jusbrasilApiToken = await getJusbrasilApiToken(adminClient);
-  } catch (error) {
-    console.error(error);
-    return new Response(JSON.stringify({ error: "Integração JusBrasil não configurada" }), { status: 500 });
-  }
 
   const { data: integrations, error: integrationsError } = await adminClient
     .from("publication_integrations")
@@ -60,14 +47,7 @@ Deno.serve(async (req) => {
   for (const integration of integrations || []) {
     if (!integration.monitor_name && !integration.monitor_oab) continue;
 
-    // Compatibilidade interna temporária: o helper compartilhado ainda
-    // tipa a credencial como api_key, mas ela nasce sempre do token central
-    // e nunca da empresa/tenant.
-    const result = await pollJusbrasilIntegration(
-      adminClient,
-      { ...integration, api_key: jusbrasilApiToken },
-      "poll",
-    );
+    const result = await pollJusbrasilCentral(adminClient, integration, "poll");
     processed += 1;
     imported += result.imported;
     if (result.error) failed += 1;
