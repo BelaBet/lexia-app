@@ -11,8 +11,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
-import { pollJusbrasilIntegration } from "../_shared/pollJusbrasilIntegration.ts";
-import { getJusbrasilApiToken } from "../_shared/jusbrasilToken.ts";
+import { pollJusbrasilCentral } from "../_shared/pollJusbrasilCentral.ts";
 
 Deno.serve(async (req) => {
   const corsHeaders = buildCorsHeaders(req);
@@ -48,14 +47,6 @@ Deno.serve(async (req) => {
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-  let jusbrasilApiToken: string;
-  try {
-    jusbrasilApiToken = await getJusbrasilApiToken(adminClient);
-  } catch (error) {
-    console.error(error);
-    return json({ error: "Integração JusBrasil não configurada no backend" }, 500);
-  }
-
   const { data: integration, error: integrationError } = await adminClient
     .from("publication_integrations")
     .select("id, user_id, source, monitor_name, monitor_oab, jusbrasil_report_id, price_per_search, linked_client_id")
@@ -72,11 +63,8 @@ Deno.serve(async (req) => {
     return json({ error: "Busca manual disponível apenas para integrações JusBrasil" }, 400);
   }
 
-  const result = await pollJusbrasilIntegration(
-    adminClient,
-    { ...integration, api_key: jusbrasilApiToken },
-    "manual",
-  );
+  const { source: _source, ...centralIntegration } = integration;
+  const result = await pollJusbrasilCentral(adminClient, centralIntegration, "manual");
   if (result.error) return json({ error: result.error, imported: result.imported }, 502);
   return json({ success: true, imported: result.imported });
 });
