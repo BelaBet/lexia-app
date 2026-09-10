@@ -1,11 +1,10 @@
-// Inicia uma busca de processos por NOME (CRM de busca) — chamado pelo
-// botão "Buscar" na nova tela. Cria o relatório no JusBrasil, já inicia a
-// cobrança (busca paga, pode levar até 72h para ficar pronta) e grava tudo
-// em process_search_reports para acompanhamento.
+// Inicia uma busca de processos por NOME no JusBrasil — ação manual e paga.
+// A credencial do provedor é central da Lex IA e nunca fica por tenant.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
 import { createNameSearchReport, startNameSearchBilling } from "../_shared/jusbrasilNameSearch.ts";
+import { getJusbrasilApiToken } from "../_shared/jusbrasilToken.ts";
 
 Deno.serve(async (req) => {
   const corsHeaders = buildCorsHeaders(req);
@@ -28,47 +27,35 @@ Deno.serve(async (req) => {
   if (authError || !user) return json({ error: "Sessão inválida ou expirada" }, 401);
 
   let body: { name?: string };
-  try {
-    body = await req.json();
-  } catch {
-    return json({ error: "JSON inválido" }, 400);
-  }
+  try { body = await req.json(); }
+  catch { return json({ error: "JSON inválido" }, 400); }
+
   const name = (body.name ?? "").trim();
   if (!name || name.length < 3) return json({ error: "Informe um nome com pelo menos 3 letras" }, 400);
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
-  // Usa a integração JusBrasil já cadastrada em Integrações (mesma api_key
-  // do monitoramento) — não pede uma chave nova.
-  //
-  // BUG-03 (corrigido): esta consulta esperava no máximo 1 linha
-  // (.maybeSingle()), mas desde o fluxo "Novo Cliente" (ver
-  // useNewClientSearch.ts) uma conta pode ter VÁRIAS integrações JusBrasil
-  // ativas — uma por cliente vinculado (linked_client_id), além de uma
-  // eventual integração geral de monitoramento. Com 2+ linhas,
-  // .maybeSingle() falha (PGRST116) e a busca por nome parava de funcionar
-  // inteiramente para essas contas. A busca por nome não é de um cliente
-  // específico, então preferimos a integração "geral" (sem
-  // linked_client_id); na ausência dela, qualquer uma serve — todas
-  // compartilham a mesma api_key da conta (ver findExistingApiKey em
-  // useNewClientSearch.ts).
   const { data: integrations, error: integrationError } = await adminClient
     .from("publication_integrations")
-    .select("id, api_key, price_per_name_search, linked_client_id")
+    .select("id, price_per_name_search, linked_client_id")
     .eq("user_id", user.id)
     .eq("source", "jusbrasil")
     .eq("is_active", true)
-    .not("api_key", "is", null)
     .order("created_at", { ascending: true });
 
   if (integrationError) {
     console.error("Error loading jusbrasil integration:", integrationError);
     return json({ error: "Erro ao carregar integração JusBrasil" }, 500);
   }
+
   const integration = integrations?.find((i) => !i.linked_client_id) ?? integrations?.[0] ?? null;
-  if (!integration?.api_key) {
-    return json({ error: "Cadastre e ative sua integração JusBrasil em Integrações antes de buscar por nome." }, 400);
+  if (!integration) {
+    return json({ error: "Ative a integração JusBrasil antes de buscar por nome." }, 400);
   }
+
+  let apiToken: string;
+  try { apiToken = await getJusbrasilApiToken(adminClient); }
+  catch { return json({ error: "Integração JusBrasil não configurada no backend" }, 500); }
 
   const { data: report, error: insertError } = await adminClient
     .from("process_search_reports")
@@ -82,21 +69,14 @@ Deno.serve(async (req) => {
   }
 
   try {
-    const { reportId } = await createNameSearchReport(integration.api_key, name, `Busca: ${name}`);
-    await startNameSearchBilling(integration.api_key, reportId);
+    const { reportId } = await createNameSearchReport(apiToken, name, `Busca: ${name}`);
+    await startNameSearchBilling(apiToken, reportId);
 
     await adminClient
       .from("process_search_reports")
-      .update({
-        jusbrasil_report_id: reportId,
-        status: "processando",
-        billed_at: new Date().toISOString(),
-      })
+      .update({ jusbrasil_report_id: reportId, status: "processando", billed_at: new Date().toISOString() })
       .eq("id", report.id);
 
-    // Usa o preço configurado em Integrações (price_per_name_search) — antes
-    // era gravado sempre 0, mesmo com um valor configurado, o que zerava o
-    // contador financeiro independente da configuração comercial.
     const unitPrice = integration.price_per_name_search ?? 0;
     await adminClient.from("process_search_charges").insert({
       user_id: user.id,
