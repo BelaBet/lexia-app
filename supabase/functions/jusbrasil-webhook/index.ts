@@ -21,9 +21,6 @@ function isUuid(value: string): boolean {
   return /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value);
 }
 
-// O JusBrasil devolve `user_custom` no webhook como `source_user_custom`.
-// Quando mais de uma origem gerou o mesmo evento, os valores podem vir
-// separados por `;`. Na Lex IA usamos o UUID de publication_integrations.
 function sourceIntegrationIds(event: JusbrasilEvent): string[] {
   return Array.from(new Set(
     String(event.source_user_custom ?? "")
@@ -104,9 +101,6 @@ async function resolveDestinations(
 ): Promise<Destination[]> {
   const integrationIds = sourceIntegrationIds(event);
 
-  // Rota principal e segura para white-label: o evento volta com o UUID
-  // exato da integração enviado no `user_custom` quando o monitoramento foi
-  // registrado. Assim não existe inferência de tenant por número do processo.
   if (integrationIds.length > 0) {
     const { data, error } = await admin
       .from("publication_integrations")
@@ -123,9 +117,6 @@ async function resolveDestinations(
     return (data ?? []).map((row) => ({ user_id: row.user_id, integration_id: row.id }));
   }
 
-  // Compatibilidade temporária com monitoramentos antigos que foram criados
-  // sem `user_custom`. Para evitar vazamento entre tenants, só fazemos
-  // fallback por CNJ quando existe EXATAMENTE um proprietário possível.
   if (!event.target_number) return [];
 
   const { data, error } = await admin
@@ -165,35 +156,43 @@ Deno.serve(async (req) => {
     return json({ error: "JSON inválido" }, 400);
   }
 
-  // A documentação do JusBrasil define o payload de webhook como uma lista.
-  // Mantemos compatibilidade com objeto único, mas normalizamos tudo aqui.
   const events = Array.isArray(body) ? body as JusbrasilEvent[] : [body as JusbrasilEvent];
 
-  // O provedor testa a URL enviando []. Esse handshake é seguro, não toca
-  // banco e deve funcionar antes mesmo de `api_name` estar configurado.
+  // Handshake oficial do JusBrasil ao cadastrar a URL: POST com [].
   if (events.length === 0) {
     return json({ success: true, received: 0, imported: 0, unrouted: 0 });
   }
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const expectedApiName = Deno.env.get("JUSBRASIL_WEBHOOK_API_NAME")?.trim();
-
   if (!supabaseUrl || !serviceRoleKey) {
     return json({ error: "Configuração do Supabase ausente" }, 500);
   }
-  if (!expectedApiName) {
+
+  const admin = createClient(supabaseUrl, serviceRoleKey);
+  let expectedSecret = Deno.env.get("JUSBRASIL_WEBHOOK_API_NAME")?.trim() || null;
+
+  // Preferimos Vault para manter toda a configuração centralizada na Lex IA.
+  if (!expectedSecret) {
+    const { data, error } = await admin.rpc("get_jusbrasil_webhook_api_name");
+    if (!error && typeof data === "string" && data.trim()) expectedSecret = data.trim();
+  }
+
+  if (!expectedSecret) {
     return json({ error: "Webhook JusBrasil ainda não habilitado no backend" }, 503);
   }
 
-  // O `api_name` é configurado no user_company do JusBrasil e enviado em
-  // cada evento. Eventos reais só entram se TODOS os itens do lote tiverem
-  // exatamente o valor configurado no backend.
-  if (events.some((event) => !event.api_name || event.api_name !== expectedApiName)) {
+  const requestSecret = new URL(req.url).searchParams.get("token");
+  const authenticatedByUrl = requestSecret === expectedSecret;
+  const authenticatedByApiName = events.every((event) => event.api_name === expectedSecret);
+
+  // O JusBrasil não suporta cabeçalho de autenticação customizado para o
+  // webhook. A Lex aceita o segredo central na URL configurada no provedor
+  // e também aceita api_name quando ele estiver disponível na user_company.
+  if (!authenticatedByUrl && !authenticatedByApiName) {
     return json({ error: "Origem do webhook não reconhecida" }, 401);
   }
 
-  const admin = createClient(supabaseUrl, serviceRoleKey);
   let imported = 0;
   let unrouted = 0;
 
