@@ -1,0 +1,381 @@
+import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useNavigate } from "react-router-dom";
+import {
+  ArrowLeft,
+  Building2,
+  CalendarDays,
+  Download,
+  FileSpreadsheet,
+  FolderOpen,
+  Search,
+  Scale,
+  RefreshCw,
+  ChevronRight,
+} from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+
+interface ReportRow {
+  id: string;
+  search_name: string;
+  status: string;
+  result_count: number | null;
+  preview_data: Record<string, unknown> | null;
+  requested_at: string;
+  completed_at: string | null;
+  updated_at: string;
+}
+
+interface ResultRow {
+  id: string;
+  report_id: string;
+  process_number: string | null;
+  tribunal: string | null;
+  data_distribuicao: string | null;
+  area: string | null;
+  natureza: string | null;
+  valor: number | null;
+  partes_ativas: unknown;
+  partes_passivas: unknown;
+  advogados: unknown;
+  comarca: string | null;
+  foro: string | null;
+  vara: string | null;
+  ultima_movimentacao_data: string | null;
+  ultima_movimentacao_tipo: string | null;
+  ultima_movimentacao_texto: string | null;
+  juiz: string | null;
+  status_processual: string | null;
+  case_id: string | null;
+  autos_status: string | null;
+  raw_data: Record<string, unknown> | null;
+}
+
+const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+const fmtDate = (value?: string | null) => {
+  if (!value) return "—";
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString("pt-BR");
+};
+
+const textValue = (value: unknown) => {
+  if (value == null) return "";
+  if (typeof value === "string") return value;
+  if (Array.isArray(value)) {
+    return value
+      .map((item) => (typeof item === "string" ? item : JSON.stringify(item)))
+      .join(" | ");
+  }
+  return JSON.stringify(value);
+};
+
+const csvEscape = (value: unknown) => `"${String(value ?? "").replace(/"/g, '""')}"`;
+
+function downloadCsv(filename: string, rows: ResultRow[]) {
+  const headers = [
+    "Número do processo",
+    "Tribunal",
+    "Área",
+    "Natureza",
+    "Valor",
+    "Distribuição",
+    "Última movimentação",
+    "Tipo da última movimentação",
+    "Descrição da última movimentação",
+    "Comarca",
+    "Foro",
+    "Vara",
+    "Juiz",
+    "Status",
+    "Partes ativas",
+    "Partes passivas",
+    "Advogados",
+  ];
+
+  const lines = rows.map((row) => [
+    row.process_number,
+    row.tribunal,
+    row.area,
+    row.natureza,
+    row.valor,
+    row.data_distribuicao,
+    row.ultima_movimentacao_data,
+    row.ultima_movimentacao_tipo,
+    row.ultima_movimentacao_texto,
+    row.comarca,
+    row.foro,
+    row.vara,
+    row.juiz,
+    row.status_processual,
+    textValue(row.partes_ativas),
+    textValue(row.partes_passivas),
+    textValue(row.advogados),
+  ]);
+
+  const csv = [headers, ...lines].map((line) => line.map(csvEscape).join(";")).join("\n");
+  const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function getExpectedTotal(report: ReportRow) {
+  const preview = report.preview_data as { total_procs?: unknown } | null;
+  const expected = Number(preview?.total_procs);
+  if (Number.isFinite(expected) && expected >= 0) return expected;
+  return Number(report.result_count || 0);
+}
+
+export function ProcessPortfolio() {
+  const navigate = useNavigate();
+  const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+
+  const { data, isLoading, refetch, isFetching } = useQuery({
+    queryKey: ["cases", "portfolio"],
+    queryFn: async () => {
+      const [{ data: reports, error: reportsError }, { data: results, error: resultsError }] = await Promise.all([
+        supabase.from("process_search_reports").select("*").order("created_at", { ascending: false }),
+        supabase.from("process_search_results").select("*").order("data_distribuicao", { ascending: false }),
+      ]);
+      if (reportsError) throw reportsError;
+      if (resultsError) throw resultsError;
+      return { reports: (reports || []) as ReportRow[], results: (results || []) as ResultRow[] };
+    },
+    refetchOnWindowFocus: true,
+  });
+
+  const reports = data?.reports || [];
+  const results = data?.results || [];
+
+  const reportResults = useMemo(() => {
+    const grouped = new Map<string, ResultRow[]>();
+    results.forEach((result) => {
+      const current = grouped.get(result.report_id) || [];
+      current.push(result);
+      grouped.set(result.report_id, current);
+    });
+    return grouped;
+  }, [results]);
+
+  const selectedReport = reports.find((report) => report.id === selectedReportId) || null;
+  const selectedResults = selectedReport ? reportResults.get(selectedReport.id) || [] : [];
+
+  const filteredResults = useMemo(() => {
+    const term = searchTerm.trim().toLowerCase();
+    if (!term) return selectedResults;
+    return selectedResults.filter((row) =>
+      [row.process_number, row.tribunal, row.area, row.natureza, row.comarca, row.vara, row.status_processual]
+        .some((value) => String(value || "").toLowerCase().includes(term)),
+    );
+  }, [selectedResults, searchTerm]);
+
+  if (isLoading) {
+    return <div className="legal-card"><p className="text-sm text-muted-foreground">Carregando processos...</p></div>;
+  }
+
+  if (selectedReport) {
+    const expectedTotal = getExpectedTotal(selectedReport);
+    const totalValue = selectedResults.reduce((sum, item) => sum + Number(item.valor || 0), 0);
+    const latestMovement = selectedResults
+      .map((item) => item.ultima_movimentacao_data)
+      .filter(Boolean)
+      .sort()
+      .at(-1) || null;
+
+    return (
+      <div className="space-y-6">
+        <div className="legal-card">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <Button variant="outline" size="sm" onClick={() => { setSelectedReportId(null); setSearchTerm(""); }}>
+                <ArrowLeft className="mr-2 h-4 w-4" /> Voltar para pesquisas
+              </Button>
+              <p className="mt-5 text-xs font-medium uppercase tracking-wide text-muted-foreground">Pesquisa processual</p>
+              <h1 className="mt-1 font-serif text-2xl font-bold md:text-3xl">{selectedReport.search_name}</h1>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Badge variant="secondary">{expectedTotal} processo(s) identificados</Badge>
+                <Badge variant="outline">{selectedResults.length} disponível(is) na LexIA</Badge>
+                <Badge variant="outline">Atualizado em {fmtDate(selectedReport.updated_at)}</Badge>
+              </div>
+            </div>
+            <Button onClick={() => downloadCsv(`${selectedReport.search_name}-processos.csv`, selectedResults)} disabled={selectedResults.length === 0}>
+              <FileSpreadsheet className="mr-2 h-4 w-4" /> Baixar relatório completo
+            </Button>
+          </div>
+
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-xl border p-4"><p className="text-xs text-muted-foreground">Processos disponíveis</p><p className="mt-1 text-2xl font-bold">{selectedResults.length}</p></div>
+            <div className="rounded-xl border p-4"><p className="text-xs text-muted-foreground">Valor total</p><p className="mt-1 text-xl font-bold">{currency.format(totalValue)}</p></div>
+            <div className="rounded-xl border p-4"><p className="text-xs text-muted-foreground">Última movimentação</p><p className="mt-1 text-xl font-bold">{fmtDate(latestMovement)}</p></div>
+            <div className="rounded-xl border p-4"><p className="text-xs text-muted-foreground">Última sincronização</p><p className="mt-1 text-xl font-bold">{fmtDate(selectedReport.updated_at)}</p></div>
+          </div>
+        </div>
+
+        <div className="legal-card !p-4">
+          <div className="relative">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input
+              value={searchTerm}
+              onChange={(event) => setSearchTerm(event.target.value)}
+              placeholder="Buscar por número, tribunal, área, natureza, comarca ou status..."
+              className="legal-input pl-10"
+            />
+          </div>
+        </div>
+
+        <div className="overflow-hidden rounded-xl border bg-card">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1100px] text-sm">
+              <thead className="border-b bg-muted/40 text-left text-xs uppercase tracking-wide text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3">Processo</th>
+                  <th className="px-4 py-3">Tribunal</th>
+                  <th className="px-4 py-3">Natureza</th>
+                  <th className="px-4 py-3">Valor</th>
+                  <th className="px-4 py-3">Distribuição</th>
+                  <th className="px-4 py-3">Última movimentação</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3 text-right">Ações</th>
+                </tr>
+              </thead>
+              <tbody>
+                {filteredResults.map((row) => (
+                  <tr
+                    key={row.id}
+                    className="cursor-pointer border-b last:border-0 hover:bg-muted/30"
+                    onClick={() => row.case_id && navigate(`/processos/${row.case_id}`)}
+                  >
+                    <td className="px-4 py-3 font-mono text-xs font-medium">{row.process_number || "—"}</td>
+                    <td className="px-4 py-3">{row.tribunal || "—"}</td>
+                    <td className="px-4 py-3">{row.natureza || row.area || "—"}</td>
+                    <td className="px-4 py-3">{row.valor != null ? currency.format(row.valor) : "—"}</td>
+                    <td className="px-4 py-3">{fmtDate(row.data_distribuicao)}</td>
+                    <td className="px-4 py-3">
+                      <div className="max-w-[260px]">
+                        <p>{fmtDate(row.ultima_movimentacao_data)}</p>
+                        <p className="truncate text-xs text-muted-foreground">{row.ultima_movimentacao_tipo || row.ultima_movimentacao_texto || "Sem movimentação informada"}</p>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3"><Badge variant="outline">{row.status_processual || "—"}</Badge></td>
+                    <td className="px-4 py-3">
+                      <div className="flex justify-end gap-2">
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          title="Baixar dados deste processo"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            downloadCsv(`${row.process_number || "processo"}.csv`, [row]);
+                          }}
+                        >
+                          <Download className="h-4 w-4" />
+                        </Button>
+                        <Button
+                          size="sm"
+                          disabled={!row.case_id}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (row.case_id) navigate(`/processos/${row.case_id}`);
+                          }}
+                        >
+                          Ver detalhes <ChevronRight className="ml-1 h-4 w-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {filteredResults.length === 0 && (
+            <div className="p-10 text-center text-sm text-muted-foreground">Nenhum processo encontrado para este filtro.</div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="legal-card">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div className="flex items-center gap-3">
+            <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-gold-light">
+              <FolderOpen className="h-6 w-6 text-gold-warm" />
+            </div>
+            <div>
+              <h2 className="font-serif text-2xl font-semibold">Processos</h2>
+              <p className="text-muted-foreground">Visão organizada por pesquisa, empresa ou pessoa consultada</p>
+            </div>
+          </div>
+          <Button variant="outline" onClick={() => refetch()} disabled={isFetching}>
+            <RefreshCw className={`mr-2 h-4 w-4 ${isFetching ? "animate-spin" : ""}`} /> Atualizar
+          </Button>
+        </div>
+      </div>
+
+      {reports.length === 0 ? (
+        <div className="legal-card py-12 text-center">
+          <Building2 className="mx-auto h-10 w-10 text-muted-foreground" />
+          <p className="mt-3 font-medium">Nenhuma pesquisa processual encontrada.</p>
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 gap-5 xl:grid-cols-2">
+          {reports.map((report) => {
+            const items = reportResults.get(report.id) || [];
+            const expectedTotal = getExpectedTotal(report);
+            const totalValue = items.reduce((sum, item) => sum + Number(item.valor || 0), 0);
+            const latestMovement = items.map((item) => item.ultima_movimentacao_data).filter(Boolean).sort().at(-1) || null;
+
+            return (
+              <article
+                key={report.id}
+                className="legal-card cursor-pointer transition-all hover:-translate-y-0.5 hover:shadow-md"
+                onClick={() => setSelectedReportId(report.id)}
+              >
+                <div className="flex items-start justify-between gap-4">
+                  <div>
+                    <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Nome pesquisado</p>
+                    <h3 className="mt-1 font-serif text-xl font-bold">{report.search_name}</h3>
+                  </div>
+                  <Badge variant={report.status === "concluido" ? "secondary" : "outline"}>{report.status}</Badge>
+                </div>
+
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                  <div className="rounded-lg bg-muted/40 p-3"><p className="text-xs text-muted-foreground">Quantidade de processos</p><p className="mt-1 text-2xl font-bold">{expectedTotal}</p>{items.length !== expectedTotal && <p className="text-xs text-muted-foreground">{items.length} disponíveis agora</p>}</div>
+                  <div className="rounded-lg bg-muted/40 p-3"><p className="flex items-center gap-1 text-xs text-muted-foreground"><Scale className="h-3.5 w-3.5" /> Valor total</p><p className="mt-1 text-lg font-bold">{currency.format(totalValue)}</p></div>
+                  <div className="rounded-lg bg-muted/40 p-3"><p className="flex items-center gap-1 text-xs text-muted-foreground"><CalendarDays className="h-3.5 w-3.5" /> Última atualização</p><p className="mt-1 font-semibold">{fmtDate(report.updated_at)}</p></div>
+                  <div className="rounded-lg bg-muted/40 p-3"><p className="text-xs text-muted-foreground">Última movimentação</p><p className="mt-1 font-semibold">{fmtDate(latestMovement)}</p></div>
+                </div>
+
+                <div className="mt-5 flex flex-col gap-2 border-t pt-4 sm:flex-row sm:items-center sm:justify-between">
+                  <p className="text-xs text-muted-foreground">Clique no quadro para ver todos os processos.</p>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={items.length === 0}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      downloadCsv(`${report.search_name}-processos.csv`, items);
+                    }}
+                  >
+                    <Download className="mr-2 h-4 w-4" /> Baixar relatório
+                  </Button>
+                </div>
+              </article>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
