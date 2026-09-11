@@ -18,7 +18,7 @@ export const DEFAULT_BRANDING: Pick<
   WhiteLabelSettings,
   "brand_name" | "tagline" | "logo_url" | "primary_color" | "sidebar_color"
 > = {
-  brand_name: "LexIA",
+  brand_name: "TK2 Juris",
   tagline: "Gestor Inteligente de Processos",
   logo_url: null,
   primary_color: "#B8860B",
