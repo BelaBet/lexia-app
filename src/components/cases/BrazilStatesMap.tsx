@@ -66,7 +66,7 @@ export function BrazilStatesMap({ counts }: { counts: StateCount[] }) {
         if (!svg) throw new Error("SVG não encontrado");
         svg.removeAttribute("width");
         svg.removeAttribute("height");
-        svg.setAttribute("class", "h-auto w-full max-w-[520px]");
+        svg.setAttribute("class", "h-auto w-full max-w-[700px]");
         setSvgMarkup(svg.outerHTML);
         setError(false);
       })
@@ -138,17 +138,17 @@ export function BrazilStatesMap({ counts }: { counts: StateCount[] }) {
 
   return (
     <section className="rounded-xl border bg-card p-3 shadow-sm sm:p-4 lg:p-5">
-      <div className="mb-4 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
+      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-end sm:justify-between">
         <div>
-          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Distribuição geográfica</p>
+          <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">Distribuição geográfica</p>
           <h3 className="mt-1 text-base font-semibold sm:text-lg">Processos por estado</h3>
         </div>
-        <p className="text-xs text-muted-foreground">{total} processo(s) com UF identificada</p>
+        <p className="text-[11px] text-muted-foreground">{total} processo(s) com UF identificada</p>
       </div>
 
-      <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-center">
-        <div>
-          <div className="flex min-h-[320px] items-center justify-center rounded-lg border bg-[#F7F7F5] p-2 sm:min-h-[390px] sm:p-4">
+      <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_150px] lg:items-start">
+        <div className="min-w-0">
+          <div className="flex min-h-[390px] items-center justify-center rounded-lg border bg-[#F7F7F5] p-1 sm:min-h-[470px] sm:p-2 lg:min-h-[520px]">
             {error ? (
               <div className="max-w-sm text-center text-sm text-muted-foreground">
                 <MapPin className="mx-auto mb-2 h-6 w-6" />
@@ -161,32 +161,30 @@ export function BrazilStatesMap({ counts }: { counts: StateCount[] }) {
             )}
           </div>
 
-          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-[11px] text-muted-foreground">
+          <div className="mt-2 flex flex-wrap items-center gap-x-2.5 gap-y-1.5 text-[10px] text-muted-foreground">
             <span className="font-medium text-foreground">Concentração:</span>
-            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: PALETTE.empty }} />0</span>
-            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: PALETTE.paleBlue }} />Baixa</span>
-            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: PALETTE.slate }} />Média</span>
-            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: PALETTE.navyMid }} />Alta</span>
-            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: PALETTE.navy }} />Muito alta</span>
+            <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-sm" style={{ background: PALETTE.empty }} />0</span>
+            <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-sm" style={{ background: PALETTE.paleBlue }} />Baixa</span>
+            <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-sm" style={{ background: PALETTE.slate }} />Média</span>
+            <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-sm" style={{ background: PALETTE.navyMid }} />Alta</span>
+            <span className="flex items-center gap-1"><i className="h-2 w-2 rounded-sm" style={{ background: PALETTE.navy }} />Muito alta</span>
           </div>
         </div>
 
-        <div className="space-y-2">
-          <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-1">
+        <div className="min-w-0">
+          <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Estados</p>
+          <div className="grid grid-cols-3 gap-1 sm:grid-cols-5 lg:grid-cols-1">
             {ranked.map(({ uf, count }) => (
-              <div key={uf} className="flex items-center justify-between rounded-md border bg-background px-3 py-2 text-sm">
-                <span className="flex items-center gap-2 font-semibold">
-                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: stateColor(count, maxCount) }} />
+              <div key={uf} className="flex min-w-0 items-center justify-between rounded border bg-background px-2 py-1 text-[10px] leading-4 sm:text-[11px]">
+                <span className="flex items-center gap-1.5 font-semibold">
+                  <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: stateColor(count, maxCount) }} />
                   {uf}
                 </span>
-                <span className="tabular-nums text-muted-foreground">{count}</span>
+                <span className="ml-1 tabular-nums text-muted-foreground">{count}</span>
               </div>
             ))}
           </div>
-          {!ranked.length && <p className="text-sm text-muted-foreground">Nenhum estado identificado nos processos.</p>}
-          <div className="pt-2 text-xs leading-5 text-muted-foreground">
-            Azul-marinho indica maior concentração. O contorno dourado destaca o estado ao passar o cursor.
-          </div>
+          {!ranked.length && <p className="text-[11px] text-muted-foreground">Nenhum estado identificado.</p>}
         </div>
       </div>
     </section>
