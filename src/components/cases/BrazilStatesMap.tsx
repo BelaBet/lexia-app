@@ -5,6 +5,17 @@ export type StateCount = { uf: string; count: number };
 
 const MAP_URL = "https://raw.githubusercontent.com/LucasBassetti/mapa-brasil-svg/master/index.html";
 
+const PALETTE = {
+  navy: "#18324A",
+  navyMid: "#496D82",
+  slate: "#8FA8B5",
+  paleBlue: "#D6E0E5",
+  empty: "#ECEDEA",
+  gold: "#C6A15B",
+  border: "#FFFFFF",
+  text: "#263746",
+};
+
 const nameToUf: Record<string, string> = {
   acre: "AC", alagoas: "AL", amapa: "AP", amazonas: "AM", bahia: "BA", ceara: "CE",
   distrito_federal: "DF", espirito_santo: "ES", goias: "GO", maranhao: "MA", mato_grosso: "MT",
@@ -21,6 +32,15 @@ function normalizeName(value: string) {
     .toLowerCase()
     .trim()
     .replace(/\s+/g, "_");
+}
+
+function stateColor(count: number, maxCount: number) {
+  if (count <= 0) return PALETTE.empty;
+  const ratio = count / Math.max(1, maxCount);
+  if (ratio <= 0.2) return PALETTE.paleBlue;
+  if (ratio <= 0.45) return PALETTE.slate;
+  if (ratio <= 0.7) return PALETTE.navyMid;
+  return PALETTE.navy;
 }
 
 export function BrazilStatesMap({ counts }: { counts: StateCount[] }) {
@@ -59,32 +79,52 @@ export function BrazilStatesMap({ counts }: { counts: StateCount[] }) {
   useEffect(() => {
     if (!svgMarkup || !containerRef.current) return;
     const anchors = Array.from(containerRef.current.querySelectorAll<SVGAElement>("a.estado"));
+
     anchors.forEach((anchor) => {
       const stateName = anchor.getAttribute("name") || "";
       const uf = nameToUf[normalizeName(stateName)] || "";
       const count = countMap.get(uf) || 0;
-      const intensity = count / maxCount;
+      const fill = stateColor(count, maxCount);
       const paths = Array.from(anchor.querySelectorAll<SVGPathElement>("path:not(.circle)"));
       const circles = Array.from(anchor.querySelectorAll<SVGPathElement>("path.circle"));
       const label = anchor.querySelector<SVGTextElement>("text");
 
       paths.forEach((path) => {
-        path.style.fill = count > 0
-          ? `hsl(var(--primary) / ${Math.max(0.22, 0.28 + intensity * 0.72)})`
-          : "hsl(var(--muted))";
-        path.style.stroke = "hsl(var(--background))";
-        path.style.strokeWidth = "1.3";
-        path.style.transition = "fill .18s ease, opacity .18s ease";
+        path.style.fill = fill;
+        path.style.stroke = PALETTE.border;
+        path.style.strokeWidth = "1.25";
+        path.style.transition = "fill .18s ease, stroke .18s ease, stroke-width .18s ease, filter .18s ease";
       });
+
       circles.forEach((circle) => {
-        circle.style.fill = count > 0 ? "hsl(var(--primary))" : "hsl(var(--muted-foreground) / .35)";
+        circle.style.fill = count > 0 ? PALETTE.gold : "#B8C0C5";
+        circle.style.stroke = PALETTE.border;
+        circle.style.strokeWidth = "0.8";
       });
+
       if (label) {
-        label.style.fill = count > 0 ? "hsl(var(--primary-foreground))" : "hsl(var(--foreground))";
+        const darkState = count > 0 && count / maxCount > 0.45;
+        label.style.fill = darkState ? "#FFFFFF" : PALETTE.text;
         label.style.fontWeight = "700";
         label.style.pointerEvents = "none";
       }
+
       anchor.style.cursor = "default";
+      anchor.onmouseenter = () => {
+        paths.forEach((path) => {
+          path.style.stroke = PALETTE.gold;
+          path.style.strokeWidth = "2.4";
+          path.style.filter = "drop-shadow(0 2px 3px rgba(24, 50, 74, .16))";
+        });
+      };
+      anchor.onmouseleave = () => {
+        paths.forEach((path) => {
+          path.style.stroke = PALETTE.border;
+          path.style.strokeWidth = "1.25";
+          path.style.filter = "none";
+        });
+      };
+
       let title = anchor.querySelector("title");
       if (!title) {
         title = document.createElementNS("http://www.w3.org/2000/svg", "title");
@@ -107,31 +147,45 @@ export function BrazilStatesMap({ counts }: { counts: StateCount[] }) {
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_260px] lg:items-center">
-        <div className="flex min-h-[320px] items-center justify-center rounded-lg border bg-muted/10 p-2 sm:min-h-[390px] sm:p-4">
-          {error ? (
-            <div className="max-w-sm text-center text-sm text-muted-foreground">
-              <MapPin className="mx-auto mb-2 h-6 w-6" />
-              Não foi possível carregar a malha do Brasil agora.
-            </div>
-          ) : !svgMarkup ? (
-            <div className="text-sm text-muted-foreground">Carregando mapa do Brasil...</div>
-          ) : (
-            <div ref={containerRef} className="w-full [&_svg]:mx-auto" dangerouslySetInnerHTML={{ __html: svgMarkup }} />
-          )}
+        <div>
+          <div className="flex min-h-[320px] items-center justify-center rounded-lg border bg-[#F7F7F5] p-2 sm:min-h-[390px] sm:p-4">
+            {error ? (
+              <div className="max-w-sm text-center text-sm text-muted-foreground">
+                <MapPin className="mx-auto mb-2 h-6 w-6" />
+                Não foi possível carregar a malha do Brasil agora.
+              </div>
+            ) : !svgMarkup ? (
+              <div className="text-sm text-muted-foreground">Carregando mapa do Brasil...</div>
+            ) : (
+              <div ref={containerRef} className="w-full [&_svg]:mx-auto" dangerouslySetInnerHTML={{ __html: svgMarkup }} />
+            )}
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-[11px] text-muted-foreground">
+            <span className="font-medium text-foreground">Concentração:</span>
+            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: PALETTE.empty }} />0</span>
+            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: PALETTE.paleBlue }} />Baixa</span>
+            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: PALETTE.slate }} />Média</span>
+            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: PALETTE.navyMid }} />Alta</span>
+            <span className="flex items-center gap-1.5"><i className="h-2.5 w-2.5 rounded-sm" style={{ background: PALETTE.navy }} />Muito alta</span>
+          </div>
         </div>
 
         <div className="space-y-2">
           <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-1">
             {ranked.map(({ uf, count }) => (
               <div key={uf} className="flex items-center justify-between rounded-md border bg-background px-3 py-2 text-sm">
-                <span className="font-semibold">{uf}</span>
+                <span className="flex items-center gap-2 font-semibold">
+                  <span className="h-2.5 w-2.5 rounded-full" style={{ background: stateColor(count, maxCount) }} />
+                  {uf}
+                </span>
                 <span className="tabular-nums text-muted-foreground">{count}</span>
               </div>
             ))}
           </div>
           {!ranked.length && <p className="text-sm text-muted-foreground">Nenhum estado identificado nos processos.</p>}
           <div className="pt-2 text-xs leading-5 text-muted-foreground">
-            Quanto maior a concentração de processos, maior a intensidade do preenchimento no estado. Passe o cursor sobre o estado para ver o total.
+            Azul-marinho indica maior concentração. O contorno dourado destaca o estado ao passar o cursor.
           </div>
         </div>
       </div>
