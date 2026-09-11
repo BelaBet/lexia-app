@@ -1,10 +1,11 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, Building2, CalendarDays, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FolderOpen, MapPin, RefreshCw, Scale, Search } from "lucide-react";
+import { ArrowLeft, Building2, CalendarDays, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FolderOpen, RefreshCw, Scale, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { BrazilStatesMap } from "./BrazilStatesMap";
 
 interface ReportRow { id:string; search_name:string; status:string; result_count:number|null; preview_data:Record<string,unknown>|null; requested_at:string; completed_at:string|null; updated_at:string; }
 interface ResultRow { id:string; report_id:string; process_number:string|null; tribunal:string|null; data_distribuicao:string|null; area:string|null; natureza:string|null; valor:number|null; partes_ativas:unknown; partes_passivas:unknown; advogados:unknown; comarca:string|null; foro:string|null; vara:string|null; ultima_movimentacao_data:string|null; ultima_movimentacao_tipo:string|null; ultima_movimentacao_texto:string|null; juiz:string|null; status_processual:string|null; case_id:string|null; autos_status:string|null; raw_data:Record<string,unknown>|null; }
@@ -34,6 +35,15 @@ function yearData(rows:ResultRow[]){ return countBy(rows,(row)=>{const value=row
 function natureData(rows:ResultRow[]){ return countBy(rows,(row)=>row.area?.trim()||safeText(raw(row).classeNatureza)||row.natureza?.trim()||"OUTROS").slice(0,8); }
 function statusData(rows:ResultRow[]){ return countBy(rows,(row)=>{const source=raw(row);const status=(row.status_processual||"").toLowerCase();const closed=Boolean(source.arquivado)||Boolean(source.extinto)||/arquiv|baixad|encerr|extint/.test(status);return closed?"Encerrado":"Não encerrado";}); }
 function poloData(rows:ResultRow[]){ return countBy(rows,(row)=>{const papel=safeText(raw(row).papel);if(/ativo/i.test(papel))return "Polo ativo";if(/passivo|réu|reu/i.test(papel))return "Polo passivo";return papel||"Sem dados";}).slice(0,4); }
+function stateData(rows:ResultRow[]){
+  const valid = new Set(["AC","AL","AP","AM","BA","CE","DF","ES","GO","MA","MT","MS","MG","PA","PB","PR","PE","PI","RJ","RN","RS","RO","RR","SC","SP","SE","TO"]);
+  const map = new Map<string,number>();
+  rows.forEach((row)=>{
+    const uf = safeText(raw(row).uf).toUpperCase();
+    if(valid.has(uf)) map.set(uf,(map.get(uf)||0)+1);
+  });
+  return [...map.entries()].map(([uf,count])=>({uf,count})).sort((a,b)=>b.count-a.count);
+}
 function partyLabel(row:ResultRow){
   const source=raw(row).partes;
   if(Array.isArray(source)){
@@ -61,10 +71,6 @@ function Donut({data}:{data:CountItem[]}){
   const p1=Math.round((first/total)*100);
   return <div className="flex min-h-[270px] flex-col items-center justify-center gap-5"><div className="flex h-44 w-44 items-center justify-center rounded-full p-8" style={{background:`conic-gradient(hsl(var(--primary)) 0 ${p1}%, hsl(var(--muted-foreground) / .25) ${p1}% 100%)`}}><div className="h-full w-full rounded-full bg-background"/></div><div className="flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs">{data.map((item,index)=><span key={item.name} className="flex items-center gap-2"><span className={`h-2.5 w-2.5 rounded-full ${index===0?"bg-primary":"bg-muted-foreground/40"}`}/>{item.name}: <strong>{item.value}</strong></span>)}</div></div>;
 }
-function BrazilMap({rows}:{rows:ResultRow[]}){
-  const points=rows.map((row)=>{const geo=raw(row).comarca_geo;if(!Array.isArray(geo)||geo.length<2)return null;const lat=Number(geo[0]);const lon=Number(geo[1]);if(!Number.isFinite(lat)||!Number.isFinite(lon))return null;const x=((lon+74)/40)*430+35;const y=((6-lat)/40)*330+35;return{x:Math.min(470,Math.max(25,x)),y:Math.min(375,Math.max(25,y)),label:row.comarca||safeText(raw(row).uf)||"Processo"};}).filter(Boolean) as {x:number;y:number;label:string}[];
-  return <div className="overflow-hidden rounded-sm border bg-[#f1f1ef]"><svg viewBox="0 0 500 400" className="h-auto w-full" role="img" aria-label="Mapa de distribuição dos processos"><rect width="500" height="400" fill="#e8e8e5"/><path d="M205 30 L270 55 L320 50 L354 80 L390 105 L410 145 L397 180 L421 212 L402 247 L367 263 L349 299 L318 319 L302 367 L269 387 L244 355 L224 327 L194 307 L173 277 L143 255 L126 221 L91 195 L76 161 L94 124 L122 109 L137 73 L173 68 Z" fill="#f7f7f5" stroke="#bcbcbc" strokeWidth="1.6"/><text x="247" y="205" textAnchor="middle" fill="#7a7a7a" fontSize="17" fontWeight="600">Brasil</text>{points.map((point,index)=><g key={`${point.x}-${point.y}-${index}`}><circle cx={point.x} cy={point.y} r="10" fill="hsl(var(--primary) / .15)" stroke="hsl(var(--primary) / .35)"/><circle cx={point.x} cy={point.y} r="3.5" fill="hsl(var(--primary))"><title>{point.label}</title></circle></g>)}</svg><div className="flex items-center gap-2 border-t bg-background px-3 py-2 text-xs text-muted-foreground"><MapPin className="h-3.5 w-3.5"/>{points.length} processo(s) com localização</div></div>;
-}
 
 export function ProcessPortfolio(){
   const navigate=useNavigate();
@@ -85,7 +91,7 @@ export function ProcessPortfolio(){
   if(isError)return <div className="legal-card"><h2 className="font-semibold">Não foi possível carregar os processos</h2><p className="mt-2 text-sm text-muted-foreground">{error instanceof Error?error.message:"Erro inesperado ao carregar os dados."}</p><Button className="mt-4" variant="outline" onClick={()=>refetch()}>Tentar novamente</Button></div>;
 
   if(selectedReport){
-    const expectedTotal=getExpectedTotal(selectedReport);const latestMovement=latestDate(selectedResults);const years=yearData(selectedResults);const natures=natureData(selectedResults);const statuses=statusData(selectedResults);const polos=poloData(selectedResults);
+    const expectedTotal=getExpectedTotal(selectedReport);const latestMovement=latestDate(selectedResults);const years=yearData(selectedResults);const natures=natureData(selectedResults);const statuses=statusData(selectedResults);const polos=poloData(selectedResults);const states=stateData(selectedResults);
     return <div className="mx-auto w-full max-w-[1220px] space-y-8 pb-8 sm:space-y-10">
       <header className="border-b pb-6">
         <div className="flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
@@ -96,7 +102,7 @@ export function ProcessPortfolio(){
       </header>
 
       <section className="grid gap-10 lg:grid-cols-2">
-        <ReportPanel title={`Total de ${selectedResults.length} processos`}><BrazilMap rows={selectedResults}/></ReportPanel>
+        <BrazilStatesMap counts={states}/>
         <ReportPanel title="Data de distribuição"><VerticalYearChart data={years}/></ReportPanel>
       </section>
 
