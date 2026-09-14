@@ -1,26 +1,83 @@
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Download, ExternalLink, FileText, Loader2, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
-import { ExternalLink, Loader2 } from "lucide-react";
+import { Button } from "@/components/ui/button";
+
+const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
+
+function safeObject(value: unknown): Record<string, unknown> {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+}
+
+function safeArray(value: unknown): any[] {
+  return Array.isArray(value) ? value : [];
+}
 
 function text(value: unknown) {
   if (value == null || value === "") return "";
-  if (Array.isArray(value)) return value.map(text).filter(Boolean).join("; ");
-  if (typeof value === "object") return Object.values(value as Record<string, unknown>).map(text).filter(Boolean).join("; ");
-  return String(value);
+  if (typeof value === "string" || typeof value === "number" || typeof value === "boolean") return String(value);
+  return "";
 }
 
-function rawValue(raw: Record<string, unknown>, ...keys: string[]) {
-  for (const key of keys) if (raw[key] != null && raw[key] !== "") return raw[key];
-  return null;
+function fmtDate(value?: string | null) {
+  if (!value) return "—";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString("pt-BR");
 }
 
-function safeUrl(value: unknown) {
-  const candidate = text(value).trim();
-  return /^https?:\/\//i.test(candidate) ? candidate : null;
+function fmtDateTime(value?: string | null) {
+  if (!value) return "—";
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? value : d.toLocaleString("pt-BR");
+}
+
+function lawyerName(value: any) {
+  return text(value?.nomeNormalizado) || text(value?.nome) || "—";
+}
+
+function lawyerOab(value: any) {
+  return text(value?.oab) || "—";
+}
+
+function PartyTable({ title, rows }: { title: string; rows: any[] }) {
+  return (
+    <section className="space-y-3">
+      <h2 className="text-xl font-semibold uppercase tracking-tight">{title}</h2>
+      <div className="overflow-x-auto border-y">
+        <table className="w-full min-w-[720px] text-sm">
+          <thead className="text-left text-xs text-muted-foreground">
+            <tr>
+              <th className="px-3 py-3 font-medium">Nome</th>
+              <th className="px-3 py-3 font-medium">Advogado</th>
+              <th className="px-3 py-3 font-medium">OAB</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.length ? rows.map((party, index) => {
+              const lawyers = safeArray(party?.advogados);
+              const first = lawyers[0];
+              return (
+                <tr key={`${text(party?.nomeParte)}-${index}`} className="border-t align-top">
+                  <td className="px-3 py-3 font-medium">{text(party?.nomeParte) || "—"}</td>
+                  <td className="px-3 py-3">{first ? lawyerName(first) : "—"}</td>
+                  <td className="px-3 py-3">{first ? lawyerOab(first) : "—"}</td>
+                </tr>
+              );
+            }) : (
+              <tr><td colSpan={3} className="px-3 py-6 text-center text-sm text-muted-foreground">Nenhuma parte informada.</td></tr>
+            )}
+          </tbody>
+        </table>
+      </div>
+    </section>
+  );
 }
 
 export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
-  const { data, isLoading } = useQuery({
+  const [movementSearch, setMovementSearch] = useState("");
+
+  const { data, isLoading, isError } = useQuery({
     queryKey: ["jusbrasil-case-details", caseId],
     queryFn: async () => {
       const { data, error } = await supabase
@@ -35,133 +92,142 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
     },
   });
 
-  if (isLoading) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Carregando dados do JusBrasil...</div>;
-  if (!data) return <p className="text-sm text-muted-foreground">Este processo ainda não possui dados detalhados importados do JusBrasil.</p>;
+  const { data: movements = [] } = useQuery({
+    queryKey: ["case-timeline-events", caseId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("case_timeline_events")
+        .select("id,event_date,title,client_summary,internal_note,source,created_at")
+        .eq("case_id", caseId)
+        .order("event_date", { ascending: false })
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
-  const raw = (data.raw_data && typeof data.raw_data === "object" ? data.raw_data : {}) as Record<string, unknown>;
-  const detailUrl = safeUrl(rawValue(raw, "Link detalhes", "link_detalhes", "url_detalhes"));
-  const attachmentUrl = safeUrl(rawValue(raw, "URL Anexo", "url_anexo", "URL anexo"));
-  const activeLawyers = rawValue(raw, "Advogados (parte ativa)", "Advogados da parte ativa");
-  const activeOab = rawValue(raw, "OAB advogado (parte ativa)", "OAB advogado da parte ativa");
-  const passiveLawyers = rawValue(raw, "Advogados (parte passiva)", "Advogados da parte passiva");
-  const passiveOab = rawValue(raw, "OAB advogado (parte passiva)", "OAB advogado da parte passiva");
-  const allParties = rawValue(raw, "Todas partes", "todas_partes");
-  const hearingDate = rawValue(raw, "Data Audiência", "data_audiencia");
-  const hearingType = rawValue(raw, "Tipo Audiência", "tipo_audiencia");
-  const hearingPlace = rawValue(raw, "Local Audiência", "local_audiencia");
-  const sentenceDate = rawValue(raw, "Data Sentença", "data_sentenca");
-  const sentenceClass = rawValue(raw, "Classificação sentença", "classificacao_sentenca");
-  const sentenceText = rawValue(raw, "Texto Sentença", "texto_sentenca", "Sentença");
+  const resultId = data?.id as string | undefined;
+  const { data: autos = [] } = useQuery({
+    queryKey: ["process-search-documents", resultId],
+    enabled: Boolean(resultId),
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("process_search_documents")
+        .select("id,file_name,file_path,file_size,file_type,source_url,created_at")
+        .eq("result_id", resultId as string)
+        .order("created_at", { ascending: false });
+      if (error) throw error;
+      return data ?? [];
+    },
+  });
 
-  const Field = ({ label, value }: { label: string; value: unknown }) => text(value) ? (
-    <div>
-      <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-sm whitespace-pre-wrap break-words">{text(value)}</p>
-    </div>
-  ) : null;
+  const filteredMovements = useMemo(() => {
+    const term = movementSearch.trim().toLowerCase();
+    if (!term) return movements;
+    return movements.filter((item: any) => [item.title, item.client_summary, item.internal_note, item.event_date].some((v) => String(v || "").toLowerCase().includes(term)));
+  }, [movements, movementSearch]);
 
-  const allRawEntries = Object.entries(raw).filter(([, value]) => text(value));
+  if (isLoading) return <div className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" />Carregando dados do processo...</div>;
+  if (isError || !data) return <p className="text-sm text-muted-foreground">Este processo ainda não possui dados detalhados importados.</p>;
+
+  const raw = safeObject(data.raw_data);
+  const activeParties = safeArray(data.partes_ativas).length ? safeArray(data.partes_ativas) : safeArray(raw.partes).filter((p: any) => p?.is_autora || p?.relacaoNormalizado === "AUTOR");
+  const passiveParties = safeArray(data.partes_passivas).length ? safeArray(data.partes_passivas) : safeArray(raw.partes).filter((p: any) => p?.is_re || p?.relacaoNormalizado === "REU");
+  const classes = safeArray(raw.classes);
+  const hearings = safeArray(raw.audiencias);
+  const firstHearing = hearings[0] || null;
+  const courtUnit = text(raw.vara_original) ? `${text(raw.vara_original)}ª Vara` : text(data.vara);
+  const instance = text(raw.instancia) ? `${text(raw.instancia)}ª instância` : "—";
+  const updatedAt = text(raw.alteradoEm) || data.updated_at || data.created_at;
+  const documentCount = Number(raw.num_anexos || autos.length || 0);
 
   return (
-    <div className="space-y-4">
-      <div>
-        <p className="font-semibold">Informações completas do processo</p>
-        <p className="text-xs text-muted-foreground">Tudo o que foi recebido do JusBrasil fica preservado e consultável dentro da LEXIA.</p>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-3 rounded-lg border p-3">
-        <Field label="Número do processo" value={data.process_number} />
-        <Field label="Tribunal" value={data.tribunal} />
-        <Field label="Área" value={data.area} />
-        <Field label="Natureza" value={data.natureza} />
-        <Field label="Foro" value={data.foro} />
-        <Field label="Vara" value={data.vara} />
-        <Field label="Comarca" value={data.comarca} />
-        <Field label="Valor" value={data.valor} />
-        <Field label="Data de distribuição" value={data.data_distribuicao} />
-        <Field label="Partes" value={allParties || [data.partes_ativas, data.partes_passivas]} />
-        <Field label="Parte ativa" value={data.partes_ativas} />
-        <Field label="Parte passiva" value={data.partes_passivas} />
-        <Field label="Todos os advogados" value={data.advogados} />
-        <Field label="Advogados — parte ativa" value={activeLawyers} />
-        <Field label="OAB — parte ativa" value={activeOab} />
-        <Field label="Advogados — parte passiva" value={passiveLawyers} />
-        <Field label="OAB — parte passiva" value={passiveOab} />
-      </div>
-
-      {(data.ultima_movimentacao_texto || data.ultima_movimentacao_tipo || data.juiz || data.ultima_movimentacao_data) && (
-        <div className="rounded-lg border p-3 space-y-2">
-          <p className="text-sm font-semibold">Última movimentação</p>
-          <Field label="Data" value={data.ultima_movimentacao_data} />
-          <Field label="Tipo" value={data.ultima_movimentacao_tipo} />
-          <Field label="Movimentação" value={data.ultima_movimentacao_texto} />
-          <Field label="Juiz" value={data.juiz} />
-        </div>
-      )}
-
-      {(hearingDate || hearingType || hearingPlace) && (
-        <div className="rounded-lg border p-3 grid grid-cols-1 md:grid-cols-3 gap-3">
-          <Field label="Data da audiência" value={hearingDate} />
-          <Field label="Tipo de audiência" value={hearingType} />
-          <Field label="Local da audiência" value={hearingPlace} />
-        </div>
-      )}
-
-      {(sentenceDate || sentenceClass || sentenceText || data.status_processual) && (
-        <div className="rounded-lg border p-3 space-y-2">
-          <p className="text-sm font-semibold">Sentença / situação processual</p>
-          <Field label="Data" value={sentenceDate} />
-          <Field label="Classificação" value={sentenceClass} />
-          <Field label="Sentença" value={sentenceText} />
-          <Field label="Status processual" value={data.status_processual} />
-          <Field label="Total de movimentações" value={rawValue(raw, "Total movs.", "total_movs")} />
-          <Field label="Arquivado" value={rawValue(raw, "Arquivado", "arquivado")} />
-          <Field label="Extinto" value={rawValue(raw, "Extinto", "extinto")} />
-          <Field label="Suspenso" value={rawValue(raw, "Suspenso", "suspenso")} />
-          <Field label="Transitado em julgado" value={rawValue(raw, "Transitado julg.", "transitado_julgado")} />
-          <Field label="Liminar" value={rawValue(raw, "Liminar", "liminar")} />
-          <Field label="Recurso" value={rawValue(raw, "Recurso", "recurso")} />
-          <Field label="Risco" value={rawValue(raw, "Risco", "risco")} />
-        </div>
-      )}
-
-      {(detailUrl || attachmentUrl) && (
-        <div className="rounded-lg border p-3 space-y-2">
-          <p className="text-sm font-semibold">Links e documentos já disponibilizados</p>
-          {attachmentUrl && <a href={attachmentUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm underline">Abrir anexo <ExternalLink className="h-3.5 w-3.5" /></a>}
-          {detailUrl && <a href={detailUrl} target="_blank" rel="noreferrer" className="flex items-center gap-2 text-sm underline">Ver detalhes da origem <ExternalLink className="h-3.5 w-3.5" /></a>}
-          <p className="text-xs text-muted-foreground">A LEXIA mostra os arquivos e links que já vierem no retorno. Novos autos não são solicitados automaticamente.</p>
-        </div>
-      )}
-
-      {allRawEntries.length > 0 && (
-        <div className="rounded-lg border p-3">
-          <div className="mb-3">
-            <p className="text-sm font-semibold">Todos os campos recebidos da API</p>
-            <p className="text-xs text-muted-foreground">Nenhum campo retornado pelo provedor é descartado.</p>
+    <div className="space-y-10 md:space-y-12">
+      <section className="space-y-6">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+          <div className="min-w-0">
+            <h1 className="break-words font-serif text-2xl font-semibold text-primary md:text-3xl">
+              {data.tribunal || "Processo"} - Nº {data.process_number || "—"}
+            </h1>
+            <p className="mt-3 text-sm text-muted-foreground">{text(data.foro) || text(raw.fonte_sistema) || "—"}</p>
           </div>
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-            {allRawEntries.map(([key, value]) => {
-              const url = safeUrl(value);
-              return (
-                <div key={key} className="rounded-md bg-muted/30 p-2">
-                  <p className="text-xs text-muted-foreground">{key}</p>
-                  {url ? (
-                    <a href={url} target="_blank" rel="noreferrer" className="mt-1 inline-flex items-center gap-1 break-all text-sm underline">Abrir conteúdo <ExternalLink className="h-3.5 w-3.5" /></a>
-                  ) : (
-                    <p className="mt-1 whitespace-pre-wrap break-words text-sm">{text(value)}</p>
-                  )}
-                </div>
-              );
-            })}
+          <div className="text-sm text-muted-foreground lg:text-right">Atualizado em {fmtDateTime(updatedAt)}</div>
+        </div>
+
+        <div>
+          <h2 className="mb-5 text-lg font-semibold">Detalhes do processo</h2>
+          <div className="grid gap-x-10 gap-y-4 md:grid-cols-2">
+            <div className="space-y-2 text-sm">
+              <p>{data.area || "—"} / {instance}</p>
+              <p className="font-medium">{data.natureza || text(raw.classeNatureza) || "—"}</p>
+              {classes.length > 0 && <div className="space-y-1 text-muted-foreground">{classes.map((item, i) => <p key={`${String(item)}-${i}`}>- {String(item)}</p>)}</div>}
+            </div>
+            <dl className="grid grid-cols-[150px_1fr] gap-x-4 gap-y-2 text-sm">
+              <dt className="text-muted-foreground">Comarca</dt><dd>{data.comarca || text(raw.comarca_cnj) || "—"}</dd>
+              <dt className="text-muted-foreground">Vara</dt><dd>{courtUnit || "—"}</dd>
+              <dt className="text-muted-foreground">Data de distribuição</dt><dd>{fmtDate(data.data_distribuicao || text(raw.distribuicaoData))}</dd>
+              <dt className="text-muted-foreground">Audiência</dt><dd>{firstHearing ? fmtDateTime(text(firstHearing.datahora)) : "—"}</dd>
+              <dt className="text-muted-foreground">Valor da causa</dt><dd>{data.valor != null ? currency.format(Number(data.valor)) : "—"}</dd>
+              <dt className="text-muted-foreground">Status</dt><dd>{data.status_processual || (raw.arquivado ? "Arquivado" : "Em andamento")}</dd>
+            </dl>
           </div>
         </div>
-      )}
+      </section>
 
-      <details className="rounded-lg border p-3">
-        <summary className="cursor-pointer text-sm font-medium">JSON original completo</summary>
-        <pre className="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded bg-muted/40 p-3 text-xs">{JSON.stringify(raw, null, 2)}</pre>
+      <PartyTable title="Autor" rows={activeParties} />
+      <PartyTable title="Réu" rows={passiveParties} />
+
+      <section className="space-y-5">
+        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+          <div>
+            <h2 className="text-xl font-semibold">{movements.length} Movimentações</h2>
+            <p className="mt-1 text-xs text-muted-foreground">Histórico processual disponível na TK2 Juris.</p>
+          </div>
+          <div className="relative w-full md:w-72">
+            <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+            <input value={movementSearch} onChange={(e) => setMovementSearch(e.target.value)} placeholder="Buscar nas movimentações" className="legal-input h-10 w-full pl-9" />
+          </div>
+        </div>
+
+        {filteredMovements.length > 0 ? (
+          <div className="overflow-x-auto border-y">
+            <table className="w-full min-w-[800px] text-sm">
+              <thead className="text-left text-xs text-muted-foreground"><tr><th className="px-3 py-3 font-medium">Data</th><th className="px-3 py-3 font-medium">Tipo</th><th className="px-3 py-3 font-medium">Texto</th></tr></thead>
+              <tbody>{filteredMovements.map((item: any) => <tr key={item.id} className="border-t align-top"><td className="px-3 py-4 whitespace-nowrap">{fmtDate(item.event_date)}</td><td className="px-3 py-4 font-medium">{item.title || "Movimentação"}</td><td className="px-3 py-4 text-muted-foreground">{item.client_summary || item.internal_note || "—"}</td></tr>)}</tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="rounded-lg border bg-muted/20 p-5 text-sm text-muted-foreground">
+            As movimentações detalhadas ainda não foram importadas para este processo. Os dados já disponíveis acima continuam visíveis sem gerar nova consulta paga.
+          </div>
+        )}
+      </section>
+
+      <section className="space-y-5">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div><h2 className="text-xl font-semibold">{Math.max(documentCount, autos.length)} Autos</h2><p className="mt-1 text-xs text-muted-foreground">Documentos e anexos já existentes na base.</p></div>
+          {autos.length > 0 && <Button variant="outline" onClick={() => autos.forEach((doc: any) => { const url = doc.source_url || doc.file_path; if (url && /^https?:\/\//i.test(url)) window.open(url, "_blank", "noopener,noreferrer"); })}><Download className="mr-2 h-4 w-4" />Abrir autos disponíveis</Button>}
+        </div>
+
+        {autos.length > 0 ? (
+          <div className="overflow-x-auto border-y">
+            <table className="w-full min-w-[720px] text-sm"><thead className="text-left text-xs text-muted-foreground"><tr><th className="px-3 py-3 font-medium">Título</th><th className="px-3 py-3 font-medium">Data</th><th className="px-3 py-3 font-medium">Tipo</th><th className="px-3 py-3 font-medium">Ação</th></tr></thead><tbody>{autos.map((doc: any) => { const url = doc.source_url || doc.file_path; const canOpen = Boolean(url && /^https?:\/\//i.test(url)); return <tr key={doc.id} className="border-t"><td className="px-3 py-4 font-medium">{doc.file_name || "Documento"}</td><td className="px-3 py-4">{fmtDate(doc.created_at)}</td><td className="px-3 py-4">{doc.file_type || "—"}</td><td className="px-3 py-4">{canOpen ? <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">Abrir <ExternalLink className="h-3.5 w-3.5" /></a> : "—"}</td></tr>; })}</tbody></table>
+          </div>
+        ) : (
+          <div className="rounded-lg border bg-muted/20 p-5 text-sm text-muted-foreground">Nenhum auto ou anexo foi armazenado ainda para este processo.</div>
+        )}
+      </section>
+
+      <details className="rounded-lg border p-4">
+        <summary className="cursor-pointer text-sm font-medium">Outras informações recebidas da API</summary>
+        <div className="mt-4 grid gap-3 md:grid-cols-2">
+          {Object.entries(raw).filter(([key]) => !["partes", "classes", "audiencias"].includes(key)).map(([key, value]) => (
+            <div key={key} className="rounded-md bg-muted/30 p-3"><p className="text-xs text-muted-foreground">{key}</p><p className="mt-1 break-words text-sm">{typeof value === "object" ? JSON.stringify(value) : String(value ?? "—")}</p></div>
+          ))}
+        </div>
       </details>
+
+      <div className="flex items-center gap-2 text-xs text-muted-foreground"><FileText className="h-4 w-4" />Dados exibidos a partir das informações já importadas. Esta tela não dispara consulta paga.</div>
     </div>
   );
 }
