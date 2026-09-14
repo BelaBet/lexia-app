@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Download, ExternalLink, FileText, Loader2, RefreshCw, Search } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
@@ -192,12 +192,10 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
 
   const autos = storedAutos.length ? storedAutos : rawAutos;
   const documentCount = Math.max(Number(raw.num_anexos || 0), autos.length);
-
-  const filteredMovements = useMemo(() => {
-    const term = movementSearch.trim().toLowerCase();
-    if (!term) return movements;
-    return movements.filter((item: any) => [item.title, item.client_summary, item.internal_note, item.event_date].some((v) => String(v || "").toLowerCase().includes(term)));
-  }, [movements, movementSearch]);
+  const term = movementSearch.trim().toLowerCase();
+  const filteredMovements = term
+    ? movements.filter((item: any) => [item.title, item.client_summary, item.internal_note, item.event_date].some((v) => String(v || "").toLowerCase().includes(term)))
+    : movements;
 
   return (
     <div className="space-y-10 md:space-y-12">
