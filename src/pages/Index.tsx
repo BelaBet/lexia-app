@@ -63,7 +63,7 @@ const Index = () => {
     }
   };
 
-  return <div className="min-h-screen bg-background"><MobileNav activeTab={activeTab} onTabChange={setActiveTab} /><Sidebar activeTab={activeTab} onTabChange={setActiveTab} /><main className="min-w-0 p-4 pt-20 md:pt-8 md:ml-64 md:p-8"><DemoDataBanner />{renderContent()}</main></div>;
+  return <div className="min-h-screen bg-background"><MobileNav activeTab={activeTab} onTabChange={setActiveTab} /><Sidebar activeTab={activeTab} onTabChange={setActiveTab} /><main className="min-w-0 p-4 pt-20 md:ml-56 md:p-6 md:pt-6 lg:ml-60 lg:p-7 xl:ml-64 xl:p-8"><DemoDataBanner />{renderContent()}</main></div>;
 };
 
 export default Index;
