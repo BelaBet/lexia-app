@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ExternalLink, FileText, Loader2, RefreshCw, Search } from "lucide-react";
+import { Download, ExternalLink, FileText, Loader2, RefreshCw, Search, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 
@@ -20,16 +20,27 @@ function text(value: unknown) {
   return "";
 }
 
+function parseDate(value?: string | null) {
+  if (!value) return null;
+  const br = value.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
+  if (br) {
+    const d = new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1]));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? null : d;
+}
+
 function fmtDate(value?: string | null) {
   if (!value) return "—";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? value : d.toLocaleDateString("pt-BR");
+  const d = parseDate(value);
+  return d ? d.toLocaleDateString("pt-BR") : value;
 }
 
 function fmtDateTime(value?: string | null) {
   if (!value) return "—";
-  const d = new Date(value);
-  return Number.isNaN(d.getTime()) ? value : d.toLocaleString("pt-BR");
+  const d = parseDate(value);
+  return d ? d.toLocaleString("pt-BR") : value;
 }
 
 function lawyerName(value: any) {
@@ -74,9 +85,60 @@ function PartyTable({ title, rows }: { title: string; rows: any[] }) {
   );
 }
 
+function MovementTimeline({ movements }: { movements: any[] }) {
+  const chronological = [...movements]
+    .filter((item) => parseDate(item.event_date))
+    .sort((a, b) => (parseDate(a.event_date)?.getTime() || 0) - (parseDate(b.event_date)?.getTime() || 0));
+
+  if (!chronological.length) return null;
+
+  const maxPoints = 7;
+  const points = chronological.length <= maxPoints
+    ? chronological
+    : Array.from({ length: maxPoints }, (_, index) => chronological[Math.round(index * (chronological.length - 1) / (maxPoints - 1))]);
+
+  return (
+    <div className="rounded-xl border bg-background px-4 py-5 sm:px-6">
+      <div className="mb-5 flex items-center justify-between gap-3">
+        <div>
+          <p className="text-sm font-semibold">Linha do tempo das movimentações</p>
+          <p className="mt-1 text-xs text-muted-foreground">Do primeiro ao último evento dentro dos filtros aplicados.</p>
+        </div>
+        <span className="shrink-0 rounded-full bg-muted px-3 py-1 text-xs font-medium">{movements.length} eventos</span>
+      </div>
+      <div className="overflow-x-auto pb-2">
+        <div className="min-w-[620px] px-2">
+          <div className="relative h-16">
+            <div className="absolute left-2 right-2 top-5 h-0.5 bg-primary/25" />
+            <div className="relative flex items-start justify-between">
+              {points.map((item, index) => {
+                const isLatest = index === points.length - 1;
+                return (
+                  <div key={`${item.id}-${index}`} className="group relative flex w-8 flex-col items-center">
+                    <div
+                      className={`z-10 mt-2 h-4 w-4 rounded-full border-4 border-background shadow-sm transition-transform group-hover:scale-125 ${isLatest ? "bg-destructive" : "bg-primary/65"}`}
+                      title={`${fmtDate(item.event_date)} — ${item.title || "Movimentação"}`}
+                    />
+                    <div className={`absolute top-9 whitespace-nowrap text-[10px] ${index === 0 ? "left-0" : index === points.length - 1 ? "right-0" : "left-1/2 -translate-x-1/2"}`}>
+                      {fmtDate(item.event_date)}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
   const queryClient = useQueryClient();
   const [movementSearch, setMovementSearch] = useState("");
+  const [movementType, setMovementType] = useState("all");
+  const [movementDateFrom, setMovementDateFrom] = useState("");
+  const [movementDateTo, setMovementDateTo] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [autoSyncDone, setAutoSyncDone] = useState(false);
@@ -180,6 +242,7 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
   }));
 
   const movements = providerMovements.length ? providerMovements : timelineEvents;
+  const movementTypes = Array.from(new Set(movements.map((item: any) => text(item.title) || "Movimentação"))).sort((a, b) => a.localeCompare(b, "pt-BR"));
 
   const rawAutos = safeArray(raw.anexos).map((item: any, index: number) => ({
     id: `raw-auto-${item?.[0] ?? index}`,
@@ -193,9 +256,25 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
   const autos = storedAutos.length ? storedAutos : rawAutos;
   const documentCount = Math.max(Number(raw.num_anexos || 0), autos.length);
   const term = movementSearch.trim().toLowerCase();
-  const filteredMovements = term
-    ? movements.filter((item: any) => [item.title, item.client_summary, item.internal_note, item.event_date].some((v) => String(v || "").toLowerCase().includes(term)))
-    : movements;
+  const fromDate = movementDateFrom ? new Date(`${movementDateFrom}T00:00:00`) : null;
+  const toDate = movementDateTo ? new Date(`${movementDateTo}T23:59:59`) : null;
+  const filteredMovements = movements.filter((item: any) => {
+    const searchable = [item.title, item.client_summary, item.internal_note, item.event_date].some((v) => String(v || "").toLowerCase().includes(term));
+    if (term && !searchable) return false;
+    if (movementType !== "all" && (text(item.title) || "Movimentação") !== movementType) return false;
+    const itemDate = parseDate(item.event_date);
+    if (fromDate && (!itemDate || itemDate < fromDate)) return false;
+    if (toDate && (!itemDate || itemDate > toDate)) return false;
+    return true;
+  });
+  const hasMovementFilters = Boolean(term || movementType !== "all" || movementDateFrom || movementDateTo);
+
+  const clearMovementFilters = () => {
+    setMovementSearch("");
+    setMovementType("all");
+    setMovementDateFrom("");
+    setMovementDateTo("");
+  };
 
   return (
     <div className="space-y-10 md:space-y-12">
@@ -242,7 +321,7 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
       <PartyTable title="Réu" rows={passiveParties} />
 
       <section className="space-y-5">
-        <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
           <div>
             <h2 className="text-xl font-semibold">{movements.length} Movimentações</h2>
             <p className="mt-1 text-xs text-muted-foreground">Histórico processual disponível na TK2 Juris.</p>
@@ -251,6 +330,32 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input value={movementSearch} onChange={(e) => setMovementSearch(e.target.value)} placeholder="Buscar nas movimentações" className="legal-input h-10 w-full pl-9" />
           </div>
+        </div>
+
+        <MovementTimeline movements={filteredMovements} />
+
+        <div className="rounded-xl border bg-muted/10 p-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-[1.35fr_1fr_1fr_auto] lg:items-end">
+            <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+              <span>Tipo de movimentação</span>
+              <select value={movementType} onChange={(e) => setMovementType(e.target.value)} className="legal-input h-10 w-full bg-background px-3 text-sm text-foreground">
+                <option value="all">Todos os tipos</option>
+                {movementTypes.map((type) => <option key={type} value={type}>{type}</option>)}
+              </select>
+            </label>
+            <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+              <span>Data inicial</span>
+              <input type="date" value={movementDateFrom} onChange={(e) => setMovementDateFrom(e.target.value)} className="legal-input h-10 w-full bg-background px-3 text-sm text-foreground" />
+            </label>
+            <label className="space-y-1.5 text-xs font-medium text-muted-foreground">
+              <span>Data final</span>
+              <input type="date" value={movementDateTo} onChange={(e) => setMovementDateTo(e.target.value)} className="legal-input h-10 w-full bg-background px-3 text-sm text-foreground" />
+            </label>
+            <Button variant="outline" onClick={clearMovementFilters} disabled={!hasMovementFilters} className="h-10 w-full lg:w-auto">
+              <X className="mr-2 h-4 w-4" />Limpar
+            </Button>
+          </div>
+          <div className="mt-3 text-xs text-muted-foreground">Exibindo {filteredMovements.length} de {movements.length} movimentações.</div>
         </div>
 
         {filteredMovements.length > 0 ? (
@@ -262,7 +367,7 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
           </div>
         ) : (
           <div className="rounded-lg border bg-muted/20 p-5 text-sm text-muted-foreground">
-            {syncing ? "Sincronizando movimentações existentes..." : "Nenhuma movimentação foi retornada pela base atual do provedor para este processo."}
+            {syncing ? "Sincronizando movimentações existentes..." : hasMovementFilters ? "Nenhuma movimentação corresponde aos filtros selecionados." : "Nenhuma movimentação foi retornada pela base atual do provedor para este processo."}
           </div>
         )}
       </section>
