@@ -175,8 +175,8 @@ export function CalendarView({ onOpenCase }: CalendarViewProps) {
     type: "meeting",
     location: "",
     meeting_link: "",
-    notification_enabled: false,
-    notification_minutes_before: 30,
+    notification_enabled: true,
+    notification_minutes_before: 120,
     case_id: undefined,
     participants: [],
     files: [],
@@ -391,7 +391,7 @@ export function CalendarView({ onOpenCase }: CalendarViewProps) {
 
   const generateMeetingLink = () => {
     const roomId = Math.random().toString(36).substring(2, 15);
-    const link = `https://meet.jit.si/lexia-${roomId}`;
+    const link = `https://meet.jit.si/tk2-juris-${roomId}`;
     setNewEvent({ ...newEvent, meeting_link: link });
     toast.success("Link de reunião gerado!");
   };
@@ -412,8 +412,8 @@ export function CalendarView({ onOpenCase }: CalendarViewProps) {
       type: "meeting",
       location: "",
       meeting_link: "",
-      notification_enabled: false,
-      notification_minutes_before: 30,
+      notification_enabled: true,
+      notification_minutes_before: 120,
       case_id: undefined,
       participants: [],
       files: [],
@@ -453,7 +453,7 @@ export function CalendarView({ onOpenCase }: CalendarViewProps) {
       location: event.location || "",
       meeting_link: event.meeting_link || "",
       notification_enabled: event.notification_enabled,
-      notification_minutes_before: event.notification_minutes_before || 30,
+      notification_minutes_before: event.notification_minutes_before || 120,
       status: event.status || undefined,
       case_id: event.case_id || undefined,
     });
