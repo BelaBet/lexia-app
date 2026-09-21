@@ -46,6 +46,7 @@ import { useCases } from "@/hooks/useCases";
 import { useNotifications } from "@/hooks/useNotifications";
 import { openGoogleCalendar, downloadICS } from "@/lib/calendarExport";
 import { SyncToClickUpButton } from "@/components/integrations/SyncToClickUpButton";
+import { AgendaAutomationHealth } from "@/components/calendar/AgendaAutomationHealth";
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, getDay, isSameDay, isToday, startOfDay, parseISO, differenceInCalendarDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { CheckSquare } from "lucide-react";
@@ -529,7 +530,8 @@ export function CalendarView({ onOpenCase }: CalendarViewProps) {
               <p className="text-muted-foreground">Compromissos e prazos</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap justify-end">
+            <AgendaAutomationHealth />
             {notificationsSupported && notificationPermission !== "granted" && (
               <button 
                 onClick={handleEnableNotifications}
@@ -543,7 +545,7 @@ export function CalendarView({ onOpenCase }: CalendarViewProps) {
             {notificationPermission === "granted" && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground px-3 py-2 bg-success/10 rounded-lg">
                 <BellRing className="w-4 h-4 text-success" />
-                <span className="text-success">Notificações ativas</span>
+                <span className="text-success">Alertas do navegador ativos</span>
               </div>
             )}
             <button 
