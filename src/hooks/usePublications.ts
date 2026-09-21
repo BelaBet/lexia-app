@@ -41,6 +41,16 @@ export interface Publication {
   data_abertura_tribunal: string | null;
   /** Data de aceitação do processo. */
   data_aceitacao: string | null;
+  /** Área do direito detectada (via cases.type) para a classificação automática do ato. */
+  classified_area: "civel" | "criminal" | "trabalhista" | "administrativo_tributario" | null;
+  /** Nome do ato processual detectado automaticamente no conteúdo (ex.: "Contestação"). */
+  classified_act_name: string | null;
+  /** Prazo calculado a partir do ato detectado — informação complementar, nunca substitui external_deadline/internal_deadline. */
+  classified_deadline: string | null;
+  classified_deadline_unit: "dias_uteis" | "anos" | null;
+  /** true quando o ato detectado tem prazo variável/faixa e precisa de conferência manual. */
+  classified_needs_review: boolean;
+  classified_rule_note: string | null;
   created_at: string;
   updated_at: string;
   followups?: PublicationFollowup[];

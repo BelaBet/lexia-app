@@ -224,6 +224,48 @@ export type Database = {
         }
         Relationships: []
       }
+      deadline_rules: {
+        Row: {
+          act_name: string
+          area: string
+          created_at: string
+          deadline_max: number | null
+          deadline_min: number | null
+          deadline_unit: string
+          deadline_value: number | null
+          id: string
+          is_variable: boolean
+          note: string | null
+          trigger_description: string | null
+        }
+        Insert: {
+          act_name: string
+          area: string
+          created_at?: string
+          deadline_max?: number | null
+          deadline_min?: number | null
+          deadline_unit: string
+          deadline_value?: number | null
+          id?: string
+          is_variable?: boolean
+          note?: string | null
+          trigger_description?: string | null
+        }
+        Update: {
+          act_name?: string
+          area?: string
+          created_at?: string
+          deadline_max?: number | null
+          deadline_min?: number | null
+          deadline_unit?: string
+          deadline_value?: number | null
+          id?: string
+          is_variable?: boolean
+          note?: string | null
+          trigger_description?: string | null
+        }
+        Relationships: []
+      }
       chat_history: {
         Row: {
           created_at: string
@@ -1568,6 +1610,12 @@ export type Database = {
       publications: {
         Row: {
           case_id: string | null
+          classified_act_name: string | null
+          classified_area: string | null
+          classified_deadline: string | null
+          classified_deadline_unit: string | null
+          classified_needs_review: boolean
+          classified_rule_note: string | null
           comarca: string | null
           content: string
           created_at: string
@@ -1600,6 +1648,12 @@ export type Database = {
         }
         Insert: {
           case_id?: string | null
+          classified_act_name?: string | null
+          classified_area?: string | null
+          classified_deadline?: string | null
+          classified_deadline_unit?: string | null
+          classified_needs_review?: boolean
+          classified_rule_note?: string | null
           comarca?: string | null
           content: string
           created_at?: string
@@ -1632,6 +1686,12 @@ export type Database = {
         }
         Update: {
           case_id?: string | null
+          classified_act_name?: string | null
+          classified_area?: string | null
+          classified_deadline?: string | null
+          classified_deadline_unit?: string | null
+          classified_needs_review?: boolean
+          classified_rule_note?: string | null
           comarca?: string | null
           content?: string
           created_at?: string

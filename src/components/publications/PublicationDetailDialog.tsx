@@ -9,7 +9,7 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Separator } from "@/components/ui/separator";
-import { Loader2, Send, Trash2, Scale, Gavel, Users, Landmark, Upload, FileText, Download } from "lucide-react";
+import { Loader2, Send, Trash2, Scale, Gavel, Users, Landmark, Upload, FileText, Download, Sparkles, AlertTriangle } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import {
@@ -40,6 +40,13 @@ const sourceLabels: Record<string, string> = {
 const roleLabels: Record<string, string> = {
   advogado: "Advogado",
   operacional: "Operacional",
+};
+
+const areaLabels: Record<string, string> = {
+  civel: "Cível",
+  criminal: "Criminal",
+  trabalhista: "Trabalhista",
+  administrativo_tributario: "Administrativo/Tributário",
 };
 
 export function PublicationDetailDialog({ publication, onOpenChange }: PublicationDetailDialogProps) {
@@ -137,6 +144,41 @@ export function PublicationDetailDialog({ publication, onOpenChange }: Publicati
               )}
             </div>
           </div>
+
+          {publication.classified_act_name && (
+            <div className={`rounded-lg border p-3 space-y-1 ${publication.classified_needs_review ? "border-amber-300 bg-amber-50 dark:bg-amber-950/20" : "border-primary/30 bg-primary/5"}`}>
+              <div className="flex items-center gap-1.5 text-sm font-semibold">
+                {publication.classified_needs_review ? (
+                  <AlertTriangle className="w-4 h-4 text-amber-600" />
+                ) : (
+                  <Sparkles className="w-4 h-4 text-primary" />
+                )}
+                Ato Detectado Automaticamente
+                <Badge variant="outline" className="ml-auto text-[10px]">
+                  {areaLabels[publication.classified_area ?? ""] ?? publication.classified_area}
+                </Badge>
+              </div>
+              <p className="text-sm font-medium">{publication.classified_act_name}</p>
+              {publication.classified_needs_review ? (
+                <p className="text-xs text-amber-700 dark:text-amber-500">
+                  Prazo variável — confira manualmente. {publication.classified_rule_note}
+                </p>
+              ) : (
+                <>
+                  <p className="text-sm">
+                    Prazo calculado:{" "}
+                    {publication.classified_deadline
+                      ? format(parseISO(publication.classified_deadline), "dd/MM/yyyy", { locale: ptBR })
+                      : "—"}
+                  </p>
+                  <p className="text-xs text-muted-foreground">{publication.classified_rule_note}</p>
+                </>
+              )}
+              <p className="text-[10px] text-muted-foreground pt-1">
+                Informação complementar — não substitui os prazos externo/interno acima. Confira sempre.
+              </p>
+            </div>
+          )}
 
           {(publication.vara || publication.comarca || publication.valor_causa != null ||
             publication.data_abertura_tribunal || publication.data_aceitacao) && (

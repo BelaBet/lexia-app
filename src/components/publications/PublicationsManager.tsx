@@ -25,6 +25,8 @@ import {
   Pencil,
   Gavel,
   Scale,
+  Sparkles,
+  AlertTriangle,
 } from "lucide-react";
 import { format, isPast, isToday, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -164,6 +166,18 @@ export function PublicationsManager() {
                         <span className="flex items-center gap-1">
                           <Scale className="w-3.5 h-3.5" /> Interno: {deadlineBadge(pub.internal_deadline)}
                         </span>
+                      )}
+                      {pub.classified_act_name && (
+                        pub.classified_needs_review ? (
+                          <span className="flex items-center gap-1 text-amber-600">
+                            <AlertTriangle className="w-3.5 h-3.5" /> {pub.classified_act_name}: prazo variável, confira
+                          </span>
+                        ) : (
+                          <span className="flex items-center gap-1 text-primary">
+                            <Sparkles className="w-3.5 h-3.5" /> {pub.classified_act_name}
+                            {pub.classified_deadline && <>: {deadlineBadge(pub.classified_deadline)}</>}
+                          </span>
+                        )
                       )}
                     </div>
                   </div>
