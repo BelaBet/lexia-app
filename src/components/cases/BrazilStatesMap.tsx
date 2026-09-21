@@ -125,7 +125,7 @@ export function BrazilStatesMap({ counts }: { counts: StateCount[] }) {
         });
       };
 
-      let title = anchor.querySelector("title");
+      let title = anchor.querySelector<SVGTitleElement>("title");
       if (!title) {
         title = document.createElementNS("http://www.w3.org/2000/svg", "title");
         anchor.prepend(title);

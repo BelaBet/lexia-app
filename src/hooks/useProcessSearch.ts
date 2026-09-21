@@ -5,7 +5,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-export type ReportStatus = "criando" | "processando" | "concluido" | "erro";
+export type ReportStatus = "criando" | "processando" | "preview" | "concluido" | "erro";
 export type PipelineStage = "novo" | "em_analise" | "relevante" | "descartado" | "convertido";
 export type AutosStatus = "nao_solicitado" | "solicitado" | "pronto" | "erro";
 
