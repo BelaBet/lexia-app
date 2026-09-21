@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { toast } from "sonner";
 import { CnjSearchCard } from "@/components/process-search/CnjSearchCard";
 import { CompletedSearchResults } from "@/components/process-search/CompletedSearchResults";
-import { useSearchReports, useCheckNameSearch } from "@/hooks/useProcessSearch";
+import { useSearchReports, useCheckNameSearch, type SearchReport } from "@/hooks/useProcessSearch";
 import { useConfirmNameSearch, usePreviewNameSearch, type NameSearchPreviewResponse } from "@/hooks/useNameSearchFlow";
 
 const statusMeta: Record<string, { label: string; className: string }> = {
@@ -32,7 +32,7 @@ type StoredPreview = {
   }>;
 };
 
-function normalizeStoredPreview(report: any): NameSearchPreviewResponse | null {
+function normalizeStoredPreview(report: SearchReport): NameSearchPreviewResponse | null {
   const raw = report?.preview_data as StoredPreview | null | undefined;
   if (!raw || !Array.isArray(raw.partes)) return null;
 
@@ -42,7 +42,7 @@ function normalizeStoredPreview(report: any): NameSearchPreviewResponse | null {
     checked: part?.checked !== false,
     total: Number(part?.total_procs_variacoes ?? part?.parte_max_total ?? 0) || 0,
     variations: Array.isArray(part?.variacoes)
-      ? part.variacoes.map((variation: any, index: number) => {
+      ? part.variacoes.map((variation, index: number) => {
           if (Array.isArray(variation)) {
             return {
               name: String(variation?.[0] ?? `Variação ${index + 1}`),
@@ -51,11 +51,12 @@ function normalizeStoredPreview(report: any): NameSearchPreviewResponse | null {
               checked: variation?.[4] !== false,
             };
           }
+          const obj = (variation ?? {}) as Record<string, unknown>;
           return {
-            name: String(variation?.nome ?? variation?.name ?? `Variação ${index + 1}`),
-            total: Number(variation?.total ?? variation?.total_procs ?? 0) || 0,
-            variation_id: variation?.id ?? variation?.variation_id ?? null,
-            checked: variation?.checked !== false,
+            name: String(obj.nome ?? obj.name ?? `Variação ${index + 1}`),
+            total: Number(obj.total ?? obj.total_procs ?? 0) || 0,
+            variation_id: (obj.id ?? obj.variation_id ?? null) as number | null,
+            checked: obj.checked !== false,
           };
         }).filter((variation) => variation.name)
       : [],
@@ -108,7 +109,7 @@ export function ProcessSearchManagerV2({ onOpenCase }: ProcessSearchManagerV2Pro
     }
   };
 
-  const openSavedPreview = (report: any) => {
+  const openSavedPreview = (report: SearchReport) => {
     const restored = normalizeStoredPreview(report);
     if (!restored) {
       toast.error("Esta prévia não possui os dados necessários para ser reaberta.");

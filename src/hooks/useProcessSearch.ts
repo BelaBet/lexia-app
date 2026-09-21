@@ -17,6 +17,10 @@ export interface SearchReport {
   error_message: string | null;
   requested_at: string;
   completed_at: string | null;
+  jusbrasil_report_id: string | null;
+  preview_data: unknown;
+  estimated_cost: number | null;
+  outcome_message: string | null;
 }
 
 export interface SearchResult {
