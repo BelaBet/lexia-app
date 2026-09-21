@@ -6,11 +6,16 @@ import { Button } from "@/components/ui/button";
 
 const currency = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
-function safeObject(value: unknown): Record<string, unknown> {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
+// Dados crus vindos da API do JusBrasil (armazenados como JSON sem schema
+// fixo) — acessados via indexação solta (chave de objeto ou índice de
+// tupla), nunca com um shape conhecido em tempo de compilação.
+type JsonRecord = Record<string, unknown>;
+
+function safeObject(value: unknown): JsonRecord {
+  return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
 }
 
-function safeArray(value: unknown): any[] {
+function safeArray(value: unknown): JsonRecord[] {
   return Array.isArray(value) ? value : [];
 }
 
@@ -20,8 +25,8 @@ function text(value: unknown) {
   return "";
 }
 
-function parseDate(value?: string | null) {
-  if (!value) return null;
+function parseDate(value: unknown) {
+  if (typeof value !== "string" || !value) return null;
   const br = value.match(/^(\d{2})\/(\d{2})\/(\d{4})/);
   if (br) {
     const d = new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1]));
@@ -31,27 +36,29 @@ function parseDate(value?: string | null) {
   return Number.isNaN(d.getTime()) ? null : d;
 }
 
-function fmtDate(value?: string | null) {
-  if (!value) return "—";
-  const d = parseDate(value);
-  return d ? d.toLocaleDateString("pt-BR") : value;
+function fmtDate(value: unknown) {
+  const str = text(value);
+  if (!str) return "—";
+  const d = parseDate(str);
+  return d ? d.toLocaleDateString("pt-BR") : str;
 }
 
-function fmtDateTime(value?: string | null) {
-  if (!value) return "—";
-  const d = parseDate(value);
-  return d ? d.toLocaleString("pt-BR") : value;
+function fmtDateTime(value: unknown) {
+  const str = text(value);
+  if (!str) return "—";
+  const d = parseDate(str);
+  return d ? d.toLocaleString("pt-BR") : str;
 }
 
-function lawyerName(value: any) {
+function lawyerName(value: JsonRecord) {
   return text(value?.nomeNormalizado) || text(value?.nome) || "—";
 }
 
-function lawyerOab(value: any) {
+function lawyerOab(value: JsonRecord) {
   return text(value?.oab) || "—";
 }
 
-function PartyTable({ title, rows }: { title: string; rows: any[] }) {
+function PartyTable({ title, rows }: { title: string; rows: JsonRecord[] }) {
   return (
     <section className="space-y-3">
       <h2 className="text-xl font-semibold uppercase tracking-tight">{title}</h2>
@@ -85,7 +92,7 @@ function PartyTable({ title, rows }: { title: string; rows: any[] }) {
   );
 }
 
-function MovementTimeline({ movements }: { movements: any[] }) {
+function MovementTimeline({ movements }: { movements: JsonRecord[] }) {
   const chronological = [...movements]
     .filter((item) => parseDate(item.event_date))
     .sort((a, b) => (parseDate(a.event_date)?.getTime() || 0) - (parseDate(b.event_date)?.getTime() || 0));
@@ -154,7 +161,7 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
         .limit(1)
         .maybeSingle();
       if (error) throw error;
-      return data as any;
+      return data as JsonRecord;
     },
   });
 
@@ -223,8 +230,8 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
   if (isError || !data) return <p className="text-sm text-muted-foreground">Este processo ainda não possui dados detalhados importados.</p>;
 
   const raw = safeObject(data.raw_data);
-  const activeParties = safeArray(data.partes_ativas).length ? safeArray(data.partes_ativas) : safeArray(raw.partes).filter((p: any) => p?.is_autora || p?.relacaoNormalizado === "AUTOR");
-  const passiveParties = safeArray(data.partes_passivas).length ? safeArray(data.partes_passivas) : safeArray(raw.partes).filter((p: any) => p?.is_re || p?.relacaoNormalizado === "REU");
+  const activeParties = safeArray(data.partes_ativas).length ? safeArray(data.partes_ativas) : safeArray(raw.partes).filter((p: JsonRecord) => p?.is_autora || p?.relacaoNormalizado === "AUTOR");
+  const passiveParties = safeArray(data.partes_passivas).length ? safeArray(data.partes_passivas) : safeArray(raw.partes).filter((p: JsonRecord) => p?.is_re || p?.relacaoNormalizado === "REU");
   const classes = safeArray(raw.classes);
   const hearings = safeArray(raw.audiencias);
   const firstHearing = hearings[0] || null;
@@ -232,7 +239,7 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
   const instance = text(raw.instancia) ? `${text(raw.instancia)}ª instância` : "—";
   const updatedAt = text(raw.alteradoEm) || data.updated_at || data.created_at;
 
-  const providerMovements = safeArray(raw.movs).map((mov: any, index: number) => ({
+  const providerMovements = safeArray(raw.movs).map((mov: JsonRecord, index: number) => ({
     id: `provider-${mov?.[4] ?? index}`,
     event_date: text(mov?.[0]),
     title: text(mov?.[1]) || "Movimentação",
@@ -242,23 +249,23 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
   }));
 
   const movements = providerMovements.length ? providerMovements : timelineEvents;
-  const movementTypes = Array.from(new Set(movements.map((item: any) => text(item.title) || "Movimentação"))).sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const movementTypes = Array.from(new Set(movements.map((item: JsonRecord) => text(item.title) || "Movimentação"))).sort((a, b) => a.localeCompare(b, "pt-BR"));
 
-  const rawAutos = safeArray(raw.anexos).map((item: any, index: number) => ({
+  const rawAutos = safeArray(raw.anexos).map((item: JsonRecord, index: number) => ({
     id: `raw-auto-${item?.[0] ?? index}`,
     file_name: text(item?.[7]) || `Documento ${index + 1}`,
     source_url: text(item?.[1]),
     file_path: text(item?.[1]),
     file_type: text(item?.[2]) || "Documento",
     created_at: text(item?.[3]) || text(item?.[5]),
-  })).filter((doc: any) => doc.source_url || doc.file_name);
+  })).filter((doc) => doc.source_url || doc.file_name);
 
   const autos = storedAutos.length ? storedAutos : rawAutos;
   const documentCount = Math.max(Number(raw.num_anexos || 0), autos.length);
   const term = movementSearch.trim().toLowerCase();
   const fromDate = movementDateFrom ? new Date(`${movementDateFrom}T00:00:00`) : null;
   const toDate = movementDateTo ? new Date(`${movementDateTo}T23:59:59`) : null;
-  const filteredMovements = movements.filter((item: any) => {
+  const filteredMovements = movements.filter((item) => {
     const searchable = [item.title, item.client_summary, item.internal_note, item.event_date].some((v) => String(v || "").toLowerCase().includes(term));
     if (term && !searchable) return false;
     if (movementType !== "all" && (text(item.title) || "Movimentação") !== movementType) return false;
@@ -282,7 +289,7 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0">
             <h1 className="break-words font-serif text-2xl font-semibold text-primary md:text-3xl">
-              {data.tribunal || "Processo"} - Nº {data.process_number || "—"}
+              {text(data.tribunal) || "Processo"} - Nº {text(data.process_number) || "—"}
             </h1>
             <p className="mt-3 text-sm text-muted-foreground">{text(data.foro) || text(raw.fonte_sistema) || "—"}</p>
           </div>
@@ -301,17 +308,17 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
           <h2 className="mb-5 text-lg font-semibold">Detalhes do processo</h2>
           <div className="grid gap-x-10 gap-y-4 md:grid-cols-2">
             <div className="space-y-2 text-sm">
-              <p>{data.area || "—"} / {instance}</p>
-              <p className="font-medium">{data.natureza || text(raw.classeNatureza) || "—"}</p>
+              <p>{text(data.area) || "—"} / {instance}</p>
+              <p className="font-medium">{text(data.natureza) || text(raw.classeNatureza) || "—"}</p>
               {classes.length > 0 && <div className="space-y-1 text-muted-foreground">{classes.map((item, i) => <p key={`${String(item)}-${i}`}>- {String(item)}</p>)}</div>}
             </div>
             <dl className="grid grid-cols-[150px_1fr] gap-x-4 gap-y-2 text-sm">
-              <dt className="text-muted-foreground">Comarca</dt><dd>{data.comarca || text(raw.comarca_cnj) || "—"}</dd>
+              <dt className="text-muted-foreground">Comarca</dt><dd>{text(data.comarca) || text(raw.comarca_cnj) || "—"}</dd>
               <dt className="text-muted-foreground">Vara</dt><dd>{courtUnit || "—"}</dd>
               <dt className="text-muted-foreground">Data de distribuição</dt><dd>{fmtDate(data.data_distribuicao || text(raw.distribuicaoData))}</dd>
               <dt className="text-muted-foreground">Audiência</dt><dd>{firstHearing ? fmtDateTime(text(firstHearing.datahora ?? firstHearing?.[0])) : "—"}</dd>
               <dt className="text-muted-foreground">Valor da causa</dt><dd>{data.valor != null ? currency.format(Number(data.valor)) : "—"}</dd>
-              <dt className="text-muted-foreground">Status</dt><dd>{data.status_processual || (raw.arquivado ? "Arquivado" : "Em andamento")}</dd>
+              <dt className="text-muted-foreground">Status</dt><dd>{text(data.status_processual) || (raw.arquivado ? "Arquivado" : "Em andamento")}</dd>
             </dl>
           </div>
         </div>
@@ -362,7 +369,7 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
           <div className="overflow-x-auto border-y">
             <table className="w-full min-w-[800px] text-sm">
               <thead className="text-left text-xs text-muted-foreground"><tr><th className="px-3 py-3 font-medium">Data</th><th className="px-3 py-3 font-medium">Tipo</th><th className="px-3 py-3 font-medium">Texto</th></tr></thead>
-              <tbody>{filteredMovements.map((item: any) => <tr key={item.id} className="border-t align-top"><td className="px-3 py-4 whitespace-nowrap">{fmtDate(item.event_date)}</td><td className="px-3 py-4 font-medium">{item.title || "Movimentação"}</td><td className="px-3 py-4 text-muted-foreground">{item.client_summary || item.internal_note || "—"}</td></tr>)}</tbody>
+              <tbody>{filteredMovements.map((item) => <tr key={item.id} className="border-t align-top"><td className="px-3 py-4 whitespace-nowrap">{fmtDate(item.event_date)}</td><td className="px-3 py-4 font-medium">{item.title || "Movimentação"}</td><td className="px-3 py-4 text-muted-foreground">{item.client_summary || item.internal_note || "—"}</td></tr>)}</tbody>
             </table>
           </div>
         ) : (
@@ -375,12 +382,12 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
       <section className="space-y-5">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div><h2 className="text-xl font-semibold">{documentCount} Autos</h2><p className="mt-1 text-xs text-muted-foreground">Documentos e anexos já existentes na base.</p></div>
-          {autos.length > 0 && <Button variant="outline" onClick={() => autos.forEach((doc: any) => { const url = doc.source_url || doc.file_path; if (url && /^https?:\/\//i.test(url)) window.open(url, "_blank", "noopener,noreferrer"); })}><Download className="mr-2 h-4 w-4" />Abrir autos disponíveis</Button>}
+          {autos.length > 0 && <Button variant="outline" onClick={() => autos.forEach((doc) => { const url = doc.source_url || doc.file_path; if (url && /^https?:\/\//i.test(url)) window.open(url, "_blank", "noopener,noreferrer"); })}><Download className="mr-2 h-4 w-4" />Abrir autos disponíveis</Button>}
         </div>
 
         {autos.length > 0 ? (
           <div className="overflow-x-auto border-y">
-            <table className="w-full min-w-[720px] text-sm"><thead className="text-left text-xs text-muted-foreground"><tr><th className="px-3 py-3 font-medium">Título</th><th className="px-3 py-3 font-medium">Data</th><th className="px-3 py-3 font-medium">Tipo</th><th className="px-3 py-3 font-medium">Ação</th></tr></thead><tbody>{autos.map((doc: any) => { const url = doc.source_url || doc.file_path; const canOpen = Boolean(url && /^https?:\/\//i.test(url)); return <tr key={doc.id} className="border-t"><td className="px-3 py-4 font-medium">{doc.file_name || "Documento"}</td><td className="px-3 py-4">{fmtDate(doc.created_at)}</td><td className="px-3 py-4">{doc.file_type || "—"}</td><td className="px-3 py-4">{canOpen ? <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">Abrir <ExternalLink className="h-3.5 w-3.5" /></a> : "—"}</td></tr>; })}</tbody></table>
+            <table className="w-full min-w-[720px] text-sm"><thead className="text-left text-xs text-muted-foreground"><tr><th className="px-3 py-3 font-medium">Título</th><th className="px-3 py-3 font-medium">Data</th><th className="px-3 py-3 font-medium">Tipo</th><th className="px-3 py-3 font-medium">Ação</th></tr></thead><tbody>{autos.map((doc) => { const url = doc.source_url || doc.file_path; const canOpen = Boolean(url && /^https?:\/\//i.test(url)); return <tr key={doc.id} className="border-t"><td className="px-3 py-4 font-medium">{doc.file_name || "Documento"}</td><td className="px-3 py-4">{fmtDate(doc.created_at)}</td><td className="px-3 py-4">{doc.file_type || "—"}</td><td className="px-3 py-4">{canOpen ? <a href={url} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">Abrir <ExternalLink className="h-3.5 w-3.5" /></a> : "—"}</td></tr>; })}</tbody></table>
           </div>
         ) : (
           <div className="rounded-lg border bg-muted/20 p-5 text-sm text-muted-foreground">{syncing ? "Sincronizando autos existentes..." : "Nenhum auto foi retornado pela base atual do provedor para este processo."}</div>
