@@ -1175,9 +1175,12 @@ export type Database = {
           distribuido_from: string | null
           distribuido_to: string | null
           error_message: string | null
+          estimated_cost: number | null
           id: string
           integration_id: string | null
           jusbrasil_report_id: string | null
+          outcome_message: string | null
+          preview_data: Json | null
           requested_at: string
           result_count: number
           search_name: string
@@ -1192,9 +1195,12 @@ export type Database = {
           distribuido_from?: string | null
           distribuido_to?: string | null
           error_message?: string | null
+          estimated_cost?: number | null
           id?: string
           integration_id?: string | null
           jusbrasil_report_id?: string | null
+          outcome_message?: string | null
+          preview_data?: Json | null
           requested_at?: string
           result_count?: number
           search_name: string
@@ -1209,9 +1215,12 @@ export type Database = {
           distribuido_from?: string | null
           distribuido_to?: string | null
           error_message?: string | null
+          estimated_cost?: number | null
           id?: string
           integration_id?: string | null
           jusbrasil_report_id?: string | null
+          outcome_message?: string | null
+          preview_data?: Json | null
           requested_at?: string
           result_count?: number
           search_name?: string
