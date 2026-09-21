@@ -71,6 +71,33 @@ export type Database = {
         }
         Relationships: []
       }
+      automation_health: {
+        Row: {
+          automation_key: string
+          status: string
+          last_success_at: string | null
+          last_error_at: string | null
+          details: string | null
+          updated_at: string
+        }
+        Insert: {
+          automation_key: string
+          status?: string
+          last_success_at?: string | null
+          last_error_at?: string | null
+          details?: string | null
+          updated_at?: string
+        }
+        Update: {
+          automation_key?: string
+          status?: string
+          last_success_at?: string | null
+          last_error_at?: string | null
+          details?: string | null
+          updated_at?: string
+        }
+        Relationships: []
+      }
       case_clients: {
         Row: {
           case_id: string
