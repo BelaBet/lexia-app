@@ -56,6 +56,7 @@ import { syncDeadlineEvents, attachDocumentIfAvailable } from "./syncPublication
 import { computeFallbackExternalId } from "./externalId.ts";
 import { createNameSearchReport, startNameSearchBilling, fetchNameSearchExport, NameSearchRow } from "./jusbrasilNameSearch.ts";
 import { loadBlockedRanges, adjustDeadlineToNextBusinessDay } from "./businessDays.ts";
+import { loadDeadlineRules, loadCaseType, classifyDeadline } from "./deadlineClassifier.ts";
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 
 type AdminClient = SupabaseClient;
@@ -487,6 +488,7 @@ export async function pollJusbrasilIntegration(
     // escritório cadastrou) e usa para corrigir cada prazo recebido cru da
     // API antes de gravar — ver _shared/businessDays.ts.
     const blockedRanges = await loadBlockedRanges(adminClient, integration.user_id);
+    const deadlineRules = await loadDeadlineRules(adminClient);
 
     for (const item of items) {
       const content = firstString(item.conteudo, item.resumo) || JSON.stringify(item).slice(0, 4000);
@@ -531,6 +533,12 @@ export async function pollJusbrasilIntegration(
         if (linkError) console.error("Error auto-linking case to client:", linkError);
       }
 
+      // Classificação automática do ato processual (complementar, nunca
+      // substitui external_deadline/internal_deadline acima) — ver
+      // _shared/deadlineClassifier.ts.
+      const caseType = await loadCaseType(adminClient, caseId);
+      const classification = classifyDeadline(content, caseType, publishedDate, deadlineRules, blockedRanges);
+
       const { data: inserted, error: insertError } = await adminClient
         .from("publications")
         .insert({
@@ -546,6 +554,12 @@ export async function pollJusbrasilIntegration(
           raw_payload: item,
           imported_automatically: true,
           status: "pending",
+          classified_area: classification?.area ?? null,
+          classified_act_name: classification?.actName ?? null,
+          classified_deadline: classification?.deadline ?? null,
+          classified_deadline_unit: classification?.deadlineUnit ?? null,
+          classified_needs_review: classification?.needsReview ?? false,
+          classified_rule_note: classification?.ruleNote ?? null,
           ...processualData,
         })
         .select("id")

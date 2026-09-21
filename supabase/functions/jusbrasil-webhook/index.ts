@@ -1,6 +1,8 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { findOrCreateCaseId } from "../_shared/findOrCreateCase.ts";
 import { computeFallbackExternalId } from "../_shared/externalId.ts";
+import { loadBlockedRanges } from "../_shared/businessDays.ts";
+import { loadDeadlineRules, loadCaseType, classifyDeadline } from "../_shared/deadlineClassifier.ts";
 
 interface JusbrasilEvent {
   id?: string | number;
@@ -195,6 +197,7 @@ Deno.serve(async (req) => {
 
   let imported = 0;
   let unrouted = 0;
+  const deadlineRules = await loadDeadlineRules(admin);
 
   for (const event of events) {
     const destinations = await resolveDestinations(admin, event);
@@ -210,6 +213,8 @@ Deno.serve(async (req) => {
     }
 
     for (const destination of destinations) {
+      const blockedRanges = await loadBlockedRanges(admin, destination.user_id);
+
       for (const row of eventRows(event)) {
         const caseId = await findOrCreateCaseId(admin, destination.user_id, row.processNumber);
         const externalId = await computeFallbackExternalId([
@@ -220,6 +225,11 @@ Deno.serve(async (req) => {
           row.processNumber,
           row.date,
         ]);
+
+        // Classificação automática do ato processual (complementar) — ver
+        // _shared/deadlineClassifier.ts.
+        const caseType = await loadCaseType(admin, caseId);
+        const classification = classifyDeadline(row.content, caseType, row.date, deadlineRules, blockedRanges);
 
         const { data: inserted, error } = await admin
           .from("publications")
@@ -234,6 +244,12 @@ Deno.serve(async (req) => {
             raw_payload: row.raw,
             imported_automatically: true,
             status: "pending",
+            classified_area: classification?.area ?? null,
+            classified_act_name: classification?.actName ?? null,
+            classified_deadline: classification?.deadline ?? null,
+            classified_deadline_unit: classification?.deadlineUnit ?? null,
+            classified_needs_review: classification?.needsReview ?? false,
+            classified_rule_note: classification?.ruleNote ?? null,
           })
           .select("id")
           .maybeSingle();

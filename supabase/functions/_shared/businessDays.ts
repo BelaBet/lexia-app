@@ -78,3 +78,21 @@ export function adjustDeadlineToNextBusinessDay(dateStr: string | null, ranges: 
   }
   return adjusted;
 }
+
+// Conta N dias ÚTEIS a partir de uma data-gatilho (ex.: juntada do mandado,
+// intimação da sentença) — CPC art. 219/224: exclui o dia do começo, conta
+// só dias úteis, e o dia do vencimento resultante já é sempre um dia útil
+// por construção (não precisa de adjustDeadlineToNextBusinessDay depois).
+// Usado pelo classificador de prazos (_shared/deadlineClassifier.ts) para
+// calcular o prazo real de um ato processual detectado numa movimentação.
+export function addBusinessDays(startDateStr: string, days: number, ranges: BlockedRange[]): string {
+  let current = startDateStr;
+  let counted = 0;
+  let guard = 0;
+  while (counted < days && guard < 3650) {
+    current = addDays(current, 1);
+    guard += 1;
+    if (!isBlocked(current, ranges)) counted += 1;
+  }
+  return current;
+}

@@ -38,6 +38,7 @@ import { findOrCreateCaseId, ProcessualData } from "../_shared/findOrCreateCase.
 import { syncDeadlineEvents, attachDocumentIfAvailable } from "../_shared/syncPublicationExtras.ts";
 import { computeFallbackExternalId } from "../_shared/externalId.ts";
 import { loadBlockedRanges, adjustDeadlineToNextBusinessDay } from "../_shared/businessDays.ts";
+import { loadDeadlineRules, loadCaseType, classifyDeadline } from "../_shared/deadlineClassifier.ts";
 
 type PublicationSource = "jusbrasil" | "webjur" | "escavador";
 
@@ -301,6 +302,7 @@ Deno.serve(async (req) => {
   // única vez por chamada de webhook e usa para corrigir cada prazo cru
   // recebido do provedor antes de gravar — ver _shared/businessDays.ts.
   const blockedRanges = await loadBlockedRanges(adminClient, userId);
+  const deadlineRules = await loadDeadlineRules(adminClient);
 
   for (const row of rows) {
     const caseId = await findOrCreateCaseId(adminClient, userId, row.processNumber, row.processualData);
@@ -309,6 +311,12 @@ Deno.serve(async (req) => {
     // em feriado/recesso/fim de semana (CPC art. 224 §1º).
     const externalDeadline = adjustDeadlineToNextBusinessDay(row.externalDeadline ?? null, blockedRanges);
     const internalDeadline = adjustDeadlineToNextBusinessDay(row.internalDeadline ?? null, blockedRanges);
+
+    // Classificação automática do ato processual (complementar, nunca
+    // substitui external_deadline/internal_deadline acima) — ver
+    // _shared/deadlineClassifier.ts.
+    const caseType = await loadCaseType(adminClient, caseId);
+    const classification = classifyDeadline(row.content, caseType, row.publishedDate, deadlineRules, blockedRanges);
 
     const { data: inserted, error: insertError } = await adminClient
       .from("publications")
@@ -325,6 +333,12 @@ Deno.serve(async (req) => {
         raw_payload: row.rawPayload,
         imported_automatically: true,
         status: "pending",
+        classified_area: classification?.area ?? null,
+        classified_act_name: classification?.actName ?? null,
+        classified_deadline: classification?.deadline ?? null,
+        classified_deadline_unit: classification?.deadlineUnit ?? null,
+        classified_needs_review: classification?.needsReview ?? false,
+        classified_rule_note: classification?.ruleNote ?? null,
         ...(row.processualData ?? {}),
       })
       .select("id")
