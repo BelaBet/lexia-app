@@ -13,7 +13,7 @@ export function AgendaAutomationHealth() {
   const { data = [], isLoading } = useQuery({
     queryKey: ["agenda-automation-health"],
     queryFn: async () => {
-      const { data, error } = await (supabase as any)
+      const { data, error } = await supabase
         .from("automation_health")
         .select("automation_key,status,last_success_at,updated_at")
         .in("automation_key", ["event_notifications", "process_agenda_sync"]);
