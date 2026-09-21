@@ -49,7 +49,11 @@ export function usePreviewNameSearch() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (name: string) => invoke<NameSearchPreviewResponse>("preview-name-search", { name }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["process-search", "reports"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["process-search", "reports"] });
+      queryClient.invalidateQueries({ queryKey: ["cases"] });
+      queryClient.invalidateQueries({ queryKey: ["cases", "portfolio"] });
+    },
   });
 }
 
@@ -62,6 +66,10 @@ export function useConfirmNameSearch() {
         confirm_charge: true,
         excluded_variation_ids: excludedVariationIds,
       }),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["process-search", "reports"] }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["process-search", "reports"] });
+      queryClient.invalidateQueries({ queryKey: ["cases"] });
+      queryClient.invalidateQueries({ queryKey: ["cases", "portfolio"] });
+    },
   });
 }
