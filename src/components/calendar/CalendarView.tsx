@@ -77,14 +77,14 @@ import { toast } from "sonner";
 // distinguir prazo de resposta (externo) de prazo de controle interno do
 // escritório; "deadline" é o mesmo grupo "Prazo" quando criado manualmente.
 const eventTypeConfig = {
-  hearing: { label: "Audiência", class: "bg-primary/10 text-primary border-l-primary" },
-  deadline: { label: "Prazo", class: "bg-destructive/10 text-destructive border-l-destructive" },
-  meeting: { label: "Reunião", class: "bg-success/10 text-success border-l-success" },
-  tarefa: { label: "Tarefa", class: "bg-indigo-500/10 text-indigo-600 border-l-indigo-500" },
-  procedimento: { label: "Procedimento", class: "bg-amber-500/10 text-amber-600 border-l-amber-500" },
-  evento_processual: { label: "Evento Processual", class: "bg-cyan-500/10 text-cyan-600 border-l-cyan-500" },
-  prazo_externo: { label: "Prazo Externo (Publicação)", class: "bg-destructive/10 text-destructive border-l-destructive" },
-  prazo_interno: { label: "Prazo Interno (Publicação)", class: "bg-warning/10 text-warning border-l-warning" },
+  hearing: { label: "Audiência", class: "bg-primary/20 text-primary border-l-primary font-bold" },
+  deadline: { label: "Prazo", class: "bg-destructive/20 text-destructive border-l-destructive font-bold" },
+  meeting: { label: "Reunião", class: "bg-success/20 text-success border-l-success font-bold" },
+  tarefa: { label: "Tarefa", class: "bg-indigo-500/20 text-indigo-700 border-l-indigo-500 font-bold" },
+  procedimento: { label: "Procedimento", class: "bg-amber-500/20 text-amber-700 border-l-amber-500 font-bold" },
+  evento_processual: { label: "Evento Processual", class: "bg-cyan-500/20 text-cyan-700 border-l-cyan-500 font-bold" },
+  prazo_externo: { label: "Prazo Externo (Publicação)", class: "bg-destructive/20 text-destructive border-l-destructive font-bold" },
+  prazo_interno: { label: "Prazo Interno (Publicação)", class: "bg-warning/20 text-warning border-l-warning font-bold" },
 };
 
 const eventDotColor: Record<string, string> = {
@@ -1398,7 +1398,7 @@ export function CalendarView({ onOpenCase }: CalendarViewProps) {
                                   )}
                                 </button>
                                 <div>
-                                  <p className={`font-medium text-base ${eventTitleClass(event)}`}>{event.title}</p>
+                                  <p className={`font-bold text-base ${eventTitleClass(event)}`}>{event.title}</p>
                                   <p className="text-xs text-muted-foreground mt-1">
                                     {eventTypeConfig[event.type as keyof typeof eventTypeConfig]?.label || event.type}
                                   </p>
