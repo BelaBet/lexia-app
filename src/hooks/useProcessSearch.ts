@@ -5,7 +5,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
-export type ReportStatus = "criando" | "processando" | "concluido" | "erro";
+export type ReportStatus = "criando" | "processando" | "preview" | "concluido" | "erro";
 export type PipelineStage = "novo" | "em_analise" | "relevante" | "descartado" | "convertido";
 export type AutosStatus = "nao_solicitado" | "solicitado" | "pronto" | "erro";
 
@@ -17,6 +17,10 @@ export interface SearchReport {
   error_message: string | null;
   requested_at: string;
   completed_at: string | null;
+  jusbrasil_report_id: string | null;
+  preview_data: unknown;
+  estimated_cost: number | null;
+  outcome_message: string | null;
 }
 
 export interface SearchResult {

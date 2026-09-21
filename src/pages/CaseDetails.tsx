@@ -19,7 +19,7 @@ export default function CaseDetails() {
         .eq("id", caseId as string)
         .single();
       if (error) throw error;
-      return data as any;
+      return data;
     },
   });
 
