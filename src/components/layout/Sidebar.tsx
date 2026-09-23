@@ -58,7 +58,7 @@ const navItems = [
   { id: "process-search", label: "Buscar Processos", icon: Search },
   { id: "calendar", label: "Agenda", icon: Calendar },
   { id: "documents", label: "Meus Documentos", icon: FileText },
-  { id: "document-creator", label: "Criar Documento", icon: FilePlus },
+  { id: "document-creator", label: "Criar Documento", icon: FilePlus, supremoOnly: true },
   { id: "checklists", label: "Checklists", icon: ListChecks },
   { id: "assistant", label: "Assistente IA", icon: MessageSquare },
   { id: "pdf-reader", label: "Leitor PDF", icon: Upload },
@@ -117,7 +117,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
       </div>
       {/* Navigation */}
       <nav className="flex-1 space-y-1 overflow-y-auto p-3 xl:p-4">
-        {navItems.map((item) => (
+        {navItems.filter((item) => !item.supremoOnly || isSupremo).map((item) => (
           <button
             key={item.id}
             onClick={() => onTabChange(item.id)}
