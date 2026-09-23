@@ -14,7 +14,6 @@ import { DocumentsPage } from "@/components/documents/DocumentsPage";
 import { CasesPageNavigator } from "@/components/cases/CasesPageNavigator";
 import { CalendarView } from "@/components/calendar/CalendarView";
 import { ProfilePage } from "@/components/profile/ProfilePage";
-import { FeatureRequestForm } from "@/components/features/FeatureRequestForm";
 import { AdminUsersPage } from "@/components/admin/AdminUsersPage";
 import { AdminCompaniesPage } from "@/components/admin/AdminCompaniesPage";
 import { SettingsPage } from "@/components/settings/SettingsPage";
@@ -59,7 +58,6 @@ const Index = () => {
       case "publications": return <PublicationsManager />;
       case "financial-counter": return <ProcessSearchFinancialCounter />;
       case "profile": return <ProfilePage />;
-      case "feature-request": return <FeatureRequestForm />;
       case "branding": return <BrandingSettings />;
       case "admin": return <AdminUsersPage />;
       case "companies": return <AdminCompaniesPage />;
