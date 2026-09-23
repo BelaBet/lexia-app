@@ -17,6 +17,7 @@ import { ProfilePage } from "@/components/profile/ProfilePage";
 import { FeatureRequestForm } from "@/components/features/FeatureRequestForm";
 import { IntegrationsPage } from "@/pages/Integrations";
 import { AdminUsersPage } from "@/components/admin/AdminUsersPage";
+import { AdminCompaniesPage } from "@/components/admin/AdminCompaniesPage";
 import { SettingsPage } from "@/components/settings/SettingsPage";
 import { ChecklistsManager } from "@/components/checklists/ChecklistsManager";
 import { GuidePage } from "@/components/guide/GuidePage";
@@ -56,6 +57,7 @@ const Index = () => {
       case "integrations": return <IntegrationsPage />;
       case "branding": return <BrandingSettings />;
       case "admin": return <AdminUsersPage />;
+      case "companies": return <AdminCompaniesPage />;
       case "settings":
       case "notifications":
       case "billing": return <SettingsPage onTabChange={setActiveTab} />;

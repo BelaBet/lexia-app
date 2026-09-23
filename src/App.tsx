@@ -19,11 +19,12 @@ import PortalHome from "./pages/portal/PortalHome";
 import PortalTimeline from "./pages/portal/PortalTimeline";
 import PortalDocuments from "./pages/portal/PortalDocuments";
 import PortalRequests from "./pages/portal/PortalRequests";
+import EmpresaSetPassword from "./pages/EmpresaSetPassword";
 const queryClient = new QueryClient();
 const App = () => (
   <QueryClientProvider client={queryClient}>
-    <BrandingProvider>
-      <AuthProvider>
+    <AuthProvider>
+      <BrandingProvider>
         <TooltipProvider>
           <Toaster />
           <Sonner />
@@ -32,6 +33,7 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/pricing" element={<Pricing />} />
+              <Route path="/empresa/definir-senha" element={<EmpresaSetPassword />} />
               {/* Espaço do Cliente — Meu Jurídico (login e telas próprias do cliente do escritório) */}
               <Route path="/portal/entrar" element={<PortalAuth />} />
               <Route path="/portal/definir-senha" element={<PortalSetPassword />} />
@@ -62,8 +64,8 @@ const App = () => (
             </Routes>
           </BrowserRouter>
         </TooltipProvider>
-      </AuthProvider>
-    </BrandingProvider>
+      </BrandingProvider>
+    </AuthProvider>
   </QueryClientProvider>
 );
 export default App;

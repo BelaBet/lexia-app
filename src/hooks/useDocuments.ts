@@ -13,6 +13,12 @@ export interface Document {
   user_id: string | null;
   /** Processo ao qual este documento pertence (opcional) — usado para a contagem de documentos por processo em Processos. */
   case_id: string | null;
+  /** Nome de quem é responsável por este documento (texto livre). */
+  responsible_name: string | null;
+  /** Prazo do documento — quando preenchido, existe um evento correspondente na Agenda (ver deadline_event_id). */
+  deadline_date: string | null;
+  /** Evento na Agenda criado automaticamente a partir de deadline_date, para poder atualizar/remover ao editar o prazo em vez de duplicar eventos. */
+  deadline_event_id: string | null;
 }
 
 async function requireUser() {
@@ -36,7 +42,7 @@ export function useDocuments() {
 export function useCreateDocument() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (doc: { title: string; type: string; content?: string; status?: string; case_id?: string | null }) => {
+    mutationFn: async (doc: { title: string; type: string; content?: string; status?: string; case_id?: string | null; responsible_name?: string | null; deadline_date?: string | null; deadline_event_id?: string | null }) => {
       const user = await requireUser();
       const title = doc.title.trim();
       if (!title) throw new Error("O título do documento é obrigatório");
@@ -47,9 +53,12 @@ export function useCreateDocument() {
         status: doc.status || "draft",
         user_id: user.id,
         case_id: doc.case_id || null,
+        responsible_name: doc.responsible_name || null,
+        deadline_date: doc.deadline_date || null,
+        deadline_event_id: doc.deadline_event_id || null,
       }).select().single();
       if (error) throw error;
-      return data;
+      return data as Document;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["documents"] });

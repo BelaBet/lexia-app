@@ -219,7 +219,19 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
   useEffect(() => {
     if (!data || autoSyncDone) return;
     const raw = safeObject(data.raw_data);
-    const hasProviderDetails = Array.isArray(raw.movs) || Array.isArray(raw.anexos) || Boolean(raw._details_synced_at);
+    // Processos importados em lote (busca por nome/CRM) gravam raw_data já
+    // com "movs"/"anexos" como array — só que VAZIO, porque esse import não
+    // busca o detalhe completo do processo. `Array.isArray([])` é true, então
+    // a checagem antiga considerava isso "já sincronizado" e nunca disparava
+    // a sincronização automática — o processo ficava com a aba de
+    // Movimentações permanentemente vazia até alguém clicar manualmente em
+    // "Sincronizar detalhes". Só conta como já sincronizado quando há
+    // conteúdo de fato ou um _details_synced_at registrado (prova de que o
+    // detalhe completo já foi buscado ao menos uma vez, mesmo que vazio por
+    // motivo legítimo como segredo de justiça).
+    const hasProviderDetails = Boolean(raw._details_synced_at)
+      || (Array.isArray(raw.movs) && raw.movs.length > 0)
+      || (Array.isArray(raw.anexos) && raw.anexos.length > 0);
     if (!hasProviderDetails) {
       setAutoSyncDone(true);
       void syncDetails(false);

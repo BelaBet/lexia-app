@@ -76,6 +76,11 @@ import { toast } from "sonner";
 // pela integração com o JusBrasil — ver syncDeadlineEvents no backend) para
 // distinguir prazo de resposta (externo) de prazo de controle interno do
 // escritório; "deadline" é o mesmo grupo "Prazo" quando criado manualmente.
+// Cada tipo tem uma cor própria e fixa — não é configurável pelo usuário.
+// "Prazo" e "Prazo Externo" já dividiram a mesma cor vermelha (destructive)
+// e "Procedimento"/"Prazo Interno" a mesma cor âmbar (amber-500 ≈ token
+// warning), tornando os dois pares indistinguíveis num relance da Agenda;
+// cada um dos 8 tipos agora tem uma cor exclusiva.
 const eventTypeConfig = {
   hearing: { label: "Audiência", class: "bg-primary/20 text-primary border-l-primary font-bold" },
   deadline: { label: "Prazo", class: "bg-destructive/20 text-destructive border-l-destructive font-bold" },
@@ -83,8 +88,8 @@ const eventTypeConfig = {
   tarefa: { label: "Tarefa", class: "bg-indigo-500/20 text-indigo-700 border-l-indigo-500 font-bold" },
   procedimento: { label: "Procedimento", class: "bg-amber-500/20 text-amber-700 border-l-amber-500 font-bold" },
   evento_processual: { label: "Evento Processual", class: "bg-cyan-500/20 text-cyan-700 border-l-cyan-500 font-bold" },
-  prazo_externo: { label: "Prazo Externo (Publicação)", class: "bg-destructive/20 text-destructive border-l-destructive font-bold" },
-  prazo_interno: { label: "Prazo Interno (Publicação)", class: "bg-warning/20 text-warning border-l-warning font-bold" },
+  prazo_externo: { label: "Prazo Externo (Publicação)", class: "bg-violet-500/20 text-violet-700 border-l-violet-500 font-bold" },
+  prazo_interno: { label: "Prazo Interno (Publicação)", class: "bg-orange-500/20 text-orange-700 border-l-orange-500 font-bold" },
 };
 
 const eventDotColor: Record<string, string> = {
@@ -94,8 +99,8 @@ const eventDotColor: Record<string, string> = {
   tarefa: "bg-indigo-500",
   procedimento: "bg-amber-500",
   evento_processual: "bg-cyan-500",
-  prazo_externo: "bg-destructive",
-  prazo_interno: "bg-warning",
+  prazo_externo: "bg-violet-500",
+  prazo_interno: "bg-orange-500",
 };
 
 // Agrupamento usado pelos chips de filtro da Agenda — "Prazos" reúne os 3
