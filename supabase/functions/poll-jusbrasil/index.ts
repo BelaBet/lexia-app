@@ -1,7 +1,6 @@
 // Busca ativa periódica no JusBrasil (Consulta Processual), complementando
-// o webhook (publication-webhook). Pensada para ser chamada por um job
-// agendado (pg_cron + pg_net) uma vez por dia — veja
-// supabase/scripts/agendar_busca_ativa_jusbrasil.sql para o agendamento.
+// o webhook (publication-webhook). Chamada uma vez por dia pelo pg_cron —
+// ver migration ..._schedule_daily_process_sync.sql.
 //
 // IMPORTANTE (white-label): a credencial do provedor JusBrasil é central da
 // plataforma. Esta função não recebe, lê nem persiste api_key por tenant.
@@ -21,13 +20,17 @@ Deno.serve(async (req) => {
     return new Response(JSON.stringify({ error: "Configuração do Supabase ausente" }), { status: 500 });
   }
 
+  const adminClient = createClient(supabaseUrl, serviceRoleKey);
+
+  // Autenticação por segredo dedicado (get_cron_dispatch_secret(), guardado
+  // no Vault) em vez da Service Role Key direta — nunca é chamada pelo
+  // frontend, só pelo pg_cron.
   const authHeader = req.headers.get("Authorization") || "";
   const providedToken = authHeader.startsWith("Bearer ") ? authHeader.slice("Bearer ".length) : "";
-  if (providedToken !== serviceRoleKey) {
+  const { data: expectedToken, error: secretError } = await adminClient.rpc("get_cron_dispatch_secret");
+  if (secretError || !expectedToken || providedToken !== expectedToken) {
     return new Response(JSON.stringify({ error: "Não autorizado" }), { status: 403 });
   }
-
-  const adminClient = createClient(supabaseUrl, serviceRoleKey);
 
   const { data: integrations, error: integrationsError } = await adminClient
     .from("publication_integrations")
