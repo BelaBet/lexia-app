@@ -44,14 +44,33 @@ function stateData(rows:ResultRow[]){
   });
   return [...map.entries()].map(([uf,count])=>({uf,count})).sort((a,b)=>b.count-a.count);
 }
-function partyLabel(row:ResultRow){
-  const source=raw(row).partes;
-  if(Array.isArray(source)){
-    const names=source.map((item)=>item&&typeof item==="object"?safeText((item as Record<string,unknown>).nomeParte):"").filter(Boolean);
-    if(names.length)return names.slice(0,4).join(" · ");
+function extractPartyNames(value:unknown):string[]{
+  if(value==null)return [];
+  if(Array.isArray(value))return value.flatMap(extractPartyNames);
+  if(typeof value==="string"){
+    const trimmed=value.trim();
+    if(!trimmed)return [];
+    // Campos antigos podem ter sido persistidos como JSON serializado.
+    if((trimmed.startsWith("[")&&trimmed.endsWith("]"))||(trimmed.startsWith("{")&&trimmed.endsWith("}"))){
+      try{return extractPartyNames(JSON.parse(trimmed));}catch{return [trimmed];}
+    }
+    return [trimmed];
   }
-  const fallback=[textValue(row.partes_ativas),textValue(row.partes_passivas)].filter(Boolean).join(" · ");
-  return fallback||"—";
+  if(typeof value==="object"){
+    const item=value as Record<string,unknown>;
+    const name=safeText(item.nomeParte)||safeText(item.nome)||safeText(item.name)||safeText(item.razao_social);
+    return name?[name]:[];
+  }
+  return [];
+}
+function partyLabel(row:ResultRow){
+  const sourceNames=extractPartyNames(raw(row).partes);
+  const fallbackNames=[
+    ...extractPartyNames(row.partes_ativas),
+    ...extractPartyNames(row.partes_passivas),
+  ];
+  const names=[...new Set((sourceNames.length?sourceNames:fallbackNames).filter(Boolean))];
+  return names.length?names.slice(0,4).join(" · "):"—";
 }
 
 function ReportPanel({title,children,className=""}:{title:string;children:React.ReactNode;className?:string}){
@@ -118,7 +137,7 @@ export function ProcessPortfolio(){
 
         <div className="divide-y rounded-lg border md:hidden">{pagedResults.map((row)=><article key={row.id} className="p-4"><button onClick={()=>row.case_id&&navigate(`/processos/${row.case_id}`)} className="break-all text-left font-mono text-xs font-bold text-[#18324A] hover:underline dark:text-[#DCE9F3]">{row.process_number||"—"}</button><p className="mt-2 text-xs leading-relaxed">{partyLabel(row)}</p><div className="mt-3 grid grid-cols-2 gap-3 text-xs"><div><span className="text-muted-foreground">Distribuição</span><p>{fmtDate(row.data_distribuicao)}</p></div><div><span className="text-muted-foreground">Tribunal</span><p>{row.tribunal||"—"}</p></div><div><span className="text-muted-foreground">Valor</span><p>{row.valor!=null?currency.format(Number(row.valor)):"—"}</p></div><div><span className="text-muted-foreground">Área</span><p>{row.area||"—"}</p></div><div className="col-span-2"><span className="text-muted-foreground">Natureza</span><p>{row.natureza||safeText(raw(row).classeNatureza)||"—"}</p></div></div><div className="mt-4 flex gap-2"><Button variant="outline" size="sm" onClick={()=>downloadCsv(`${row.process_number||"processo"}.csv`,[row])}><Download className="h-4 w-4"/></Button><Button size="sm" className="flex-1" disabled={!row.case_id} onClick={()=>row.case_id&&navigate(`/processos/${row.case_id}`)}>Ver detalhes</Button></div></article>)}</div>
 
-        <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[1040px] text-sm"><thead className="border-y text-left text-xs text-muted-foreground"><tr><th className="px-3 py-3 font-medium">Número do processo</th><th className="px-3 py-3 font-medium">Parte</th><th className="px-3 py-3 font-medium">Distribuição</th><th className="px-3 py-3 font-medium">Tribunal</th><th className="px-3 py-3 font-medium">Valor (R$)</th><th className="px-3 py-3 font-medium">Área</th><th className="px-3 py-3 font-medium">Natureza</th><th className="px-3 py-3 font-medium">Ações</th></tr></thead><tbody>{pagedResults.map((row)=><tr key={row.id} className="border-b align-top hover:bg-muted/20"><td className="px-3 py-4"><button className="font-mono text-xs font-bold text-[#18324A] hover:underline dark:text-[#DCE9F3]" onClick={()=>row.case_id&&navigate(`/processos/${row.case_id}`)}>{row.process_number||"—"}</button></td><td className="max-w-[330px] px-3 py-4 text-xs leading-5">{partyLabel(row)}</td><td className="px-3 py-4">{fmtDate(row.data_distribuicao)}</td><td className="px-3 py-4">{row.tribunal||"—"}</td><td className="px-3 py-4">{row.valor!=null?currency.format(Number(row.valor)):"—"}</td><td className="px-3 py-4">{row.area||"—"}</td><td className="max-w-[220px] px-3 py-4 text-xs leading-5">{row.natureza||safeText(raw(row).classeNatureza)||"—"}</td><td className="px-3 py-4"><div className="flex gap-2"><Button variant="outline" size="sm" onClick={()=>downloadCsv(`${row.process_number||"processo"}.csv`,[row])}><Download className="h-4 w-4"/></Button><Button size="sm" disabled={!row.case_id} onClick={()=>row.case_id&&navigate(`/processos/${row.case_id}`)}>Abrir</Button></div></td></tr>)}</tbody></table></div>
+        <div className="hidden overflow-x-auto md:block"><table className="w-full min-w-[1040px] text-sm"><thead className="border-y text-left text-xs text-muted-foreground"><tr><th className="px-3 py-3 font-medium">Número do processo</th><th className="px-3 py-3 font-medium">Parte</th><th className="px-3 py-3 font-medium">Distribuição</th><th className="px-3 py-3 font-medium">Tribunal</th><th className="px-3 py-3 font-medium">Valor (R$)</th><th className="px-3 py-3 font-medium">Área</th><th className="px-3 py-3 font-medium">Natureza</th><th className="px-3 py-3 font-medium">Ações</th></tr></thead><tbody>{pagedResults.map((row)=><tr key={row.id} className="border-b align-top hover:bg-muted/20"><td className="px-3 py-4"><button className="font-mono text-xs font-bold text-[#18324A] hover:underline dark:text-[#DCE9F3]" onClick={()=>row.case_id&&navigate(`/processos/${row.case_id}`)}>{row.process_number||"—"}</button></td><td className="max-w-[330px] px-3 py-4 text-xs leading-5 break-words">{partyLabel(row)}</td><td className="px-3 py-4">{fmtDate(row.data_distribuicao)}</td><td className="px-3 py-4">{row.tribunal||"—"}</td><td className="px-3 py-4">{row.valor!=null?currency.format(Number(row.valor)):"—"}</td><td className="px-3 py-4">{row.area||"—"}</td><td className="max-w-[220px] px-3 py-4 text-xs leading-5">{row.natureza||safeText(raw(row).classeNatureza)||"—"}</td><td className="px-3 py-4"><div className="flex gap-2"><Button variant="outline" size="sm" onClick={()=>downloadCsv(`${row.process_number||"processo"}.csv`,[row])}><Download className="h-4 w-4"/></Button><Button size="sm" disabled={!row.case_id} onClick={()=>row.case_id&&navigate(`/processos/${row.case_id}`)}>Abrir</Button></div></td></tr>)}</tbody></table></div>
 
         {totalPages>1&&<div className="mt-6 flex flex-wrap items-center justify-center gap-1"><Button variant="ghost" size="icon" disabled={currentPage===1} onClick={()=>setPage(p=>Math.max(1,p-1))}><ChevronLeft className="h-4 w-4"/></Button>{Array.from({length:Math.min(totalPages,7)},(_,i)=>i+1).map(n=><Button key={n} size="sm" variant={currentPage===n?"default":"ghost"} className="h-8 min-w-8 px-2" onClick={()=>setPage(n)}>{n}</Button>)}{totalPages>7&&<span className="px-1 text-sm text-muted-foreground">… {totalPages}</span>}<Button variant="ghost" size="icon" disabled={currentPage===totalPages} onClick={()=>setPage(p=>Math.min(totalPages,p+1))}><ChevronRight className="h-4 w-4"/></Button></div>}
       </section>
