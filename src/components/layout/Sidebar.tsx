@@ -15,6 +15,7 @@ import {
   Link2,
   Crown,
   ShieldCheck,
+  Building2,
   ChevronDown,
   ChevronRight,
   Bell,
@@ -184,19 +185,32 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
             ))}
           </CollapsibleContent>
         </Collapsible>
-        {/* Admin link - only for admins */}
+        {/* Admin links - only for admins */}
         {isAdmin && (
-          <button
-            onClick={() => onTabChange("admin")}
-            title="Administração"
-            className={cn(
-              "sidebar-nav-item w-full min-w-0 text-red-400 hover:text-red-300",
-              activeTab === "admin" && "active"
-            )}
-          >
-            <ShieldCheck className="h-5 w-5 shrink-0" />
-            <span className="min-w-0 truncate font-medium">Administração</span>
-          </button>
+          <>
+            <button
+              onClick={() => onTabChange("admin")}
+              title="Administração"
+              className={cn(
+                "sidebar-nav-item w-full min-w-0 text-red-400 hover:text-red-300",
+                activeTab === "admin" && "active"
+              )}
+            >
+              <ShieldCheck className="h-5 w-5 shrink-0" />
+              <span className="min-w-0 truncate font-medium">Administração</span>
+            </button>
+            <button
+              onClick={() => onTabChange("companies")}
+              title="Empresas"
+              className={cn(
+                "sidebar-nav-item w-full min-w-0 text-red-400 hover:text-red-300",
+                activeTab === "companies" && "active"
+              )}
+            >
+              <Building2 className="h-5 w-5 shrink-0" />
+              <span className="min-w-0 truncate font-medium">Empresas</span>
+            </button>
+          </>
         )}
       </nav>
       {/* User Profile */}

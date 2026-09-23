@@ -1454,6 +1454,7 @@ export type Database = {
       profiles: {
         Row: {
           avatar_url: string | null
+          company_id: string | null
           created_at: string
           full_name: string | null
           id: string
@@ -1465,6 +1466,7 @@ export type Database = {
         }
         Insert: {
           avatar_url?: string | null
+          company_id?: string | null
           created_at?: string
           full_name?: string | null
           id?: string
@@ -1476,6 +1478,7 @@ export type Database = {
         }
         Update: {
           avatar_url?: string | null
+          company_id?: string | null
           created_at?: string
           full_name?: string | null
           id?: string
@@ -1485,7 +1488,15 @@ export type Database = {
           updated_at?: string
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "profiles_company_id_fkey"
+            columns: ["company_id"]
+            isOneToOne: false
+            referencedRelation: "whitelabel_companies"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       publication_attachments: {
         Row: {
@@ -1846,6 +1857,54 @@ export type Database = {
         }
         Relationships: []
       }
+      whitelabel_companies: {
+        Row: {
+          created_at: string
+          custom_domain: string | null
+          document: string | null
+          id: string
+          is_parent_company: boolean
+          legal_name: string | null
+          logo_url: string | null
+          name: string
+          primary_color: string | null
+          secondary_color: string | null
+          slug: string
+          status: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          custom_domain?: string | null
+          document?: string | null
+          id?: string
+          is_parent_company?: boolean
+          legal_name?: string | null
+          logo_url?: string | null
+          name: string
+          primary_color?: string | null
+          secondary_color?: string | null
+          slug: string
+          status?: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          custom_domain?: string | null
+          document?: string | null
+          id?: string
+          is_parent_company?: boolean
+          legal_name?: string | null
+          logo_url?: string | null
+          name?: string
+          primary_color?: string | null
+          secondary_color?: string | null
+          slug?: string
+          status?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
@@ -1895,6 +1954,7 @@ export type Database = {
         Args: never
         Returns: {
           avatar_url: string
+          company_id: string
           created_at: string
           full_name: string
           id: string

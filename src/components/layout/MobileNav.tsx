@@ -1,4 +1,4 @@
-import { Menu, Palette, Scale } from "lucide-react";
+import { Menu, Palette, Scale, Building2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -100,6 +100,14 @@ export function MobileNav({ activeTab, onTabChange }: MobileNavProps) {
                   <Palette className="mr-2 h-4 w-4 shrink-0" />
                   <span className="min-w-0 flex-1 truncate">Marca da Plataforma</span>
                   {activeTab === "branding" && <span className="ml-3 shrink-0 text-xs font-semibold text-primary">Atual</span>}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  onSelect={() => handleNavigate("companies")}
+                  className="min-h-11 cursor-pointer rounded-md px-3 py-2.5 text-sm"
+                >
+                  <Building2 className="mr-2 h-4 w-4 shrink-0" />
+                  <span className="min-w-0 flex-1 truncate">Empresas</span>
+                  {activeTab === "companies" && <span className="ml-3 shrink-0 text-xs font-semibold text-primary">Atual</span>}
                 </DropdownMenuItem>
               </>
             )}

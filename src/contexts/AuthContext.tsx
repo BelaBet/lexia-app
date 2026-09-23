@@ -10,6 +10,7 @@ interface Profile {
   phone: string | null;
   oab_number: string | null;
   specialty: string | null;
+  company_id: string | null;
 }
 
 interface UserRole {
