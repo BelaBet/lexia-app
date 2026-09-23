@@ -164,9 +164,12 @@ interface Participant {
 interface CalendarViewProps {
   /** Navega até "Processos" já com o processo aberto — usado pelo botão "Abrir processo" nos itens da Agenda. */
   onOpenCase?: (caseId: string) => void;
+  /** Evento vindo do Dashboard: abre a Agenda diretamente no compromisso selecionado. */
+  focusEventId?: string | null;
+  onFocusEventHandled?: () => void;
 }
 
-export function CalendarView({ onOpenCase }: CalendarViewProps) {
+export function CalendarView({ onOpenCase, focusEventId, onFocusEventHandled }: CalendarViewProps) {
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
@@ -195,6 +198,22 @@ export function CalendarView({ onOpenCase }: CalendarViewProps) {
   const { data: events = [], isLoading } = useEvents();
   const { data: checklists = [] } = useChecklists();
   const { data: cases = [] } = useCases();
+
+  // Quando o usuário clica em um evento no Dashboard, a Agenda abre exatamente
+  // aquele evento (inclusive mudando o mês visível para a data correspondente).
+  useEffect(() => {
+    if (!focusEventId || isLoading) return;
+    const target = events.find((event) => event.id === focusEventId);
+    if (!target) {
+      onFocusEventHandled?.();
+      return;
+    }
+    const targetDate = parseISO(target.event_date);
+    setCurrentDate(targetDate);
+    setSelectedDay(targetDate);
+    setEditingEvent(target);
+    onFocusEventHandled?.();
+  }, [focusEventId, isLoading, events, onFocusEventHandled]);
 
   const casesById = useMemo(() => new Map(cases.map((c) => [c.id, c])), [cases]);
 
