@@ -10,7 +10,6 @@ import {
   Settings,
   Scale,
   User,
-  Lightbulb,
   LogOut,
   Crown,
   ShieldCheck,
@@ -69,7 +68,6 @@ const settingsSubItems = [
   { id: "notifications", label: "Notificações", icon: Bell },
   { id: "billing", label: "Planos e Pagamentos", icon: CreditCard },
   { id: "branding", label: "Marca da Plataforma", icon: Palette, adminOnly: true },
-  { id: "feature-request", label: "Solicitar Funcionalidade", icon: Lightbulb, highlight: true },
 ];
 export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const { user, profile, signOut, hasRole } = useAuth();
@@ -79,7 +77,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const brandName = branding?.brand_name || DEFAULT_BRANDING.brand_name;
   const brandTagline = branding?.tagline || DEFAULT_BRANDING.tagline;
   const brandLogo = branding?.logo_url;
-  const settingsTabs = ["settings", "notifications", "billing", "branding", "feature-request"];
+  const settingsTabs = ["settings", "notifications", "billing", "branding"];
   const isSettingsTab = settingsTabs.includes(activeTab);
   const [settingsOpen, setSettingsOpen] = useState(isSettingsTab);
   const visibleSettingsSubItems = settingsSubItems.filter((item) => !item.adminOnly || isAdmin);
