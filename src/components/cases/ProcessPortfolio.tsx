@@ -76,19 +76,19 @@ function partyLabel(row:ResultRow){
 function ReportPanel({title,children,className=""}:{title:string;children:React.ReactNode;className?:string}){
   return <section className={`min-w-0 ${className}`}><h3 className="mb-4 text-center text-sm font-medium text-foreground sm:text-base">{title}</h3>{children}</section>;
 }
-function VerticalYearChart({data}:{data:CountItem[]}){
+function VerticalYearChart({data,onSelect}:{data:CountItem[];onSelect?:(name:string)=>void}){
   const max=Math.max(1,...data.map((item)=>item.value));
-  return <div className="h-[330px] w-full overflow-x-auto"><div className="flex h-full min-w-[520px] items-end gap-3 border-b border-l px-4 pb-7 pt-4 sm:gap-5">{data.map((item)=><div key={item.name} className="flex min-w-[34px] flex-1 flex-col items-center justify-end gap-2"><span className="text-[11px] font-semibold">{item.value}</span><div className="w-full max-w-[42px] rounded-t bg-primary/75" style={{height:`${Math.max(6,(item.value/max)*235)}px`}}/><span className="origin-center -rotate-45 text-[10px] text-muted-foreground sm:text-xs">{item.name}</span></div>)}</div></div>;
+  return <div className="h-[330px] w-full overflow-x-auto"><div className="flex h-full min-w-[520px] items-end gap-3 border-b border-l px-4 pb-7 pt-4 sm:gap-5">{data.map((item)=><button type="button" onClick={()=>onSelect?.(item.name)} key={item.name} className="flex min-w-[34px] flex-1 flex-col items-center justify-end gap-2 cursor-pointer"><span className="text-[11px] font-semibold">{item.value}</span><div className="w-full max-w-[42px] rounded-t bg-primary/75" style={{height:`${Math.max(6,(item.value/max)*235)}px`}}/><span className="origin-center -rotate-45 text-[10px] text-muted-foreground sm:text-xs">{item.name}</span></button>)}</div></div>;
 }
-function HorizontalBars({data}:{data:CountItem[]}){
+function HorizontalBars({data,onSelect}:{data:CountItem[];onSelect?:(name:string)=>void}){
   const max=Math.max(1,...data.map((item)=>item.value));
-  return <div className="space-y-3">{data.map((item)=><div key={item.name} className="grid grid-cols-[96px_1fr_36px] items-center gap-2 text-xs sm:grid-cols-[130px_1fr_40px]"><span className="truncate text-right text-muted-foreground" title={item.name}>{item.name}</span><div className="h-8 bg-muted/35"><div className="h-full bg-primary/75" style={{width:`${Math.max(3,(item.value/max)*100)}%`}}/></div><strong>{item.value}</strong></div>)}</div>;
+  return <div className="space-y-3">{data.map((item)=><button type="button" onClick={()=>onSelect?.(item.name)} key={item.name} className="grid w-full grid-cols-[96px_1fr_36px] items-center gap-2 text-xs sm:grid-cols-[130px_1fr_40px] cursor-pointer"><span className="truncate text-right text-muted-foreground" title={item.name}>{item.name}</span><div className="h-8 bg-muted/35"><div className="h-full bg-primary/75" style={{width:`${Math.max(3,(item.value/max)*100)}%`}}/></div><strong>{item.value}</strong></button>)}</div>;
 }
-function Donut({data}:{data:CountItem[]}){
+function Donut({data,onSelect}:{data:CountItem[];onSelect?:(name:string)=>void}){
   const total=data.reduce((sum,item)=>sum+item.value,0)||1;
   const first=data[0]?.value||0;
   const p1=Math.round((first/total)*100);
-  return <div className="flex min-h-[270px] flex-col items-center justify-center gap-5"><div className="flex h-44 w-44 items-center justify-center rounded-full p-8" style={{background:`conic-gradient(hsl(var(--primary)) 0 ${p1}%, hsl(var(--muted-foreground) / .25) ${p1}% 100%)`}}><div className="h-full w-full rounded-full bg-background"/></div><div className="flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs">{data.map((item,index)=><span key={item.name} className="flex items-center gap-2"><span className={`h-2.5 w-2.5 rounded-full ${index===0?"bg-primary":"bg-muted-foreground/40"}`}/>{item.name}: <strong>{item.value}</strong></span>)}</div></div>;
+  return <div className="flex min-h-[270px] flex-col items-center justify-center gap-5"><div className="flex h-44 w-44 items-center justify-center rounded-full p-8" style={{background:`conic-gradient(hsl(var(--primary)) 0 ${p1}%, hsl(var(--muted-foreground) / .25) ${p1}% 100%)`}}><div className="h-full w-full rounded-full bg-background"/></div><div className="flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs">{data.map((item,index)=><button type="button" onClick={()=>onSelect?.(item.name)} key={item.name} className="flex items-center gap-2 cursor-pointer"><span className={`h-2.5 w-2.5 rounded-full ${index===0?"bg-primary":"bg-muted-foreground/40"}`}/>{item.name}: <strong>{item.value}</strong></button>)}</div></div>;
 }
 
 export function ProcessPortfolio(){
@@ -96,12 +96,13 @@ export function ProcessPortfolio(){
   const [selectedReportId,setSelectedReportId]=useState<string|null>(null);
   const [searchTerm,setSearchTerm]=useState("");
   const [page,setPage]=useState(1);
+  const [chartFilter,setChartFilter]=useState<{kind:"state"|"year"|"polo"|"status"|"nature";value:string}|null>(null);
   const {data,isLoading,isError,error,refetch,isFetching}=useQuery({queryKey:["cases","portfolio"],queryFn:async()=>{const [{data:reports,error:reportsError},{data:results,error:resultsError}]=await Promise.all([supabase.from("process_search_reports").select("*").order("created_at",{ascending:false}),supabase.from("process_search_results").select("*").order("data_distribuicao",{ascending:false})]);if(reportsError)throw reportsError;if(resultsError)throw resultsError;return{reports:(reports||[])as ReportRow[],results:(results||[])as ResultRow[]};},refetchOnWindowFocus:true});
   const reports=data?.reports||[];const results=data?.results||[];
   const reportResults=useMemo(()=>{const grouped=new Map<string,ResultRow[]>();results.forEach((result)=>{const current=grouped.get(result.report_id)||[];current.push(result);grouped.set(result.report_id,current);});return grouped;},[results]);
   const selectedReport=reports.find((report)=>report.id===selectedReportId)||null;
   const selectedResults=selectedReport?reportResults.get(selectedReport.id)||[]:[];
-  const filteredResults=useMemo(()=>{const term=searchTerm.trim().toLowerCase();if(!term)return selectedResults;return selectedResults.filter((row)=>[row.process_number,row.tribunal,row.area,row.natureza,row.comarca,row.vara,row.status_processual,partyLabel(row)].some((value)=>String(value||"").toLowerCase().includes(term)));},[selectedResults,searchTerm]);
+  const filteredResults=useMemo(()=>{let rows=selectedResults;if(chartFilter){rows=rows.filter((row)=>{const source=raw(row);if(chartFilter.kind==="state")return safeText(source.uf).toUpperCase()===chartFilter.value;if(chartFilter.kind==="year")return (row.data_distribuicao||"").includes(chartFilter.value);if(chartFilter.kind==="nature")return (row.area?.trim()||safeText(source.classeNatureza)||row.natureza?.trim()||"OUTROS")===chartFilter.value;if(chartFilter.kind==="polo"){const papel=safeText(source.papel);const value=/ativo/i.test(papel)?"Polo ativo":/passivo|réu|reu/i.test(papel)?"Polo passivo":papel||"Sem dados";return value===chartFilter.value;}const status=(row.status_processual||"").toLowerCase();const closed=Boolean(source.arquivado)||Boolean(source.extinto)||/arquiv|baixad|encerr|extint/.test(status);return (closed?"Encerrado":"Não encerrado")===chartFilter.value;});}const term=searchTerm.trim().toLowerCase();if(!term)return rows;return rows.filter((row)=>[row.process_number,row.tribunal,row.area,row.natureza,row.comarca,row.vara,row.status_processual,partyLabel(row)].some((value)=>String(value||"").toLowerCase().includes(term)));},[selectedResults,searchTerm,chartFilter]);
   const totalPages=Math.max(1,Math.ceil(filteredResults.length/PAGE_SIZE));
   const currentPage=Math.min(page,totalPages);
   const pagedResults=filteredResults.slice((currentPage-1)*PAGE_SIZE,currentPage*PAGE_SIZE);
@@ -121,19 +122,19 @@ export function ProcessPortfolio(){
       </header>
 
       <section className="grid gap-10 lg:grid-cols-2">
-        <BrazilStatesMap counts={states}/>
-        <ReportPanel title="Data de distribuição"><VerticalYearChart data={years}/></ReportPanel>
+        <BrazilStatesMap counts={states} onSelect={(uf)=>{setChartFilter({kind:"state",value:uf});setPage(1);}}/>
+        <ReportPanel title="Data de distribuição"><VerticalYearChart data={years} onSelect={(value)=>{setChartFilter({kind:"year",value});setPage(1);}}/></ReportPanel>
       </section>
 
       <section className="grid gap-10 lg:grid-cols-2">
-        <ReportPanel title="Polo">{polos.length===1&&polos[0].name==="Sem dados"?<div className="flex min-h-[270px] items-center justify-center text-xl font-semibold">Sem dados disponíveis.</div>:<Donut data={polos}/>}</ReportPanel>
-        <ReportPanel title="Status"><Donut data={statuses}/></ReportPanel>
+        <ReportPanel title="Polo">{polos.length===1&&polos[0].name==="Sem dados"?<div className="flex min-h-[270px] items-center justify-center text-xl font-semibold">Sem dados disponíveis.</div>:<Donut data={polos} onSelect={(value)=>{setChartFilter({kind:"polo",value});setPage(1);}}/>}</ReportPanel>
+        <ReportPanel title="Status"><Donut data={statuses} onSelect={(value)=>{setChartFilter({kind:"status",value});setPage(1);}}/></ReportPanel>
       </section>
 
-      <ReportPanel title="Natureza" className="mx-auto w-full max-w-[760px]"><HorizontalBars data={natures}/></ReportPanel>
+      <ReportPanel title="Natureza" className="mx-auto w-full max-w-[760px]"><HorizontalBars data={natures} onSelect={(value)=>{setChartFilter({kind:"nature",value});setPage(1);}}/></ReportPanel>
 
       <section className="pt-3">
-        <div className="mb-4 flex flex-col gap-4 md:flex-row md:items-end md:justify-between"><div><h2 className="text-xl font-semibold">Lista de processos</h2><p className="mt-1 text-xs text-muted-foreground">{filteredResults.length} registro(s)</p></div><div className="relative w-full md:w-72"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><input value={searchTerm} onChange={(e)=>{setSearchTerm(e.target.value);setPage(1);}} placeholder="Localizar na tabela" className="legal-input h-10 w-full pl-9"/></div></div>
+        {chartFilter&&<div className="mb-4 flex items-center justify-between rounded-lg border bg-muted/40 px-4 py-3 text-sm"><span>Filtro do gráfico: <strong>{chartFilter.value}</strong> · {filteredResults.length} processo(s)</span><Button size="sm" variant="ghost" onClick={()=>{setChartFilter(null);setPage(1);}}>Mostrar todos</Button></div>}<div className="mb-4 flex flex-col gap-4 md:flex-row md:items-end md:justify-between"><div><h2 className="text-xl font-semibold">Lista de processos</h2><p className="mt-1 text-xs text-muted-foreground">{filteredResults.length} registro(s)</p></div><div className="relative w-full md:w-72"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><input value={searchTerm} onChange={(e)=>{setSearchTerm(e.target.value);setPage(1);}} placeholder="Localizar na tabela" className="legal-input h-10 w-full pl-9"/></div></div>
 
         <div className="divide-y rounded-lg border md:hidden">{pagedResults.map((row)=><article key={row.id} className="p-4"><button onClick={()=>row.case_id&&navigate(`/processos/${row.case_id}`)} className="break-all text-left font-mono text-xs font-bold text-[#18324A] hover:underline dark:text-[#DCE9F3]">{row.process_number||"—"}</button><p className="mt-2 text-xs leading-relaxed">{partyLabel(row)}</p><div className="mt-3 grid grid-cols-2 gap-3 text-xs"><div><span className="text-muted-foreground">Distribuição</span><p>{fmtDate(row.data_distribuicao)}</p></div><div><span className="text-muted-foreground">Tribunal</span><p>{row.tribunal||"—"}</p></div><div><span className="text-muted-foreground">Valor</span><p>{row.valor!=null?currency.format(Number(row.valor)):"—"}</p></div><div><span className="text-muted-foreground">Área</span><p>{row.area||"—"}</p></div><div className="col-span-2"><span className="text-muted-foreground">Natureza</span><p>{row.natureza||safeText(raw(row).classeNatureza)||"—"}</p></div></div><div className="mt-4 flex gap-2"><Button variant="outline" size="sm" onClick={()=>downloadCsv(`${row.process_number||"processo"}.csv`,[row])}><Download className="h-4 w-4"/></Button><Button size="sm" className="flex-1" disabled={!row.case_id} onClick={()=>row.case_id&&navigate(`/processos/${row.case_id}`)}>Ver detalhes</Button></div></article>)}</div>
 
