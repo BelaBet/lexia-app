@@ -31,6 +31,7 @@ import { DemoDataBanner } from "@/components/layout/DemoDataBanner";
 
 const Index = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
+  const [focusedAgendaEventId, setFocusedAgendaEventId] = useState<string | null>(null);
   const { profile } = useAuth();
   const navigate = useNavigate();
 
@@ -38,9 +39,14 @@ const Index = () => {
     navigate(`/processos/${caseId}`);
   };
 
+  const handleOpenAgendaEvent = (eventId: string) => {
+    setFocusedAgendaEventId(eventId);
+    setActiveTab("calendar");
+  };
+
   const renderContent = () => {
     switch (activeTab) {
-      case "dashboard": return <div className="space-y-6"><div><h1 className="font-serif text-3xl font-bold text-foreground">Bem-vindo, {profile?.full_name?.split(" ")[0] || "Advogado"}!</h1><p className="text-muted-foreground mt-1">Seu assistente jurídico inteligente</p></div><StatsCards /><QuickActions onTabChange={setActiveTab} /><ProcessReportsSummary onTabChange={setActiveTab} /><div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><RecentDocuments /><UpcomingDeadlines onTabChange={setActiveTab} /></div></div>;
+      case "dashboard": return <div className="space-y-6"><div><h1 className="font-serif text-3xl font-bold text-foreground">Bem-vindo, {profile?.full_name?.split(" ")[0] || "Advogado"}!</h1><p className="text-muted-foreground mt-1">Seu assistente jurídico inteligente</p></div><StatsCards /><QuickActions onTabChange={setActiveTab} /><ProcessReportsSummary onTabChange={setActiveTab} /><div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><RecentDocuments /><UpcomingDeadlines onTabChange={setActiveTab} onOpenAgendaEvent={handleOpenAgendaEvent} /></div></div>;
       case "assistant": return <AIChat onOpenGuide={() => setActiveTab("guide")} />;
       case "pdf-reader": return <PDFReader onOpenGuide={() => setActiveTab("guide")} />;
       case "document-creator": return <DocumentCreator />;
@@ -49,7 +55,7 @@ const Index = () => {
       case "process-search": return <ProcessSearchManagerV2 onOpenCase={handleOpenCase} />;
       case "checklists": return <ChecklistsManager />;
       case "guide": return <GuidePage />;
-      case "calendar": return <CalendarView onOpenCase={handleOpenCase} />;
+      case "calendar": return <CalendarView onOpenCase={handleOpenCase} focusEventId={focusedAgendaEventId} onFocusEventHandled={() => setFocusedAgendaEventId(null)} />;
       case "publications": return <PublicationsManager />;
       case "financial-counter": return <ProcessSearchFinancialCounter />;
       case "profile": return <ProfilePage />;
