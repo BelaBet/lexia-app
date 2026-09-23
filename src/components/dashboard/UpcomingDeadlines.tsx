@@ -23,9 +23,10 @@ interface DeadlineItem {
 
 interface UpcomingDeadlinesProps {
   onTabChange?: (tab: string) => void;
+  onOpenAgendaEvent?: (eventId: string) => void;
 }
 
-export function UpcomingDeadlines({ onTabChange }: UpcomingDeadlinesProps) {
+export function UpcomingDeadlines({ onTabChange, onOpenAgendaEvent }: UpcomingDeadlinesProps) {
   const { data: events = [], isLoading: isLoadingEvents } = useEvents();
   const { data: checklists = [], isLoading: isLoadingChecklists } = useChecklists();
   
@@ -129,8 +130,18 @@ export function UpcomingDeadlines({ onTabChange }: UpcomingDeadlinesProps) {
           {allDeadlines.map((deadline, index) => (
             <div 
               key={`${deadline.type}-${deadline.id}`}
-              className={`p-4 rounded-lg border-l-4 ${priorityStyles[deadline.priority]} fade-in`}
+              role={deadline.type === "event" ? "button" : undefined}
+              tabIndex={deadline.type === "event" ? 0 : undefined}
+              onClick={() => deadline.type === "event" && onOpenAgendaEvent?.(deadline.id)}
+              onKeyDown={(e) => {
+                if (deadline.type === "event" && (e.key === "Enter" || e.key === " ")) {
+                  e.preventDefault();
+                  onOpenAgendaEvent?.(deadline.id);
+                }
+              }}
+              className={`p-4 rounded-lg border-l-4 ${priorityStyles[deadline.priority]} fade-in ${deadline.type === "event" ? "cursor-pointer hover:ring-2 hover:ring-primary/20 transition-all" : ""}`}
               style={{ animationDelay: `${index * 50}ms` }}
+              title={deadline.type === "event" ? "Abrir este evento na Agenda" : undefined}
             >
               <div className="flex items-start justify-between">
                 <div className="flex-1 min-w-0">
