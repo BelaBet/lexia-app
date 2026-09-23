@@ -32,7 +32,8 @@ import { DemoDataBanner } from "@/components/layout/DemoDataBanner";
 const Index = () => {
   const [activeTab, setActiveTab] = useState("dashboard");
   const [focusedAgendaEventId, setFocusedAgendaEventId] = useState<string | null>(null);
-  const { profile } = useAuth();
+  const { profile, hasRole } = useAuth();
+  const isSupremo = hasRole("supremo");
   const navigate = useNavigate();
 
   const handleOpenCase = (caseId: string) => {
@@ -49,7 +50,7 @@ const Index = () => {
       case "dashboard": return <div className="space-y-6"><div><h1 className="font-serif text-3xl font-bold text-foreground">Bem-vindo, {profile?.full_name?.split(" ")[0] || "Advogado"}!</h1><p className="text-muted-foreground mt-1">Seu assistente jurídico inteligente</p></div><StatsCards /><QuickActions onTabChange={setActiveTab} /><ProcessReportsSummary onTabChange={setActiveTab} /><div className="grid grid-cols-1 lg:grid-cols-2 gap-6"><RecentDocuments /><UpcomingDeadlines onTabChange={setActiveTab} onOpenAgendaEvent={handleOpenAgendaEvent} /></div></div>;
       case "assistant": return <AIChat onOpenGuide={() => setActiveTab("guide")} />;
       case "pdf-reader": return <PDFReader onOpenGuide={() => setActiveTab("guide")} />;
-      case "document-creator": return <DocumentCreator />;
+      case "document-creator": return isSupremo ? <DocumentCreator /> : <div className="rounded-lg border p-6"><h2 className="text-lg">Acesso restrito</h2><p className="mt-1 text-sm text-muted-foreground">A criação de documentos é exclusiva do Super Admin.</p></div>;
       case "documents": return <DocumentsPage />;
       case "cases": return <CasesPageNavigator onTabChange={setActiveTab} />;
       case "process-search": return <ProcessSearchManagerV2 onOpenCase={handleOpenCase} />;
