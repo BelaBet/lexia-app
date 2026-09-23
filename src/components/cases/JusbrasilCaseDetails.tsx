@@ -240,6 +240,10 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
         body: { case_id: caseId, force },
       });
       if (error) throw error;
+      if (syncData?.success === false || syncData?.provider_unavailable) {
+        setSyncMessage(syncData?.message || "O provedor de dados está temporariamente indisponível. Os dados já existentes foram preservados.");
+        return;
+      }
       setSyncMessage(`${syncData?.movements ?? 0} movimentação(ões) e ${syncData?.autos ?? 0} auto(s) sincronizados.`);
       await Promise.all([
         refetch(),
