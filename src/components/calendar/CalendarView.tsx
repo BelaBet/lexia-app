@@ -193,6 +193,7 @@ export function CalendarView({ onOpenCase, focusEventId, onFocusEventHandled }: 
   const [newParticipant, setNewParticipant] = useState<Participant>({ name: "", email: "" });
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [editingEvent, setEditingEvent] = useState<CalendarEvent | null>(null);
+  const [viewingEvent, setViewingEvent] = useState<CalendarEvent | null>(null);
   const [editForm, setEditForm] = useState<UpdateEventData>({ id: "" });
 
   const { data: events = [], isLoading } = useEvents();
@@ -211,7 +212,7 @@ export function CalendarView({ onOpenCase, focusEventId, onFocusEventHandled }: 
     const targetDate = parseISO(target.event_date);
     setCurrentDate(targetDate);
     setSelectedDay(targetDate);
-    setEditingEvent(target);
+    setViewingEvent(target);
     onFocusEventHandled?.();
   }, [focusEventId, isLoading, events, onFocusEventHandled]);
 
@@ -1028,6 +1029,61 @@ export function CalendarView({ onOpenCase, focusEventId, onFocusEventHandled }: 
           )}
         </div>
       </div>
+
+      <Dialog open={!!viewingEvent} onOpenChange={(open) => !open && setViewingEvent(null)}>
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Detalhes do evento</DialogTitle>
+          </DialogHeader>
+          {viewingEvent && (
+            <div className="space-y-4">
+              <div>
+                <p className="text-sm text-muted-foreground">Evento</p>
+                <p className="text-lg text-foreground">{viewingEvent.title}</p>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-sm">
+                <div>
+                  <p className="text-muted-foreground">Data</p>
+                  <p>{format(parseISO(viewingEvent.event_date), "dd/MM/yyyy")}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Horário</p>
+                  <p>{viewingEvent.event_time || "—"}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Tipo</p>
+                  <p>{eventTypeConfig[viewingEvent.type as keyof typeof eventTypeConfig]?.label || viewingEvent.type}</p>
+                </div>
+                <div>
+                  <p className="text-muted-foreground">Status</p>
+                  <p>{taskStatusConfig[viewingEvent.computed_status || viewingEvent.status || "pending"]?.label || viewingEvent.status || "Pendente"}</p>
+                </div>
+              </div>
+              {viewingEvent.description && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Descrição</p>
+                  <p className="whitespace-pre-wrap">{viewingEvent.description}</p>
+                </div>
+              )}
+              {viewingEvent.location && (
+                <div>
+                  <p className="text-sm text-muted-foreground">Local</p>
+                  <p>{viewingEvent.location}</p>
+                </div>
+              )}
+              {viewingEvent.case_id && (
+                <button
+                  type="button"
+                  className="legal-button-primary w-full"
+                  onClick={() => onOpenCase?.(viewingEvent.case_id!)}
+                >
+                  Abrir processo relacionado
+                </button>
+              )}
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
 
       {/* Histórico de Eventos */}
       <div className="legal-card">
