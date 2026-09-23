@@ -809,8 +809,11 @@ export type Database = {
           case_id: string | null
           content: string | null
           created_at: string
+          deadline_date: string | null
+          deadline_event_id: string | null
           id: string
           is_demo: boolean
+          responsible_name: string | null
           status: string
           title: string
           type: string
@@ -821,8 +824,11 @@ export type Database = {
           case_id?: string | null
           content?: string | null
           created_at?: string
+          deadline_date?: string | null
+          deadline_event_id?: string | null
           id?: string
           is_demo?: boolean
+          responsible_name?: string | null
           status?: string
           title: string
           type: string
@@ -833,8 +839,11 @@ export type Database = {
           case_id?: string | null
           content?: string | null
           created_at?: string
+          deadline_date?: string | null
+          deadline_event_id?: string | null
           id?: string
           is_demo?: boolean
+          responsible_name?: string | null
           status?: string
           title?: string
           type?: string
@@ -847,6 +856,13 @@ export type Database = {
             columns: ["case_id"]
             isOneToOne: false
             referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "documents_deadline_event_id_fkey"
+            columns: ["deadline_event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
             referencedColumns: ["id"]
           },
         ]

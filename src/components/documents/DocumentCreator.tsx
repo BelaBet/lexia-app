@@ -1,8 +1,23 @@
 import { useState } from "react";
-import { FileText, Plus, Wand2, Save, Download, ChevronRight, Scale } from "lucide-react";
+import { FileText, Plus, Wand2, Save, Download, ChevronRight, ChevronsUpDown, Check, Scale, UserRound, CalendarClock } from "lucide-react";
 import { useCreateDocument, useUpdateDocument, Document } from "@/hooks/useDocuments";
-import { useCases } from "@/hooks/useCases";
+import { useCases, Case } from "@/hooks/useCases";
+import { useCreateEvent, useUpdateEvent, useDeleteEvent, isRetroactiveEventDateChange, getTodayDateStr } from "@/hooks/useEvents";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
+  Command,
+  CommandEmpty,
+  CommandGroup,
+  CommandInput,
+  CommandItem,
+  CommandList,
+} from "@/components/ui/command";
 
 const documentTypes = [
   { id: "peticao", name: "Petição Inicial", description: "Crie petições personalizadas" },
@@ -46,7 +61,7 @@ Pede deferimento.
 _______________________________
 [Nome do Advogado]
 OAB/[UF] nº [número]`,
-  
+
   contrato: `CONTRATO DE [TÍTULO]
 
 Pelo presente instrumento particular, as partes a seguir qualificadas:
@@ -84,7 +99,7 @@ CONTRATANTE
 
 _______________________________
 CONTRATADO(A)`,
-  
+
   procuracao: `PROCURAÇÃO AD JUDICIA
 
 OUTORGANTE: [Nome completo], [nacionalidade], [estado civil], [profissão], portador(a) da Cédula de Identidade RG nº [número] e inscrito(a) no CPF sob o nº [número], residente e domiciliado(a) em [endereço completo].
@@ -187,6 +202,55 @@ _______________________________
 [Nome do Notificado]`,
 };
 
+function CaseCombobox({ cases, value, onChange }: { cases: Case[]; value: string; onChange: (id: string) => void }) {
+  const [open, setOpen] = useState(false);
+  const selected = cases.find((c) => c.id === value);
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" className="legal-input flex items-center justify-between text-left gap-2">
+          <span className={cn("truncate", !selected && "text-muted-foreground")}>
+            {selected ? `${selected.case_number} · ${selected.client}` : "Nenhum"}
+          </span>
+          <ChevronsUpDown className="w-4 h-4 text-muted-foreground shrink-0" />
+        </button>
+      </PopoverTrigger>
+      <PopoverContent className="w-[--radix-popover-trigger-width] p-0" align="start">
+        <Command filter={(_value, search, keywords) => {
+          const haystack = (keywords || []).join(" ").toLowerCase();
+          return haystack.includes(search.toLowerCase()) ? 1 : 0;
+        }}>
+          <CommandInput placeholder="Buscar por número do processo ou cliente..." />
+          <CommandList>
+            <CommandEmpty>Nenhum processo encontrado.</CommandEmpty>
+            <CommandGroup>
+              <CommandItem value="__none__" onSelect={() => { onChange(""); setOpen(false); }}>
+                <Check className={cn("mr-2 h-4 w-4 shrink-0", !value ? "opacity-100" : "opacity-0")} />
+                Nenhum
+              </CommandItem>
+              {cases.map((c) => (
+                <CommandItem
+                  key={c.id}
+                  value={c.id}
+                  keywords={[c.case_number, c.client, c.title]}
+                  onSelect={() => { onChange(c.id); setOpen(false); }}
+                >
+                  <Check className={cn("mr-2 h-4 w-4 shrink-0", value === c.id ? "opacity-100" : "opacity-0")} />
+                  <div className="min-w-0">
+                    <p className="truncate">{c.case_number}</p>
+                    <p className="text-xs text-muted-foreground truncate">{c.client}</p>
+                  </div>
+                </CommandItem>
+              ))}
+            </CommandGroup>
+          </CommandList>
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 export function DocumentCreator() {
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [documentContent, setDocumentContent] = useState("");
@@ -194,10 +258,19 @@ export function DocumentCreator() {
   const [isGenerating, setIsGenerating] = useState(false);
   const [currentDocId, setCurrentDocId] = useState<string | null>(null);
   const [selectedCaseId, setSelectedCaseId] = useState<string>("");
+  const [responsibleName, setResponsibleName] = useState("");
+  const [deadlineDate, setDeadlineDate] = useState("");
+  const [deadlineEventId, setDeadlineEventId] = useState<string | null>(null);
+  const [savedDeadlineDate, setSavedDeadlineDate] = useState<string | null>(null);
 
   const createDocument = useCreateDocument();
   const updateDocument = useUpdateDocument();
+  const createEvent = useCreateEvent();
+  const updateEvent = useUpdateEvent();
+  const deleteEvent = useDeleteEvent();
   const { data: cases = [] } = useCases();
+
+  const isSaving = createDocument.isPending || updateDocument.isPending || createEvent.isPending || updateEvent.isPending || deleteEvent.isPending;
 
   const handleTypeSelect = (typeId: string) => {
     setSelectedType(typeId);
@@ -205,16 +278,20 @@ export function DocumentCreator() {
     setDocumentContent("");
     setCurrentDocId(null);
     setSelectedCaseId("");
+    setResponsibleName("");
+    setDeadlineDate("");
+    setDeadlineEventId(null);
+    setSavedDeadlineDate(null);
   };
 
   const generateWithAI = async () => {
     if (!selectedType || !title) return;
-    
+
     setIsGenerating(true);
-    
+
     const template = templates[selectedType] || "Documento em construção...";
     const content = template.replace("[TÍTULO]", title.toUpperCase());
-    
+
     setDocumentContent(content);
     setIsGenerating(false);
   };
@@ -222,26 +299,56 @@ export function DocumentCreator() {
   const saveDocument = async () => {
     if (!title || !documentContent || !selectedType) return;
 
+    if (deadlineDate && isRetroactiveEventDateChange(deadlineDate, savedDeadlineDate ?? undefined)) {
+      toast.error("O prazo não pode ser uma data passada.");
+      return;
+    }
+
+    let nextDeadlineEventId = deadlineEventId;
+
+    try {
+      if (!deadlineDate && deadlineEventId) {
+        await deleteEvent.mutateAsync({ id: deadlineEventId, publication_id: null });
+        nextDeadlineEventId = null;
+      } else if (deadlineDate && !deadlineEventId) {
+        const { event } = await createEvent.mutateAsync({
+          title: `Prazo: ${title}`,
+          description: responsibleName ? `Responsável: ${responsibleName}` : undefined,
+          event_date: deadlineDate,
+          event_time: "09:00",
+          type: "deadline",
+          case_id: selectedCaseId || undefined,
+          notification_enabled: true,
+          notification_minutes_before: 120,
+        });
+        nextDeadlineEventId = event.id;
+      } else if (deadlineDate && deadlineEventId && deadlineDate !== savedDeadlineDate) {
+        await updateEvent.mutateAsync({ id: deadlineEventId, event_date: deadlineDate });
+      }
+    } catch {
+      toast.error("Não foi possível atualizar o prazo na Agenda. O documento não foi salvo.");
+      return;
+    }
+
     const typeName = documentTypes.find(t => t.id === selectedType)?.name || selectedType;
+    const payload = {
+      title,
+      content: documentContent,
+      status: "draft" as const,
+      case_id: selectedCaseId || null,
+      responsible_name: responsibleName || null,
+      deadline_date: deadlineDate || null,
+      deadline_event_id: nextDeadlineEventId,
+    };
 
     if (currentDocId) {
-      await updateDocument.mutateAsync({
-        id: currentDocId,
-        title,
-        content: documentContent,
-        status: "draft",
-        case_id: selectedCaseId || null,
-      });
+      await updateDocument.mutateAsync({ id: currentDocId, ...payload });
     } else {
-      const result = await createDocument.mutateAsync({
-        title,
-        type: typeName,
-        content: documentContent,
-        status: "draft",
-        case_id: selectedCaseId || null,
-      });
+      const result = await createDocument.mutateAsync({ title, type: typeName, ...payload }) as Document;
       setCurrentDocId(result.id);
     }
+    setDeadlineEventId(nextDeadlineEventId);
+    setSavedDeadlineDate(deadlineDate || null);
   };
 
   const downloadDocument = () => {
@@ -315,18 +422,46 @@ export function DocumentCreator() {
 
                 <label className="block text-sm font-medium mb-2 mt-4 flex items-center gap-1.5">
                   <Scale className="w-4 h-4" />
-                  Processo vinculado (opcional)
+                  Processo vinculado
                 </label>
-                <select
-                  value={selectedCaseId}
-                  onChange={(e) => setSelectedCaseId(e.target.value)}
-                  className="legal-input"
-                >
-                  <option value="">Nenhum</option>
-                  {cases.map((c) => (
-                    <option key={c.id} value={c.id}>{c.case_number} · {c.client}</option>
-                  ))}
-                </select>
+                <CaseCombobox cases={cases} value={selectedCaseId} onChange={setSelectedCaseId} />
+                <p className="text-xs text-muted-foreground mt-1">
+                  Busque pelo número do processo ou pelo nome do cliente.
+                </p>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mt-4">
+                  <div>
+                    <label className="block text-sm font-medium mb-2 flex items-center gap-1.5">
+                      <UserRound className="w-4 h-4" />
+                      Responsável
+                    </label>
+                    <input
+                      type="text"
+                      value={responsibleName}
+                      onChange={(e) => setResponsibleName(e.target.value)}
+                      placeholder="Nome de quem é responsável"
+                      className="legal-input"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2 flex items-center gap-1.5">
+                      <CalendarClock className="w-4 h-4" />
+                      Prazo (opcional)
+                    </label>
+                    <input
+                      type="date"
+                      min={getTodayDateStr()}
+                      value={deadlineDate}
+                      onChange={(e) => setDeadlineDate(e.target.value)}
+                      className="legal-input"
+                    />
+                  </div>
+                </div>
+                {deadlineDate && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Ao salvar, este prazo entra na Agenda automaticamente.
+                  </p>
+                )}
 
                 <button
                   onClick={generateWithAI}
@@ -352,15 +487,15 @@ export function DocumentCreator() {
                   <label className="block text-sm font-medium">Conteúdo</label>
                   {documentContent && (
                     <div className="flex gap-2">
-                      <button 
+                      <button
                         onClick={saveDocument}
-                        disabled={createDocument.isPending || updateDocument.isPending}
+                        disabled={isSaving}
                         className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
                       >
                         <Save className="w-4 h-4" />
-                        {createDocument.isPending || updateDocument.isPending ? "Salvando..." : "Salvar"}
+                        {isSaving ? "Salvando..." : "Salvar"}
                       </button>
-                      <button 
+                      <button
                         onClick={downloadDocument}
                         className="flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors"
                       >
