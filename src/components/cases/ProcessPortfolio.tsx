@@ -74,7 +74,7 @@ function partyLabel(row:ResultRow){
 }
 
 function ReportPanel({title,children,className=""}:{title:string;children:React.ReactNode;className?:string}){
-  return <section className={`min-w-0 ${className}`}><h3 className="mb-4 text-center text-sm font-medium text-foreground sm:text-base">{title}</h3>{children}</section>;
+  return <section className={`min-w-0 ${className}`}><h3 className="mb-1 text-center text-sm font-medium text-foreground sm:text-base">{title}</h3><p className="mb-4 text-center text-[11px] text-muted-foreground">Clique em uma informação para visualizar os processos correspondentes na lista abaixo.</p>{children}</section>;
 }
 function VerticalYearChart({data,onSelect}:{data:CountItem[];onSelect?:(name:string)=>void}){
   const max=Math.max(1,...data.map((item)=>item.value));
