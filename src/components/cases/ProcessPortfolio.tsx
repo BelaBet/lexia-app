@@ -86,9 +86,8 @@ function HorizontalBars({data,onSelect}:{data:CountItem[];onSelect?:(name:string
 }
 function Donut({data,onSelect}:{data:CountItem[];onSelect?:(name:string)=>void}){
   const total=data.reduce((sum,item)=>sum+item.value,0)||1;
-  const first=data[0]?.value||0;
-  const p1=Math.round((first/total)*100);
-  return <div className="flex min-h-[270px] flex-col items-center justify-center gap-5"><div className="flex h-44 w-44 items-center justify-center rounded-full p-8" style={{background:`conic-gradient(hsl(var(--primary)) 0 ${p1}%, hsl(var(--muted-foreground) / .25) ${p1}% 100%)`}}><div className="h-full w-full rounded-full bg-background"/></div><div className="flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs">{data.map((item,index)=><button type="button" onClick={()=>onSelect?.(item.name)} key={item.name} className="flex items-center gap-2 cursor-pointer"><span className={`h-2.5 w-2.5 rounded-full ${index===0?"bg-primary":"bg-muted-foreground/40"}`}/>{item.name}: <strong>{item.value}</strong></button>)}</div></div>;
+  let offset=0;
+  return <div className="flex min-h-[270px] flex-col items-center justify-center gap-5"><div className="relative h-44 w-44"><svg viewBox="0 0 42 42" className="h-full w-full -rotate-90" aria-label="Gráfico interativo">{data.map((item,index)=>{const pct=(item.value/total)*100;const current=offset;offset+=pct;return <circle key={item.name} cx="21" cy="21" r="15.9155" fill="transparent" stroke={index===0?"hsl(var(--primary))":"hsl(var(--muted-foreground) / .35)"} strokeWidth="8" strokeDasharray={`${pct} ${100-pct}`} strokeDashoffset={-current} className="cursor-pointer transition-opacity hover:opacity-75" onClick={()=>onSelect?.(item.name)}><title>{item.name}: {item.value} processo(s)</title></circle>;})}</svg><div className="pointer-events-none absolute inset-[30%] rounded-full bg-background"/></div><div className="flex flex-wrap justify-center gap-x-5 gap-y-2 text-xs">{data.map((item,index)=><button type="button" onClick={()=>onSelect?.(item.name)} key={item.name} className="flex items-center gap-2 cursor-pointer"><span className={`h-2.5 w-2.5 rounded-full ${index===0?"bg-primary":"bg-muted-foreground/40"}`}/>{item.name}: <strong>{item.value}</strong></button>)}</div></div>;
 }
 
 export function ProcessPortfolio(){
