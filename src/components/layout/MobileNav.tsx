@@ -37,6 +37,7 @@ const items = [
 export function MobileNav({ activeTab, onTabChange }: MobileNavProps) {
   const { hasRole } = useAuth();
   const isAdmin = hasRole("admin");
+  const isSupremo = hasRole("supremo");
   const { data: branding } = useWhiteLabelSettings();
   const brandName = branding?.brand_name || DEFAULT_BRANDING.brand_name;
   const brandLogo = branding?.logo_url;
@@ -79,7 +80,7 @@ export function MobileNav({ activeTab, onTabChange }: MobileNavProps) {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
 
-            {items.map(([id, label]) => (
+            {items.filter(([id]) => id !== "document-creator" || isSupremo).map(([id, label]) => (
               <DropdownMenuItem
                 key={id}
                 onSelect={() => handleNavigate(id)}
