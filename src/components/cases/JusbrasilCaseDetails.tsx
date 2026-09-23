@@ -15,8 +15,43 @@ function safeObject(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
 }
 
+function normalizeLawyer(value: unknown): JsonRecord | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as JsonRecord;
+  if (Array.isArray(value)) {
+    return { advogadoID: value[0], nomeNormalizado: value[1], oab: value[2], cnpjCpf: value[3], uf: value[4] };
+  }
+  return null;
+}
+
+function normalizeParty(value: unknown): JsonRecord | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as JsonRecord;
+  if (Array.isArray(value)) {
+    return {
+      processoParteAdvogadoID: value[0],
+      parteID: value[1],
+      nomeParte: value[2],
+      nomeNormalizado: value[3],
+      cnpj: value[4],
+      cpf: value[5],
+      documento: value[6],
+      parteRelacaoID: value[7],
+      relacaoNormalizado: value[8],
+      advogados: Array.isArray(value[9]) ? value[9].map(normalizeLawyer).filter(Boolean) : [],
+      is_autora: value[10],
+      is_coautora: value[11],
+      is_re: value[12],
+      is_neutra: value[13],
+    };
+  }
+  return null;
+}
+
 function safeArray(value: unknown): JsonRecord[] {
-  return Array.isArray(value) ? value : [];
+  return Array.isArray(value) ? value.map(normalizeParty).filter((item): item is JsonRecord => Boolean(item)) : [];
+}
+
+function rawPartyArray(value: unknown): JsonRecord[] {
+  return Array.isArray(value) ? value.map(normalizeParty).filter((item): item is JsonRecord => Boolean(item)) : [];
 }
 
 function text(value: unknown) {
@@ -73,7 +108,9 @@ function PartyTable({ title, rows }: { title: string; rows: JsonRecord[] }) {
           </thead>
           <tbody>
             {rows.length ? rows.map((party, index) => {
-              const lawyers = safeArray(party?.advogados);
+              const lawyers = Array.isArray(party?.advogados)
+                ? (party.advogados as unknown[]).map(normalizeLawyer).filter((item): item is JsonRecord => Boolean(item))
+                : [];
               const first = lawyers[0];
               return (
                 <tr key={`${text(party?.nomeParte)}-${index}`} className="border-t align-top">
@@ -242,8 +279,17 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
   if (isError || !data) return <p className="text-sm text-muted-foreground">Este processo ainda não possui dados detalhados importados.</p>;
 
   const raw = safeObject(data.raw_data);
-  const activeParties = safeArray(data.partes_ativas).length ? safeArray(data.partes_ativas) : safeArray(raw.partes).filter((p: JsonRecord) => p?.is_autora || p?.relacaoNormalizado === "AUTOR");
-  const passiveParties = safeArray(data.partes_passivas).length ? safeArray(data.partes_passivas) : safeArray(raw.partes).filter((p: JsonRecord) => p?.is_re || p?.relacaoNormalizado === "REU");
+  // A fonte mais atual é raw.partes, preenchida pela sincronização de detalhes.
+  // Cada advogado deve permanecer ligado à SUA parte; nunca reutilizamos um
+  // advogado globalmente entre autor e réu. O provedor pode retornar partes
+  // tanto como objetos quanto como tuplas, por isso normalizamos os dois formatos.
+  const providerParties = rawPartyArray(raw.partes);
+  const storedActive = safeArray(data.partes_ativas);
+  const storedPassive = safeArray(data.partes_passivas);
+  const activeFromProvider = providerParties.filter((p) => Boolean(p.is_autora) || /AUTOR|ATIVO/i.test(text(p.relacaoNormalizado)));
+  const passiveFromProvider = providerParties.filter((p) => Boolean(p.is_re) || /REU|RÉU|PASSIVO/i.test(text(p.relacaoNormalizado)));
+  const activeParties = activeFromProvider.length ? activeFromProvider : storedActive;
+  const passiveParties = passiveFromProvider.length ? passiveFromProvider : storedPassive;
   const classes = safeArray(raw.classes);
   const hearings = safeArray(raw.audiencias);
   const firstHearing = hearings[0] || null;
