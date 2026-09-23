@@ -43,7 +43,7 @@ function stateColor(count: number, maxCount: number) {
   return PALETTE.navy;
 }
 
-export function BrazilStatesMap({ counts }: { counts: StateCount[] }) {
+export function BrazilStatesMap({ counts, onSelect }: { counts: StateCount[]; onSelect?: (uf: string) => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [svgMarkup, setSvgMarkup] = useState("");
   const [error, setError] = useState(false);
@@ -109,7 +109,8 @@ export function BrazilStatesMap({ counts }: { counts: StateCount[] }) {
         label.style.pointerEvents = "none";
       }
 
-      anchor.style.cursor = "default";
+      anchor.style.cursor = count > 0 ? "pointer" : "default";
+      anchor.onclick = (event) => { event.preventDefault(); if (count > 0) onSelect?.(uf); };
       anchor.onmouseenter = () => {
         paths.forEach((path) => {
           path.style.stroke = PALETTE.gold;
@@ -132,7 +133,7 @@ export function BrazilStatesMap({ counts }: { counts: StateCount[] }) {
       }
       title.textContent = `${stateName} (${uf}) — ${count} processo${count === 1 ? "" : "s"}`;
     });
-  }, [svgMarkup, countMap, maxCount]);
+  }, [svgMarkup, countMap, maxCount, onSelect]);
 
   const ranked = [...counts].sort((a, b) => b.count - a.count);
 
@@ -175,13 +176,13 @@ export function BrazilStatesMap({ counts }: { counts: StateCount[] }) {
           <p className="mb-1.5 text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Estados</p>
           <div className="grid grid-cols-3 gap-1 sm:grid-cols-5 lg:grid-cols-1">
             {ranked.map(({ uf, count }) => (
-              <div key={uf} className="flex min-w-0 items-center justify-between rounded border bg-background px-2 py-1 text-[10px] leading-4 sm:text-[11px]">
+              <button type="button" onClick={()=>onSelect?.(uf)} key={uf} className="flex min-w-0 items-center justify-between rounded border bg-background px-2 py-1 text-[10px] leading-4 sm:text-[11px] hover:bg-muted/60">
                 <span className="flex items-center gap-1.5 font-semibold">
                   <span className="h-1.5 w-1.5 shrink-0 rounded-full" style={{ background: stateColor(count, maxCount) }} />
                   {uf}
                 </span>
                 <span className="ml-1 tabular-nums text-muted-foreground">{count}</span>
-              </div>
+              </button>
             ))}
           </div>
           {!ranked.length && <p className="text-[11px] text-muted-foreground">Nenhum estado identificado.</p>}
