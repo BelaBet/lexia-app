@@ -1,3 +1,4 @@
+import { useAuth } from "@/contexts/AuthContext";
 import { FileText, Upload, MessageSquare, FolderOpen, ClipboardList } from "lucide-react";
 import { generateIntakeChecklistPdf } from "@/lib/intakeChecklistPdf";
 
@@ -47,8 +48,10 @@ const baseActions: Omit<QuickAction, "onClick">[] = [
 ];
 
 export function QuickActions({ onTabChange }: QuickActionsProps) {
+  const { hasRole } = useAuth();
+  const isSupremo = hasRole("supremo");
   const actions: QuickAction[] = [
-    ...baseActions,
+    ...baseActions.filter((action) => action.id !== "documents" || isSupremo),
     {
       id: "intake-checklist",
       title: "Checklist de Coleta",
