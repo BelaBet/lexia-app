@@ -15,6 +15,22 @@ function safeObject(value: unknown): JsonRecord {
   return value && typeof value === "object" && !Array.isArray(value) ? value as JsonRecord : {};
 }
 
+// supabase.functions.invoke() só expõe o corpo JSON de uma resposta de erro
+// via error.context (a Response crua) — por padrão error.message é o texto
+// genérico "Edge Function returned a non-2xx status code", que esconde a
+// mensagem real do backend (ex: "Senha de liberação inválida").
+async function extractFunctionErrorMessage(error: unknown): Promise<string> {
+  const context = (error as { context?: Response } | null)?.context;
+  if (context && typeof context.clone === "function") {
+    try {
+      const payload = await context.clone().json();
+      const message = typeof payload?.error === "string" ? payload.error : typeof payload?.message === "string" ? payload.message : "";
+      if (message) return message;
+    } catch { /* mantém o fallback abaixo */ }
+  }
+  return error instanceof Error ? error.message : "Erro inesperado";
+}
+
 function normalizeLawyer(value: unknown): JsonRecord | null {
   if (value && typeof value === "object" && !Array.isArray(value)) return value as JsonRecord;
   if (Array.isArray(value)) {
@@ -248,20 +264,7 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (error) {
-        // Supabase FunctionsHttpError hides the JSON response behind context.
-        // Surface the backend message (e.g. invalid release password) instead
-        // of the generic "Edge Function returned a non-2xx status code".
-        let backendMessage = "";
-        try {
-          const context = (error as { context?: Response }).context;
-          if (context && typeof context.clone === "function") {
-            const payload = await context.clone().json();
-            backendMessage = typeof payload?.error === "string" ? payload.error : typeof payload?.message === "string" ? payload.message : "";
-          }
-        } catch { /* keep fallback below */ }
-        throw new Error(backendMessage || error.message);
-      }
+      if (error) throw error;
       return data as JsonRecord;
     },
   });
@@ -303,7 +306,7 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
       const { data: syncData, error } = await supabase.functions.invoke("sync-case-details", {
         body: { case_id: caseId, force, ...(force ? { update_password: (updatePasswordValue ?? "").trim() } : {}) },
       });
-      if (error) throw error;
+      if (error) throw new Error(await extractFunctionErrorMessage(error));
       if (syncData?.success === false || syncData?.provider_unavailable) {
         setSyncMessage(syncData?.message || "O provedor de dados está temporariamente indisponível. Os dados já existentes foram preservados.");
         return;
