@@ -23,6 +23,16 @@ const documentTypeLabels: Record<DocumentType, string> = {
 
 const currencyFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
+const salesPriceTable = [
+  { item: "Busca de processos por OAB", billing: "por OAB consultada", price: 2.7 },
+  { item: "Consulta de processos por CNJ (base Tribunal)", billing: "por processo encontrado", price: 1.0 },
+  { item: "Monitoramento de diários oficiais", billing: "por publicação enviada", price: 0.5 },
+  { item: "Monitoramento de processos", billing: "por processo monitorado/mês", price: 1.0 },
+  { item: "Download de autos", billing: "por processo", price: 6.0 },
+  { item: "Intimações", billing: "por intimação enviada", price: 1.0 },
+  { item: "Distribuição de novos processos (com anexo)", billing: "por processo encontrado", price: 9.0 },
+] as const;
+
 export function ProcessSearchFinancialCounter() {
   const { data: charges = [], isLoading } = useProcessSearchCharges();
   const [period, setPeriod] = useState<(typeof periodOptions)[number]["value"]>("all");
@@ -55,6 +65,34 @@ export function ProcessSearchFinancialCounter() {
           API — busca ativa diária e buscas manuais.
         </p>
       </div>
+
+      <Card>
+        <CardContent className="p-0 overflow-hidden">
+          <div className="bg-primary px-4 py-3 text-primary-foreground">
+            <h3 className="font-semibold">Tabela de Preços — Faixa de 0 a 1.999 consultas/mês</h3>
+          </div>
+          <div className="overflow-x-auto">
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead>Item</TableHead>
+                  <TableHead>Forma de Cobrança</TableHead>
+                  <TableHead className="text-right">Preço de Venda (R$)</TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {salesPriceTable.map((row) => (
+                  <TableRow key={row.item}>
+                    <TableCell className="font-medium">{row.item}</TableCell>
+                    <TableCell className="text-muted-foreground">{row.billing}</TableCell>
+                    <TableCell className="text-right font-semibold">{currencyFormatter.format(row.price)}</TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        </CardContent>
+      </Card>
 
       <div className="flex flex-wrap gap-2">
         {periodOptions.map((opt) => (
