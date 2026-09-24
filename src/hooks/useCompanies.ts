@@ -100,6 +100,8 @@ export interface InviteCompanyMemberInput {
   company_id: string;
   full_name: string;
   email: string;
+  /** Opcional: quando informada, a conta já nasce pronta pra uso com essa senha (o usuário troca depois em Configurações), em vez de depender do e-mail de convite. */
+  password?: string;
 }
 
 export function useInviteCompanyMember() {
@@ -111,15 +113,17 @@ export function useInviteCompanyMember() {
       const { data, error } = await supabase.functions.invoke("invite-company-member", { body: input });
       if (error) throw error;
       if (data?.error) throw new Error(data.error);
-      return data as { success: true; user_id: string | null; company: string; already_existed: boolean };
+      return data as { success: true; user_id: string | null; company: string; already_existed: boolean; password_set: boolean };
     },
     onSuccess: (data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["company-members", variables.company_id] });
       toast({
-        title: data.already_existed ? "Usuário associado" : "Convite enviado",
+        title: data.already_existed ? "Usuário associado" : data.password_set ? "Usuário criado" : "Convite enviado",
         description: data.already_existed
           ? "O usuário já tinha conta e foi associado à empresa."
-          : "Um e-mail foi enviado para o usuário definir a senha.",
+          : data.password_set
+            ? "A conta já está pronta com a senha definida. A pessoa pode trocá-la depois em Configurações."
+            : "Um e-mail foi enviado para o usuário definir a senha.",
       });
     },
     onError: (error: Error) => toast({ variant: "destructive", title: "Erro ao convidar usuário", description: error.message }),
