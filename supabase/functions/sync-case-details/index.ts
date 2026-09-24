@@ -27,9 +27,20 @@ Deno.serve(async (req) => {
   const { data: { user }, error: authError } = await userClient.auth.getUser();
   if (authError || !user) return json({ error: "Sessão inválida" }, 401);
 
-  let body: { case_id?: string; force?: boolean };
+  let body: { case_id?: string; force?: boolean; update_password?: string };
   try { body = await req.json(); } catch { return json({ error: "JSON inválido" }, 400); }
   if (!body.case_id) return json({ error: "case_id é obrigatório" }, 400);
+
+  // Atualizações manuais forçadas exigem a senha de liberação. A senha em si
+  // nunca fica no frontend nem no código: somente o SHA-256 esperado é comparado.
+  if (body.force) {
+    const password = typeof body.update_password === "string" ? body.update_password : "";
+    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(password));
+    const hash = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
+    if (hash !== "e6a77d382f7a62895638ecb981618818d7f0da30e0893a30b51402a13b69493a") {
+      return json({ error: "Senha de liberação inválida" }, 403);
+    }
+  }
 
   const admin = createClient(supabaseUrl, serviceRole);
   const { data: result, error: resultError } = await admin.from("process_search_results")
@@ -45,6 +56,14 @@ Deno.serve(async (req) => {
     const sync = await syncCaseDetails(admin, result, token, Boolean(body.force));
     return json({ success: true, ...sync });
   } catch (e) {
-    return json({ error: e instanceof Error ? e.message : "Não foi possível sincronizar os detalhes já existentes do processo" }, 502);
+    const message = e instanceof Error ? e.message : "O provedor de dados está temporariamente indisponível.";
+    return json({
+      success: false,
+      provider_unavailable: true,
+      preserved_existing_data: true,
+      message: message.includes("status 502")
+        ? "O provedor de dados está temporariamente indisponível. Os dados já existentes do processo foram preservados."
+        : message,
+    }, 200);
   }
 });
