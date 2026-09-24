@@ -200,7 +200,20 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (error) throw error;
+      if (error) {
+        // Supabase FunctionsHttpError hides the JSON response behind context.
+        // Surface the backend message (e.g. invalid release password) instead
+        // of the generic "Edge Function returned a non-2xx status code".
+        let backendMessage = "";
+        try {
+          const context = (error as { context?: Response }).context;
+          if (context && typeof context.clone === "function") {
+            const payload = await context.clone().json();
+            backendMessage = typeof payload?.error === "string" ? payload.error : typeof payload?.message === "string" ? payload.message : "";
+          }
+        } catch { /* keep fallback below */ }
+        throw new Error(backendMessage || error.message);
+      }
       return data as JsonRecord;
     },
   });
@@ -240,7 +253,7 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
     setSyncMessage(null);
     try {
       const { data: syncData, error } = await supabase.functions.invoke("sync-case-details", {
-        body: { case_id: caseId, force, ...(force ? { update_password: updatePasswordValue ?? "" } : {}) },
+        body: { case_id: caseId, force, ...(force ? { update_password: (updatePasswordValue ?? "").trim() } : {}) },
       });
       if (error) throw error;
       if (syncData?.success === false || syncData?.provider_unavailable) {
@@ -251,6 +264,7 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
       if (force) {
         setShowUpdatePassword(false);
         setUpdatePassword("");
+        setShowPassword(false);
       }
       await Promise.all([
         refetch(),
