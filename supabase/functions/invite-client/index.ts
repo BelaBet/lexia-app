@@ -69,11 +69,16 @@ Deno.serve(async (req) => {
   }
 
   // Já existe um cadastro deste e-mail como cliente deste advogado?
+  // `email` já é passado em minúsculas (trim + toLowerCase acima), então a
+  // busca é uma igualdade exata; usar .ilike() aqui tratava "%" e "_" do
+  // e-mail (ex.: "an_b@example.com", comum em e-mails reais) como coringas
+  // do LIKE, podendo casar com o e-mail de um cliente completamente
+  // diferente e misturar os cadastros.
   const { data: existingClient, error: existingError } = await admin
     .from("clients")
     .select("id, user_id, full_name")
     .eq("owner_id", user.id)
-    .ilike("email", email)
+    .eq("email", email)
     .maybeSingle();
 
   if (existingError) {
