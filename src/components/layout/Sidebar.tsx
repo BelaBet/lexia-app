@@ -16,7 +16,6 @@ import {
   Building2,
   ChevronDown,
   ChevronRight,
-  Bell,
   CreditCard,
   ShoppingBag,
   ListChecks,
@@ -65,7 +64,6 @@ const navItems = [
 ];
 const settingsSubItems = [
   { id: "settings", label: "Preferências", icon: Settings },
-  { id: "notifications", label: "Notificações", icon: Bell },
   { id: "billing", label: "Planos e Pagamentos", icon: CreditCard },
   { id: "branding", label: "Marca da Plataforma", icon: Palette, adminOnly: true },
 ];
@@ -77,7 +75,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
   const brandName = branding?.brand_name || DEFAULT_BRANDING.brand_name;
   const brandTagline = branding?.tagline || DEFAULT_BRANDING.tagline;
   const brandLogo = branding?.logo_url;
-  const settingsTabs = ["settings", "notifications", "billing", "branding"];
+  const settingsTabs = ["settings", "billing", "branding"];
   const isSettingsTab = settingsTabs.includes(activeTab);
   const [settingsOpen, setSettingsOpen] = useState(isSettingsTab);
   const visibleSettingsSubItems = settingsSubItems.filter((item) => !item.adminOnly || isAdmin);
