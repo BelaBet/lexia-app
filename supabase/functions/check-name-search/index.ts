@@ -280,8 +280,19 @@ Deno.serve(async (req) => {
     let addedToCases = 0;
     for (const row of rows) {
       if (!row.process_number) continue;
+      // Mescla com o raw_data já salvo em vez de sobrescrever: se uma
+      // re-checagem futura vier pelo formato de exportação (mais pobre, sem
+      // "classes"/"assuntoExtra") em vez do formato completo já usado hoje,
+      // isso não pode apagar "Motivos / assuntos" e outros campos ricos já
+      // obtidos numa importação anterior.
+      const { data: existingResult } = await adminClient.from("process_search_results")
+        .select("raw_data").eq("report_id", report.id).eq("process_number", row.process_number).maybeSingle();
+      const existingRawData = existingResult?.raw_data && typeof existingResult.raw_data === "object"
+        ? existingResult.raw_data as Record<string, unknown>
+        : {};
+      const mergedRawData = { ...existingRawData, ...(row.raw_data as Record<string, unknown>) };
       const { data: searchResult, error: upsertError } = await adminClient.from("process_search_results")
-        .upsert({ report_id: report.id, user_id: user.id, ...row }, { onConflict: "report_id,process_number" }).select("id, case_id").single();
+        .upsert({ report_id: report.id, user_id: user.id, ...row, raw_data: mergedRawData }, { onConflict: "report_id,process_number" }).select("id, case_id").single();
       if (upsertError || !searchResult) continue;
       imported += 1;
 
