@@ -123,7 +123,7 @@ function CreateCompanyDialog() {
           Adicionar empresa
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Adicionar empresa</DialogTitle>
           <DialogDescription>
@@ -210,7 +210,7 @@ function InviteMemberDialog({ company }: { company: Company }) {
           Convidar usuário
         </Button>
       </DialogTrigger>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>Convidar usuário para {company.name}</DialogTitle>
           <DialogDescription>
