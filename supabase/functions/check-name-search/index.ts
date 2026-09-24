@@ -4,6 +4,8 @@
 // mas o endpoint de exportação JSON ainda não foi materializado.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
+import { buildCorsHeaders } from "../_shared/cors.ts";
+import { getJusbrasilApiToken } from "../_shared/jusbrasilToken.ts";
 
 const JUSBRASIL_API_BASE_URL = "https://op.digesto.com.br";
 
@@ -32,17 +34,6 @@ type NameSearchRow = {
   url_detalhes: string | null;
   raw_data: Record<string, unknown>;
 };
-
-function buildCorsHeaders(req: Request): Record<string, string> {
-  const configured = (Deno.env.get("ALLOWED_ORIGINS") ?? "").split(",").map((v) => v.trim()).filter(Boolean);
-  const origin = req.headers.get("Origin") ?? "";
-  return {
-    "Access-Control-Allow-Origin": configured.length ? (configured.includes(origin) ? origin : configured[0]) : "*",
-    "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
-    "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Vary": "Origin",
-  };
-}
 
 function hasFinishedAt(payload: unknown): boolean {
   if (!payload || typeof payload !== "object") return false;
@@ -209,16 +200,6 @@ async function fetchFinal(apiToken: string, providerReportId: string): Promise<N
     if (hits.length === 0 || hits.length < perPage || (total !== null && rows.length >= total)) break;
   }
   return rows;
-}
-
-async function getJusbrasilApiToken(adminClient: ReturnType<typeof createClient>): Promise<string> {
-  const envToken = Deno.env.get("JUSBRASIL_API_TOKEN")?.trim();
-  if (envToken) return envToken;
-  const { data, error } = await adminClient.rpc("get_jusbrasil_api_token");
-  if (error) throw new Error("Integração JusBrasil não configurada no backend");
-  const token = typeof data === "string" ? data.trim() : "";
-  if (!token) throw new Error("JUSBRASIL_API_TOKEN não encontrado no backend");
-  return token;
 }
 
 Deno.serve(async (req) => {

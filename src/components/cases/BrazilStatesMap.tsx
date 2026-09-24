@@ -43,6 +43,34 @@ function stateColor(count: number, maxCount: number) {
   return PALETTE.navy;
 }
 
+// O SVG do mapa vem de um repositório de terceiros (fetch em texto puro) e é
+// injetado via dangerouslySetInnerHTML — se o conteúdo remoto for alterado ou
+// comprometido, atributos de evento (onload/onerror/onclick...) ou elementos
+// como <script>/<foreignObject>/<a href="javascript:...">, quando definidos
+// via innerHTML, executam no contexto (origem) desta aplicação. Removemos
+// esses vetores antes de serializar o markup para o estado do componente.
+function sanitizeRemoteSvg(svg: Element): void {
+  const disallowedTags = new Set(["script", "foreignobject", "iframe", "embed", "object"]);
+  const walker = document.createTreeWalker(svg, NodeFilter.SHOW_ELEMENT);
+  const toRemove: Element[] = [];
+  let node = walker.currentNode as Element | null;
+  while (node) {
+    if (disallowedTags.has(node.tagName.toLowerCase())) {
+      toRemove.push(node);
+    } else {
+      Array.from(node.attributes).forEach((attr) => {
+        const name = attr.name.toLowerCase();
+        const value = attr.value.trim();
+        if (name.startsWith("on") || /^\s*javascript:/i.test(value)) {
+          node?.removeAttribute(attr.name);
+        }
+      });
+    }
+    node = walker.nextNode() as Element | null;
+  }
+  toRemove.forEach((el) => el.remove());
+}
+
 export function BrazilStatesMap({ counts, onSelect }: { counts: StateCount[]; onSelect?: (uf: string) => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [svgMarkup, setSvgMarkup] = useState("");
@@ -67,6 +95,7 @@ export function BrazilStatesMap({ counts, onSelect }: { counts: StateCount[]; on
         svg.removeAttribute("width");
         svg.removeAttribute("height");
         svg.setAttribute("class", "h-auto w-full max-w-[700px]");
+        sanitizeRemoteSvg(svg);
         setSvgMarkup(svg.outerHTML);
         setError(false);
       })
