@@ -300,7 +300,11 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
   const passiveFromProvider = providerParties.filter((p) => Boolean(p.is_re) || /REU|RÉU|PASSIVO/i.test(text(p.relacaoNormalizado)));
   const activeParties = activeFromProvider.length ? activeFromProvider : storedActive;
   const passiveParties = passiveFromProvider.length ? passiveFromProvider : storedPassive;
-  const classes = safeArray(raw.classes);
+  const classesFromProvider = safeArray(raw.classes).map((item) => text(item).trim()).filter(Boolean);
+  const assuntoExtra = text(raw.assuntoExtra).split(",").map((item) => item.trim()).filter(Boolean);
+  // "Motivos / assuntos" vêm de campos estruturados do provedor. Nunca
+  // inferimos o motivo a partir de movimentações, sentença ou documentos.
+  const reasons = Array.from(new Set(classesFromProvider.length ? classesFromProvider : assuntoExtra));
   const hearings = safeArray(raw.audiencias);
   const firstHearing = hearings[0] || null;
   const courtUnit = text(raw.vara_original) ? `${text(raw.vara_original)}ª Vara` : text(data.vara);
@@ -397,7 +401,10 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
             <div className="space-y-2 text-sm">
               <p>{text(data.area) || "—"} / {instance}</p>
               <p className="font-medium">{text(data.natureza) || text(raw.classeNatureza) || "—"}</p>
-              {classes.length > 0 && <div className="space-y-1 text-muted-foreground">{classes.map((item, i) => <p key={`${String(item)}-${i}`}>- {String(item)}</p>)}</div>}
+              <div className="pt-2">
+                <p className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Motivos / assuntos</p>
+                {reasons.length > 0 ? <div className="space-y-1 text-muted-foreground">{reasons.map((item, i) => <p key={`${item}-${i}`}>- {item}</p>)}</div> : <p className="text-sm text-muted-foreground">Nenhum motivo informado pelo provedor.</p>}
+              </div>
             </div>
             <dl className="grid grid-cols-[150px_1fr] gap-x-4 gap-y-2 text-sm">
               <dt className="text-muted-foreground">Comarca</dt><dd>{text(data.comarca) || text(raw.comarca_cnj) || "—"}</dd>
