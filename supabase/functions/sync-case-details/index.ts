@@ -37,7 +37,7 @@ Deno.serve(async (req) => {
     const password = typeof body.update_password === "string" ? body.update_password : "";
     const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(password));
     const hash = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
-    if (hash !== "e6a77d382f7a62895638ecb981618818d7f0da30e0893a30b51402a13b69493a") {
+    if (hash !== "6ffe46e661afcb326620e905ef4346793cc0415db339566e93c5ea931a013624") {
       return json({ error: "Senha de liberação inválida" }, 403);
     }
   }
