@@ -25,41 +25,71 @@ import {
 import { Building2, Plus, UserPlus, AlertTriangle, Loader2 } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { formatCnpj, isValidCnpj } from "@/lib/cnpj";
 
 function CreateCompanyDialog() {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState("");
   const [legalName, setLegalName] = useState("");
   const [document, setDocument] = useState("");
+  const [firstUserName, setFirstUserName] = useState("");
+  const [firstUserEmail, setFirstUserEmail] = useState("");
   const createCompany = useCreateCompany();
+  const inviteMember = useInviteCompanyMember();
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!name.trim()) return;
-    createCompany.mutate(
-      { name: name.trim(), legal_name: legalName.trim() || undefined, document: document.trim() || undefined },
-      {
-        onSuccess: () => {
-          setOpen(false);
-          setName("");
-          setLegalName("");
-          setDocument("");
-        },
-      }
-    );
+  const cnpjDigits = document.replace(/\D/g, "");
+  const cnpjError = cnpjDigits.length > 0 && !isValidCnpj(document) ? "CNPJ inválido" : null;
+  const hasFirstUserName = firstUserName.trim().length > 0;
+  const hasFirstUserEmail = firstUserEmail.trim().length > 0;
+  const firstUserIncomplete = hasFirstUserName !== hasFirstUserEmail;
+
+  const resetForm = () => {
+    setName("");
+    setLegalName("");
+    setDocument("");
+    setFirstUserName("");
+    setFirstUserEmail("");
   };
 
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim() || cnpjError || firstUserIncomplete) return;
+    try {
+      const company = await createCompany.mutateAsync({
+        name: name.trim(),
+        legal_name: legalName.trim() || undefined,
+        document: cnpjDigits || undefined,
+      });
+      if (hasFirstUserName && hasFirstUserEmail) {
+        await inviteMember.mutateAsync({
+          company_id: company.id,
+          full_name: firstUserName.trim(),
+          email: firstUserEmail.trim(),
+        });
+      }
+      setOpen(false);
+      resetForm();
+    } catch {
+      // Erros já são exibidos via toast pelos próprios hooks (useCreateCompany
+      // / useInviteCompanyMember) — se a empresa foi criada mas o convite
+      // falhou, ela já aparece na lista e o usuário pode convidar de novo
+      // pelo botão "Convidar usuário" do card da empresa.
+    }
+  };
+
+  const isSubmitting = createCompany.isPending || inviteMember.isPending;
+
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
+    <Dialog open={open} onOpenChange={(next) => { setOpen(next); if (!next) resetForm(); }}>
       <DialogTrigger asChild>
         <Button className="gap-1.5">
           <Plus className="w-4 h-4" />
-          Nova empresa
+          Adicionar empresa
         </Button>
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Cadastrar empresa</DialogTitle>
+          <DialogTitle>Adicionar empresa</DialogTitle>
           <DialogDescription>
             Cria uma nova empresa white label. O slug é gerado automaticamente a partir do nome.
           </DialogDescription>
@@ -75,12 +105,32 @@ function CreateCompanyDialog() {
           </div>
           <div className="space-y-2">
             <Label htmlFor="company-document">CNPJ (opcional)</Label>
-            <Input id="company-document" value={document} onChange={(e) => setDocument(e.target.value)} />
+            <Input
+              id="company-document"
+              value={document}
+              onChange={(e) => setDocument(formatCnpj(e.target.value))}
+              placeholder="00.000.000/0000-00"
+              inputMode="numeric"
+              aria-invalid={Boolean(cnpjError)}
+            />
+            {cnpjError && <p className="text-sm text-destructive">{cnpjError}</p>}
+          </div>
+          <div className="space-y-3 rounded-md border border-border p-3">
+            <p className="text-sm font-medium">Primeiro usuário (opcional)</p>
+            <div className="space-y-2">
+              <Label htmlFor="first-user-name">Nome completo</Label>
+              <Input id="first-user-name" value={firstUserName} onChange={(e) => setFirstUserName(e.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="first-user-email">E-mail</Label>
+              <Input id="first-user-email" type="email" value={firstUserEmail} onChange={(e) => setFirstUserEmail(e.target.value)} />
+            </div>
+            {firstUserIncomplete && <p className="text-sm text-destructive">Informe nome e e-mail para convidar o primeiro usuário.</p>}
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={createCompany.isPending || !name.trim()} className="gap-1.5">
-              {createCompany.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              Cadastrar
+            <Button type="submit" disabled={isSubmitting || !name.trim() || Boolean(cnpjError) || firstUserIncomplete} className="gap-1.5">
+              {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
+              Adicionar empresa
             </Button>
           </DialogFooter>
         </form>
