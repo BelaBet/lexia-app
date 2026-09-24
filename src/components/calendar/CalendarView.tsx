@@ -107,9 +107,9 @@ const eventDotColor: Record<string, string> = {
 // subtipos de prazo (manual + os 2 que chegam automaticamente via API) num
 // só filtro, já que para quem está olhando a agenda o que importa é "isto
 // é um prazo", não qual sistema o criou.
-type AgendaFilterKey = "todos" | "prazos" | "audiencias" | "tarefas" | "reunioes" | "procedimentos" | "criticos" | "sem_processo";
+type AgendaFilterKey = "todos" | "prazos" | "audiencias" | "tarefas" | "reunioes" | "procedimentos" | "criticos" | "atrasados" | "sem_processo";
 
-const filterTypeGroups: Record<Exclude<AgendaFilterKey, "todos" | "criticos" | "sem_processo">, string[]> = {
+const filterTypeGroups: Record<Exclude<AgendaFilterKey, "todos" | "criticos" | "atrasados" | "sem_processo">, string[]> = {
   prazos: ["deadline", "prazo_externo", "prazo_interno"],
   audiencias: ["hearing"],
   tarefas: ["tarefa"],
@@ -125,6 +125,7 @@ const agendaFilterLabels: Record<AgendaFilterKey, string> = {
   reunioes: "Reuniões",
   procedimentos: "Procedimentos",
   criticos: "Críticos",
+  atrasados: "Atrasados",
   sem_processo: "Sem processo",
 };
 
@@ -175,6 +176,7 @@ export function CalendarView({ onOpenCase, focusEventId, onFocusEventHandled }: 
   const [selectedDay, setSelectedDay] = useState<Date | null>(null);
   const [dayDetailsFilter, setDayDetailsFilter] = useState<"all" | "events" | "checklists">("all");
   const [viewMode, setViewMode] = useState<"mes" | "lista">("mes");
+  const [showUnscheduledCases, setShowUnscheduledCases] = useState(false);
   const [activeFilter, setActiveFilter] = useState<AgendaFilterKey>("todos");
   const [newEvent, setNewEvent] = useState<CreateEventData>({
     title: "",
@@ -225,7 +227,11 @@ export function CalendarView({ onOpenCase, focusEventId, onFocusEventHandled }: 
     if (filter === "criticos") {
       if (event.computed_status === "completed" || event.computed_status === "cancelled") return false;
       const days = differenceInCalendarDays(startOfDay(parseISO(event.event_date)), startOfDay(new Date()));
-      return days <= CRITICAL_WINDOW_DAYS;
+      return days >= 0 && days <= CRITICAL_WINDOW_DAYS;
+    }
+    if (filter === "atrasados") {
+      if (event.computed_status === "completed" || event.computed_status === "cancelled") return false;
+      return differenceInCalendarDays(startOfDay(parseISO(event.event_date)), startOfDay(new Date())) < 0;
     }
     if (filter === "sem_processo") return !event.case_id;
     return filterTypeGroups[filter].includes(event.type);
@@ -277,11 +283,17 @@ export function CalendarView({ onOpenCase, focusEventId, onFocusEventHandled }: 
   // tenham mais de um prazo/compromisso crítico) por trás dos itens
   // críticos — dá a ideia de tamanho do problema em dinheiro, não só em
   // quantidade de itens.
+  const overdueEvents = useMemo(() => {
+    return events
+      .filter((e) => matchesFilter(e, "atrasados"))
+      .sort((a, b) => parseISO(a.event_date).getTime() - parseISO(b.event_date).getTime());
+  }, [events]);
+
   const criticalValueAtRisk = useMemo(() => {
     const seenCaseIds = new Set<string>();
     let total = 0;
     let hasAnyValue = false;
-    for (const event of criticalEvents) {
+    for (const event of [...criticalEvents, ...overdueEvents]) {
       if (!event.case_id || seenCaseIds.has(event.case_id)) continue;
       seenCaseIds.add(event.case_id);
       const valor = casesById.get(event.case_id)?.valor_causa;
@@ -291,7 +303,7 @@ export function CalendarView({ onOpenCase, focusEventId, onFocusEventHandled }: 
       }
     }
     return hasAnyValue ? total : null;
-  }, [criticalEvents, casesById]);
+  }, [criticalEvents, overdueEvents, casesById]);
 
   const currencyFormatter = useMemo(
     () => new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }),
@@ -587,14 +599,14 @@ export function CalendarView({ onOpenCase, focusEventId, onFocusEventHandled }: 
       {/* Banner de risco: prazos críticos e processos sem item vinculado — a
           Agenda funcionando como gerenciador de risco jurídico, não só como
           lista de compromissos. */}
-      {(criticalEvents.length > 0 || casesWithoutUpcomingItem.length > 0) && (
+      {(criticalEvents.length > 0 || overdueEvents.length > 0 || casesWithoutUpcomingItem.length > 0) && (
         <div className="legal-card border-l-4 border-l-destructive bg-destructive/5">
           <div className="flex items-start gap-3">
             <AlertTriangle className="w-5 h-5 text-destructive shrink-0 mt-0.5" />
             <div className="space-y-2 min-w-0">
               <p className="font-medium text-sm">
-                {criticalEvents.length + casesWithoutUpcomingItem.length} atividade
-                {criticalEvents.length + casesWithoutUpcomingItem.length === 1 ? "" : "s"} exigem atenção
+                {criticalEvents.length + overdueEvents.length + casesWithoutUpcomingItem.length} atividade
+                {criticalEvents.length + overdueEvents.length + casesWithoutUpcomingItem.length === 1 ? "" : "s"} exigem atenção
                 {criticalValueAtRisk !== null && (
                   <span className="text-destructive"> · {currencyFormatter.format(criticalValueAtRisk)} em causas em risco</span>
                 )}
@@ -602,20 +614,29 @@ export function CalendarView({ onOpenCase, focusEventId, onFocusEventHandled }: 
               <div className="flex flex-wrap gap-2 text-xs">
                 {criticalEvents.length > 0 && (
                   <button
-                    onClick={() => setActiveFilter("criticos")}
+                    onClick={() => { setActiveFilter("criticos"); setViewMode("lista"); }}
                     className="px-2 py-1 rounded-full bg-destructive/10 text-destructive hover:bg-destructive/20 transition-colors"
                   >
                     {criticalEvents.length} prazo{criticalEvents.length === 1 ? "" : "s"}/compromisso
                     {criticalEvents.length === 1 ? "" : "s"} crítico{criticalEvents.length === 1 ? "" : "s"} (≤ {CRITICAL_WINDOW_DAYS} dias)
                   </button>
                 )}
+                {overdueEvents.length > 0 && (
+                  <button
+                    onClick={() => { setActiveFilter("atrasados"); setViewMode("lista"); }}
+                    className="px-2 py-1 rounded-full bg-red-700/10 text-red-700 hover:bg-red-700/20 transition-colors"
+                  >
+                    {overdueEvents.length} item{overdueEvents.length === 1 ? "" : "s"} atrasado{overdueEvents.length === 1 ? "" : "s"}
+                  </button>
+                )}
                 {casesWithoutUpcomingItem.length > 0 && (
-                  <span
-                    className="px-2 py-1 rounded-full bg-warning/10 text-warning"
-                    title={casesWithoutUpcomingItem.map((c) => c.title).join(", ")}
+                  <button
+                    onClick={() => setShowUnscheduledCases(true)}
+                    className="px-2 py-1 rounded-full bg-warning/10 text-warning hover:bg-warning/20 transition-colors"
+                    title="Ver processos sem compromisso futuro"
                   >
                     {casesWithoutUpcomingItem.length} processo{casesWithoutUpcomingItem.length === 1 ? "" : "s"} sem nenhum item futuro na agenda
-                  </span>
+                  </button>
                 )}
               </div>
               {casesWithoutUpcomingItem.length > 0 && (
@@ -1655,6 +1676,40 @@ export function CalendarView({ onOpenCase, focusEventId, onFocusEventHandled }: 
               </div>
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={showUnscheduledCases} onOpenChange={setShowUnscheduledCases}>
+        <DialogContent className="max-w-3xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="font-serif">Processos sem item futuro na agenda</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">
+            Dados calculados em tempo real a partir dos processos ativos, eventos e checklists vinculados.
+          </p>
+          <div className="space-y-2 mt-3">
+            {casesWithoutUpcomingItem.length === 0 ? (
+              <p className="text-sm text-muted-foreground">Todos os processos ativos possuem ao menos um item futuro.</p>
+            ) : casesWithoutUpcomingItem.map((caseItem) => (
+              <div key={caseItem.id} className="rounded-lg border p-3 flex items-start justify-between gap-3">
+                <div className="min-w-0">
+                  <p className="font-medium text-sm break-all">{caseItem.case_number}</p>
+                  <p className="text-xs text-muted-foreground">{caseItem.title}</p>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    {[caseItem.client, caseItem.vara, caseItem.comarca].filter(Boolean).join(" · ")}
+                  </p>
+                </div>
+                {onOpenCase && (
+                  <button
+                    onClick={() => { setShowUnscheduledCases(false); onOpenCase(caseItem.id); }}
+                    className="legal-button-secondary text-xs shrink-0"
+                  >
+                    Abrir processo
+                  </button>
+                )}
+              </div>
+            ))}
+          </div>
         </DialogContent>
       </Dialog>
 
