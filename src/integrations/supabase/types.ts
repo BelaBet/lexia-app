@@ -204,6 +204,8 @@ export type Database = {
           data_aceitacao: string | null
           id: string
           is_demo: boolean
+          jusbrasil_monitoring_active: boolean
+          jusbrasil_monitoring_started_at: string | null
           parte_diversa: string | null
           status: string
           title: string
@@ -222,6 +224,8 @@ export type Database = {
           data_aceitacao?: string | null
           id?: string
           is_demo?: boolean
+          jusbrasil_monitoring_active?: boolean
+          jusbrasil_monitoring_started_at?: string | null
           parte_diversa?: string | null
           status?: string
           title: string
@@ -240,6 +244,8 @@ export type Database = {
           data_aceitacao?: string | null
           id?: string
           is_demo?: boolean
+          jusbrasil_monitoring_active?: boolean
+          jusbrasil_monitoring_started_at?: string | null
           parte_diversa?: string | null
           status?: string
           title?: string

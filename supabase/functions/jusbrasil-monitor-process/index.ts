@@ -1,3 +1,18 @@
+// Registra um processo JÁ EXISTENTE (tela "Rastreamento de Publicações",
+// botão "Rastrear") para monitoramento direto por CNJ no JusBrasil —
+// publicações futuras chegam via jusbrasil-webhook, sem precisar de uma
+// integração por nome/OAB (supabase/functions/jusbrasil-webhook/index.ts já
+// resolve o destino pelo número do processo em `cases` quando não há
+// source_user_custom, então este endpoint não precisa criar nem depender de
+// nenhuma linha em publication_integrations — essa tela de configuração foi
+// removida do sistema).
+//
+// Trava de segurança financeira: registrar um processo pode ter custo no
+// provedor, então isso só acontece de verdade quando o secret
+// JUSBRASIL_REAL_CALLS_ENABLED estiver como "true" nas Edge Functions do
+// Supabase. Enquanto não estiver, a chamada é recusada com uma mensagem
+// clara em vez de silenciosamente simular sucesso.
+
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
 import { getJusbrasilApiToken } from "../_shared/jusbrasilToken.ts";
@@ -27,35 +42,37 @@ Deno.serve(async (req) => {
   const { data: { user }, error: authError } = await userClient.auth.getUser();
   if (authError || !user) return json({ error: "Sessão inválida ou expirada" }, 401);
 
-  let body: {
-    cnj?: string;
-    integration_id?: string;
-    dry_run?: boolean;
-    monitor_tribunal?: boolean;
-    monitor_diario?: boolean;
-    instancia?: number;
-  };
+  let body: { case_id?: string; monitor_tribunal?: boolean; monitor_diario?: boolean; instancia?: number };
   try { body = await req.json(); }
   catch { return json({ error: "JSON inválido" }, 400); }
 
-  const cnj = normalizeCnj(body.cnj ?? "");
-  if (!cnj) return json({ error: "CNJ inválido. Informe um número com 20 dígitos." }, 400);
+  if (!body.case_id) return json({ error: "case_id é obrigatório" }, 400);
 
   const admin = createClient(supabaseUrl, serviceRoleKey);
-  let query = admin
-    .from("publication_integrations")
-    .select("id, user_id, source, is_active")
+
+  const { data: caseRow, error: caseError } = await admin
+    .from("cases")
+    .select("id, case_number, jusbrasil_monitoring_active")
+    .eq("id", body.case_id)
     .eq("user_id", user.id)
-    .eq("source", "jusbrasil")
-    .eq("is_active", true);
+    .maybeSingle();
+  if (caseError) return json({ error: "Erro ao carregar o processo" }, 500);
+  if (!caseRow) return json({ error: "Processo não encontrado" }, 404);
 
-  if (body.integration_id) query = query.eq("id", body.integration_id);
-  else query = query.is("linked_client_id", null).order("created_at", { ascending: true }).limit(1);
+  if (caseRow.jusbrasil_monitoring_active) {
+    return json({ success: true, already_active: true, message: "Este processo já está sendo rastreado." });
+  }
 
-  const { data: integrations, error: integrationError } = await query;
-  if (integrationError) return json({ error: "Erro ao carregar integração JusBrasil" }, 500);
-  const integration = integrations?.[0];
-  if (!integration) return json({ error: "Integração JusBrasil ativa não encontrada" }, 404);
+  const cnj = normalizeCnj(caseRow.case_number ?? "");
+  if (!cnj) return json({ error: "Este processo não tem um número CNJ válido para rastrear." }, 400);
+
+  if (Deno.env.get("JUSBRASIL_REAL_CALLS_ENABLED") !== "true") {
+    return json({ error: "O rastreamento de publicações ainda não foi habilitado no backend (secret JUSBRASIL_REAL_CALLS_ENABLED)." }, 403);
+  }
+
+  let token: string;
+  try { token = await getJusbrasilApiToken(admin); }
+  catch { return json({ error: "Integração JusBrasil não configurada no backend" }, 500); }
 
   const payload = {
     numero: cnj,
@@ -63,31 +80,7 @@ Deno.serve(async (req) => {
     is_monitored_tribunal: body.monitor_tribunal ?? true,
     is_monitored_diario: body.monitor_diario ?? true,
     instancia: body.instancia ?? 1,
-    // Identificador white-label: o JusBrasil devolve este valor em
-    // source_user_custom nos eventos de webhook.
-    user_custom: integration.id,
   };
-
-  // Segurança financeira: por padrão apenas valida e mostra o que seria
-  // enviado. Nenhuma chamada ao provedor é feita.
-  if (body.dry_run !== false) {
-    return json({
-      success: true,
-      dry_run: true,
-      cnj,
-      integration_id: integration.id,
-      request: { method: "POST", url: MONITOR_URL, body: payload },
-      message: "Monitoramento preparado com roteamento white-label. Nenhuma chamada ao JusBrasil foi executada.",
-    });
-  }
-
-  if (Deno.env.get("JUSBRASIL_REAL_CALLS_ENABLED") !== "true") {
-    return json({ error: "Chamadas reais ao JusBrasil estão bloqueadas pelo backend" }, 403);
-  }
-
-  let token: string;
-  try { token = await getJusbrasilApiToken(admin); }
-  catch { return json({ error: "Integração JusBrasil não configurada no backend" }, 500); }
 
   const response = await fetch(MONITOR_URL, {
     method: "POST",
@@ -105,8 +98,14 @@ Deno.serve(async (req) => {
 
   if (!response.ok) {
     console.error(`JusBrasil monitoramento respondeu ${response.status}`);
-    return json({ error: "Erro ao registrar monitoramento no JusBrasil", provider_status: response.status, details: data }, 502);
+    return json({ error: "Erro ao registrar rastreamento no JusBrasil", provider_status: response.status, details: data }, 502);
   }
 
-  return json({ success: true, dry_run: false, cnj, integration_id: integration.id, data });
+  const { error: updateError } = await admin
+    .from("cases")
+    .update({ jusbrasil_monitoring_active: true, jusbrasil_monitoring_started_at: new Date().toISOString() })
+    .eq("id", caseRow.id);
+  if (updateError) console.error("jusbrasil-monitor-process: erro ao marcar processo como rastreado", updateError);
+
+  return json({ success: true, cnj, data });
 });

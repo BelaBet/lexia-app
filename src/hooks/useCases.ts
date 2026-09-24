@@ -24,6 +24,9 @@ export interface Case {
   created_at: string;
   updated_at: string;
   user_id: string | null;
+  /** true quando o processo já está registrado para rastreamento de publicações no JusBrasil. */
+  jusbrasil_monitoring_active: boolean;
+  jusbrasil_monitoring_started_at: string | null;
 }
 
 async function requireUser() {
@@ -88,5 +91,26 @@ export function useDeleteCase() {
       toast.success("Processo excluído!");
     },
     onError: (error) => toast.error(error.message || "Erro ao excluir processo"),
+  });
+}
+
+// Registra um processo já existente para rastreamento automático de
+// publicações no JusBrasil (ver supabase/functions/jusbrasil-monitor-process).
+export function useTrackCasePublications() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (caseId: string) => {
+      const { data, error } = await supabase.functions.invoke("jusbrasil-monitor-process", {
+        body: { case_id: caseId },
+      });
+      if (error) throw new Error((data as { error?: string } | null)?.error || error.message);
+      if ((data as { error?: string } | null)?.error) throw new Error((data as { error?: string }).error);
+      return data as { success: boolean; already_active?: boolean; message?: string };
+    },
+    onSuccess: (result) => {
+      queryClient.invalidateQueries({ queryKey: ["cases"] });
+      toast.success(result.message || "Rastreamento de publicações ativado para este processo!");
+    },
+    onError: (error: Error) => toast.error(error.message || "Erro ao ativar o rastreamento deste processo"),
   });
 }

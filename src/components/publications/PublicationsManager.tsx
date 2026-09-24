@@ -27,6 +27,8 @@ import {
   Scale,
   Sparkles,
   AlertTriangle,
+  RadioTower,
+  CheckCircle2,
 } from "lucide-react";
 import { format, isPast, isToday, differenceInDays } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -37,6 +39,7 @@ import {
   Publication,
   PublicationStatus,
 } from "@/hooks/usePublications";
+import { useCases, useTrackCasePublications } from "@/hooks/useCases";
 import { PublicationDialog } from "./PublicationDialog";
 import { PublicationDetailDialog } from "./PublicationDetailDialog";
 
@@ -74,6 +77,56 @@ function deadlineBadge(date: string | null) {
   return <span>{label}</span>;
 }
 
+function ExistingCasesTracking() {
+  const { data: cases = [], isLoading } = useCases();
+  const trackCase = useTrackCasePublications();
+
+  if (isLoading || !cases.length) return null;
+
+  return (
+    <Card>
+      <CardContent className="p-4 space-y-3">
+        <div>
+          <p className="font-medium flex items-center gap-2"><RadioTower className="w-4 h-4 text-primary" /> Processos existentes</p>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Ative o rastreamento para receber publicações futuras de um processo já cadastrado automaticamente aqui.
+          </p>
+        </div>
+        <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+          {cases.map((c) => (
+            <div key={c.id} className="flex items-center justify-between gap-3 rounded-md border p-2.5">
+              <div className="min-w-0">
+                <p className="text-sm font-medium truncate">{c.case_number}</p>
+                <p className="text-xs text-muted-foreground truncate">{c.title}</p>
+              </div>
+              {c.jusbrasil_monitoring_active ? (
+                <Badge variant="outline" className="shrink-0 gap-1.5 border-green-500/30 text-green-600">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Rastreando
+                </Badge>
+              ) : (
+                <Button
+                  size="sm"
+                  variant="outline"
+                  className="shrink-0 gap-1.5"
+                  disabled={trackCase.isPending}
+                  onClick={() => trackCase.mutate(c.id)}
+                >
+                  {trackCase.isPending && trackCase.variables === c.id ? (
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                  ) : (
+                    <RadioTower className="w-3.5 h-3.5" />
+                  )}
+                  Rastrear
+                </Button>
+              )}
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export function PublicationsManager() {
   const [statusFilter, setStatusFilter] = useState<PublicationStatus | "all">("all");
   const [createOpen, setCreateOpen] = useState(false);
@@ -100,6 +153,8 @@ export function PublicationsManager() {
           <Plus className="w-4 h-4" /> Nova Publicação
         </Button>
       </div>
+
+      <ExistingCasesTracking />
 
       <div className="flex items-center gap-3">
         <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as PublicationStatus | "all")}>
