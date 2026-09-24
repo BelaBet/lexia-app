@@ -50,6 +50,16 @@ function safeArray(value: unknown): JsonRecord[] {
   return Array.isArray(value) ? value.map(normalizeParty).filter((item): item is JsonRecord => Boolean(item)) : [];
 }
 
+// Movimentações, anexos, audiências e assuntos vêm do provedor como tuplas
+// indexadas por posição (data, título, texto...), não como partes — passar
+// esses arrays por normalizeParty (que remapeia para as chaves de UMA parte,
+// como nomeParte/cnpj/advogados) destrói a tupla e some com todo o conteúdo,
+// deixando "Movimentação" genérico e "—" em todo campo. Aqui só filtra o que
+// não é array, sem tocar no formato de cada item.
+function rawArray(value: unknown): JsonRecord[] {
+  return Array.isArray(value) ? (value as JsonRecord[]) : [];
+}
+
 function rawPartyArray(value: unknown): JsonRecord[] {
   return Array.isArray(value) ? value.map(normalizeParty).filter((item): item is JsonRecord => Boolean(item)) : [];
 }
@@ -339,18 +349,18 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
   const activeParties = activeFromProvider.length ? activeFromProvider : storedActive;
   const passiveParties = passiveFromProvider.length ? passiveFromProvider : storedPassive;
   const conflictingLawyerKeys = findConflictingLawyerKeys(activeParties, passiveParties);
-  const classesFromProvider = safeArray(raw.classes).map((item) => text(item).trim()).filter(Boolean);
+  const classesFromProvider = rawArray(raw.classes).map((item) => text(item).trim()).filter(Boolean);
   const assuntoExtra = text(raw.assuntoExtra).split(",").map((item) => item.trim()).filter(Boolean);
   // "Motivos / assuntos" vêm de campos estruturados do provedor. Nunca
   // inferimos o motivo a partir de movimentações, sentença ou documentos.
   const reasons = Array.from(new Set(classesFromProvider.length ? classesFromProvider : assuntoExtra));
-  const hearings = safeArray(raw.audiencias);
+  const hearings = rawArray(raw.audiencias);
   const firstHearing = hearings[0] || null;
   const courtUnit = text(raw.vara_original) ? `${text(raw.vara_original)}ª Vara` : text(data.vara);
   const instance = text(raw.instancia) ? `${text(raw.instancia)}ª instância` : "—";
   const updatedAt = text(raw.alteradoEm) || data.updated_at || data.created_at;
 
-  const providerMovements = safeArray(raw.movs).map((mov: JsonRecord, index: number) => ({
+  const providerMovements = rawArray(raw.movs).map((mov: JsonRecord, index: number) => ({
     id: `provider-${mov?.[4] ?? index}`,
     event_date: text(mov?.[0]),
     title: text(mov?.[1]) || "Movimentação",
@@ -362,7 +372,7 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
   const movements = providerMovements.length ? providerMovements : timelineEvents;
   const movementTypes = Array.from(new Set(movements.map((item: JsonRecord) => text(item.title) || "Movimentação"))).sort((a, b) => a.localeCompare(b, "pt-BR"));
 
-  const rawAutos = safeArray(raw.anexos).map((item: JsonRecord, index: number) => ({
+  const rawAutos = rawArray(raw.anexos).map((item: JsonRecord, index: number) => ({
     id: `raw-auto-${item?.[0] ?? index}`,
     file_name: text(item?.[7]) || `Documento ${index + 1}`,
     source_url: text(item?.[1]),
