@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Download, ExternalLink, FileText, Loader2, RefreshCw, Search, X } from "lucide-react";
+import { AlertTriangle, Download, ExternalLink, FileText, Loader2, RefreshCw, Search, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 
@@ -93,7 +93,33 @@ function lawyerOab(value: JsonRecord) {
   return text(value?.oab) || "—";
 }
 
-function PartyTable({ title, rows }: { title: string; rows: JsonRecord[] }) {
+// Identifica um advogado de forma estável entre partes (advogadoID é o mais
+// confiável; OAB e nome servem de fallback quando o provedor não manda o ID).
+function lawyerKey(value: JsonRecord) {
+  return text(value?.advogadoID) || text(value?.oab) || text(value?.nomeNormalizado) || "";
+}
+
+// Coleta as chaves de advogado que aparecem tanto do lado do autor quanto do
+// réu — um mesmo advogado não pode representar as duas partes de uma ação.
+// Quando isso acontece, o dado veio assim do provedor (JusBrasil); nunca
+// inferimos qual lado está "certo", só sinalizamos para conferência.
+function findConflictingLawyerKeys(activeParties: JsonRecord[], passiveParties: JsonRecord[]): Set<string> {
+  const collect = (parties: JsonRecord[]) => {
+    const keys = new Set<string>();
+    parties.forEach((party) => {
+      const lawyers = Array.isArray(party?.advogados) ? party.advogados as JsonRecord[] : [];
+      lawyers.forEach((lawyer) => { const key = lawyerKey(lawyer); if (key) keys.add(key); });
+    });
+    return keys;
+  };
+  const activeKeys = collect(activeParties);
+  const passiveKeys = collect(passiveParties);
+  const conflicts = new Set<string>();
+  activeKeys.forEach((key) => { if (passiveKeys.has(key)) conflicts.add(key); });
+  return conflicts;
+}
+
+function PartyTable({ title, rows, conflictingLawyerKeys }: { title: string; rows: JsonRecord[]; conflictingLawyerKeys: Set<string> }) {
   return (
     <section className="space-y-3">
       <h2 className="text-xl font-semibold uppercase tracking-tight">{title}</h2>
@@ -112,10 +138,22 @@ function PartyTable({ title, rows }: { title: string; rows: JsonRecord[] }) {
                 ? (party.advogados as unknown[]).map(normalizeLawyer).filter((item): item is JsonRecord => Boolean(item))
                 : [];
               const first = lawyers[0];
+              const hasConflict = Boolean(first) && conflictingLawyerKeys.has(lawyerKey(first));
               return (
                 <tr key={`${text(party?.nomeParte)}-${index}`} className="border-t align-top">
                   <td className="px-3 py-3 font-medium">{text(party?.nomeParte) || "—"}</td>
-                  <td className="px-3 py-3">{first ? lawyerName(first) : "—"}</td>
+                  <td className="px-3 py-3">
+                    {first ? (
+                      <span className="inline-flex items-center gap-1.5">
+                        {lawyerName(first)}
+                        {hasConflict && (
+                          <span title="Este advogado também consta na parte contrária deste processo, segundo o provedor de dados — confira a fonte antes de considerar definitivo.">
+                            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                          </span>
+                        )}
+                      </span>
+                    ) : "—"}
+                  </td>
                   <td className="px-3 py-3">{first ? lawyerOab(first) : "—"}</td>
                 </tr>
               );
@@ -300,6 +338,7 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
   const passiveFromProvider = providerParties.filter((p) => Boolean(p.is_re) || /REU|RÉU|PASSIVO/i.test(text(p.relacaoNormalizado)));
   const activeParties = activeFromProvider.length ? activeFromProvider : storedActive;
   const passiveParties = passiveFromProvider.length ? passiveFromProvider : storedPassive;
+  const conflictingLawyerKeys = findConflictingLawyerKeys(activeParties, passiveParties);
   const classesFromProvider = safeArray(raw.classes).map((item) => text(item).trim()).filter(Boolean);
   const assuntoExtra = text(raw.assuntoExtra).split(",").map((item) => item.trim()).filter(Boolean);
   // "Motivos / assuntos" vêm de campos estruturados do provedor. Nunca
@@ -418,8 +457,8 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
         </div>
       </section>
 
-      <PartyTable title="Autor" rows={activeParties} />
-      <PartyTable title="Réu" rows={passiveParties} />
+      <PartyTable title="Autor" rows={activeParties} conflictingLawyerKeys={conflictingLawyerKeys} />
+      <PartyTable title="Réu" rows={passiveParties} conflictingLawyerKeys={conflictingLawyerKeys} />
 
       <section className="space-y-5">
         <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
