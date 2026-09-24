@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Building2, CalendarDays, ChevronLeft, ChevronRight, Download, FileSpreadsheet, FolderOpen, RefreshCw, Scale, Search } from "lucide-react";
@@ -96,6 +96,12 @@ export function ProcessPortfolio(){
   const [searchTerm,setSearchTerm]=useState("");
   const [page,setPage]=useState(1);
   const [chartFilter,setChartFilter]=useState<{kind:"state"|"year"|"polo"|"status"|"nature";value:string}|null>(null);
+  const processListRef=useRef<HTMLElement|null>(null);
+  const selectChartFilter=(filter:{kind:"state"|"year"|"polo"|"status"|"nature";value:string})=>{
+    setChartFilter(filter);
+    setPage(1);
+    window.setTimeout(()=>processListRef.current?.scrollIntoView({behavior:"smooth",block:"start"}),50);
+  };
   const {data,isLoading,isError,error,refetch,isFetching}=useQuery({queryKey:["cases","portfolio"],queryFn:async()=>{const [{data:reports,error:reportsError},{data:results,error:resultsError}]=await Promise.all([supabase.from("process_search_reports").select("*").order("created_at",{ascending:false}),supabase.from("process_search_results").select("*").order("data_distribuicao",{ascending:false})]);if(reportsError)throw reportsError;if(resultsError)throw resultsError;return{reports:(reports||[])as ReportRow[],results:(results||[])as ResultRow[]};},refetchOnWindowFocus:true});
   const reports=data?.reports||[];const results=data?.results||[];
   const reportResults=useMemo(()=>{const grouped=new Map<string,ResultRow[]>();results.forEach((result)=>{const current=grouped.get(result.report_id)||[];current.push(result);grouped.set(result.report_id,current);});return grouped;},[results]);
@@ -121,18 +127,18 @@ export function ProcessPortfolio(){
       </header>
 
       <section className="grid gap-10 lg:grid-cols-2">
-        <BrazilStatesMap counts={states} onSelect={(uf)=>{setChartFilter({kind:"state",value:uf});setPage(1);}}/>
-        <ReportPanel title="Data de distribuição"><VerticalYearChart data={years} onSelect={(value)=>{setChartFilter({kind:"year",value});setPage(1);}}/></ReportPanel>
+        <BrazilStatesMap counts={states} onSelect={(uf)=>{selectChartFilter({kind:"state",value:uf});}}/>
+        <ReportPanel title="Data de distribuição"><VerticalYearChart data={years} onSelect={(value)=>{selectChartFilter({kind:"year",value});}}/></ReportPanel>
       </section>
 
       <section className="grid gap-10 lg:grid-cols-2">
-        <ReportPanel title="Polo">{polos.length===1&&polos[0].name==="Sem dados"?<div className="flex min-h-[270px] items-center justify-center text-xl font-semibold">Sem dados disponíveis.</div>:<Donut data={polos} onSelect={(value)=>{setChartFilter({kind:"polo",value});setPage(1);}}/>}</ReportPanel>
-        <ReportPanel title="Status"><Donut data={statuses} onSelect={(value)=>{setChartFilter({kind:"status",value});setPage(1);}}/></ReportPanel>
+        <ReportPanel title="Polo">{polos.length===1&&polos[0].name==="Sem dados"?<div className="flex min-h-[270px] items-center justify-center text-xl font-semibold">Sem dados disponíveis.</div>:<Donut data={polos} onSelect={(value)=>{selectChartFilter({kind:"polo",value});}}/>}</ReportPanel>
+        <ReportPanel title="Status"><Donut data={statuses} onSelect={(value)=>{selectChartFilter({kind:"status",value});}}/></ReportPanel>
       </section>
 
-      <ReportPanel title="Natureza" className="mx-auto w-full max-w-[760px]"><HorizontalBars data={natures} onSelect={(value)=>{setChartFilter({kind:"nature",value});setPage(1);}}/></ReportPanel>
+      <ReportPanel title="Natureza" className="mx-auto w-full max-w-[760px]"><HorizontalBars data={natures} onSelect={(value)=>{selectChartFilter({kind:"nature",value});}}/></ReportPanel>
 
-      <section className="pt-3">
+      <section ref={processListRef} className="scroll-mt-6 pt-3">
         {chartFilter&&<div className="mb-4 flex items-center justify-between rounded-lg border bg-muted/40 px-4 py-3 text-sm"><span>Filtro do gráfico: <strong>{chartFilter.value}</strong> · {filteredResults.length} processo(s)</span><Button size="sm" variant="ghost" onClick={()=>{setChartFilter(null);setPage(1);}}>Mostrar todos</Button></div>}<div className="mb-4 flex flex-col gap-4 md:flex-row md:items-end md:justify-between"><div><h2 className="text-xl font-semibold">Lista de processos</h2><p className="mt-1 text-xs text-muted-foreground">{filteredResults.length} registro(s)</p></div><div className="relative w-full md:w-72"><Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground"/><input value={searchTerm} onChange={(e)=>{setSearchTerm(e.target.value);setPage(1);}} placeholder="Localizar na tabela" className="legal-input h-10 w-full pl-9"/></div></div>
 
         <div className="divide-y rounded-lg border md:hidden">{pagedResults.map((row)=><article key={row.id} className="p-4"><button onClick={()=>row.case_id&&navigate(`/processos/${row.case_id}`)} className="break-all text-left font-mono text-xs font-bold text-[#18324A] hover:underline dark:text-[#DCE9F3]">{row.process_number||"—"}</button><p className="mt-2 text-xs leading-relaxed">{partyLabel(row)}</p><div className="mt-3 grid grid-cols-2 gap-3 text-xs"><div><span className="text-muted-foreground">Distribuição</span><p>{fmtDate(row.data_distribuicao)}</p></div><div><span className="text-muted-foreground">Tribunal</span><p>{row.tribunal||"—"}</p></div><div><span className="text-muted-foreground">Valor</span><p>{row.valor!=null?currency.format(Number(row.valor)):"—"}</p></div><div><span className="text-muted-foreground">Área</span><p>{row.area||"—"}</p></div><div className="col-span-2"><span className="text-muted-foreground">Natureza</span><p>{row.natureza||safeText(raw(row).classeNatureza)||"—"}</p></div></div><div className="mt-4 flex gap-2"><Button variant="outline" size="sm" onClick={()=>downloadCsv(`${row.process_number||"processo"}.csv`,[row])}><Download className="h-4 w-4"/></Button><Button size="sm" className="flex-1" disabled={!row.case_id} onClick={()=>row.case_id&&navigate(`/processos/${row.case_id}`)}>Ver detalhes</Button></div></article>)}</div>
