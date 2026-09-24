@@ -211,7 +211,7 @@ export function CalendarView({ onOpenCase, focusEventId, onFocusEventHandled }: 
     }
     const targetDate = parseISO(target.event_date);
     setCurrentDate(targetDate);
-    setSelectedDay(targetDate);
+    setSelectedDay(null);
     setViewingEvent(target);
     onFocusEventHandled?.();
   }, [focusEventId, isLoading, events, onFocusEventHandled]);
