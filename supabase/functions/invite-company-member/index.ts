@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
   const isPlatformAdmin = actorRoles?.some((r) => r.role === "admin" || r.role === "supremo") ?? false;
   if (!isPlatformAdmin) return json({ error: "Acesso negado" }, 403);
 
-  let body: { company_id?: string; full_name?: string; email?: string };
+  let body: { company_id?: string; full_name?: string; email?: string; password?: string };
   try {
     body = await req.json();
   } catch {
@@ -48,9 +48,14 @@ Deno.serve(async (req) => {
   const companyId = body.company_id?.trim();
   const fullName = body.full_name?.trim();
   const email = body.email?.trim().toLowerCase();
+  // Senha inicial é opcional: quando informada, a conta já nasce pronta pra
+  // uso com essa senha (sem depender do e-mail de convite chegar); a pessoa
+  // troca depois em Configurações. Sem senha, mantém o fluxo por e-mail.
+  const password = body.password?.trim() || null;
 
   if (!companyId || !fullName || !email) return json({ error: "Informe a empresa, o nome e o e-mail" }, 400);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "E-mail inválido" }, 400);
+  if (password && password.length < 6) return json({ error: "A senha inicial precisa ter pelo menos 6 caracteres" }, 400);
 
   const { data: company, error: companyError } = await admin
     .from("whitelabel_companies")
@@ -94,6 +99,22 @@ Deno.serve(async (req) => {
     return json({ success: true, user_id: existingUser.id, company: company.name, already_existed: true });
   }
 
+  if (password) {
+    const { data: createdData, error: createError } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: fullName, company_id: companyId },
+    });
+
+    if (createError) {
+      console.error("invite-company-member: createUser error", createError);
+      return json({ error: "Erro ao criar o usuário" }, 500);
+    }
+
+    return json({ success: true, user_id: createdData?.user?.id ?? null, company: company.name, already_existed: false, password_set: true });
+  }
+
   const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
     redirectTo: `${siteUrl}/empresa/definir-senha`,
     data: { full_name: fullName, company_id: companyId },
@@ -104,5 +125,5 @@ Deno.serve(async (req) => {
     return json({ error: "Erro ao enviar o convite por e-mail" }, 500);
   }
 
-  return json({ success: true, user_id: inviteData?.user?.id ?? null, company: company.name, already_existed: false });
+  return json({ success: true, user_id: inviteData?.user?.id ?? null, company: company.name, already_existed: false, password_set: false });
 });

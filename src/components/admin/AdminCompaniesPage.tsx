@@ -22,10 +22,42 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@/components/ui/dialog";
-import { Building2, Plus, UserPlus, AlertTriangle, Loader2 } from "lucide-react";
+import { Building2, Plus, UserPlus, AlertTriangle, Loader2, Eye, EyeOff } from "lucide-react";
 import { format } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { formatCnpj, isValidCnpj } from "@/lib/cnpj";
+
+const MIN_PASSWORD_LENGTH = 6;
+
+function PasswordField({ id, label, value, onChange, error }: { id: string; label: string; value: string; onChange: (value: string) => void; error?: string | null }) {
+  const [visible, setVisible] = useState(false);
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="relative">
+        <Input
+          id={id}
+          type={visible ? "text" : "password"}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          autoComplete="new-password"
+          className="pr-10"
+          aria-invalid={Boolean(error)}
+        />
+        <button
+          type="button"
+          onClick={() => setVisible((v) => !v)}
+          aria-label={visible ? "Ocultar senha" : "Mostrar senha"}
+          title={visible ? "Ocultar senha" : "Mostrar senha"}
+          className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground"
+        >
+          {visible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+        </button>
+      </div>
+      {error && <p className="text-sm text-destructive">{error}</p>}
+    </div>
+  );
+}
 
 function CreateCompanyDialog() {
   const [open, setOpen] = useState(false);
@@ -34,6 +66,7 @@ function CreateCompanyDialog() {
   const [document, setDocument] = useState("");
   const [firstUserName, setFirstUserName] = useState("");
   const [firstUserEmail, setFirstUserEmail] = useState("");
+  const [firstUserPassword, setFirstUserPassword] = useState("");
   const createCompany = useCreateCompany();
   const inviteMember = useInviteCompanyMember();
 
@@ -42,6 +75,7 @@ function CreateCompanyDialog() {
   const hasFirstUserName = firstUserName.trim().length > 0;
   const hasFirstUserEmail = firstUserEmail.trim().length > 0;
   const firstUserIncomplete = hasFirstUserName !== hasFirstUserEmail;
+  const passwordError = firstUserPassword.length > 0 && firstUserPassword.length < MIN_PASSWORD_LENGTH ? `A senha precisa ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres` : null;
 
   const resetForm = () => {
     setName("");
@@ -49,11 +83,12 @@ function CreateCompanyDialog() {
     setDocument("");
     setFirstUserName("");
     setFirstUserEmail("");
+    setFirstUserPassword("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim() || cnpjError || firstUserIncomplete) return;
+    if (!name.trim() || cnpjError || firstUserIncomplete || passwordError) return;
     try {
       const company = await createCompany.mutateAsync({
         name: name.trim(),
@@ -65,6 +100,7 @@ function CreateCompanyDialog() {
           company_id: company.id,
           full_name: firstUserName.trim(),
           email: firstUserEmail.trim(),
+          password: firstUserPassword.trim() || undefined,
         });
       }
       setOpen(false);
@@ -125,10 +161,12 @@ function CreateCompanyDialog() {
               <Label htmlFor="first-user-email">E-mail</Label>
               <Input id="first-user-email" type="email" value={firstUserEmail} onChange={(e) => setFirstUserEmail(e.target.value)} />
             </div>
+            <PasswordField id="first-user-password" label="Senha inicial (opcional)" value={firstUserPassword} onChange={setFirstUserPassword} error={passwordError} />
+            <p className="text-xs text-muted-foreground">Deixe em branco para enviar um convite por e-mail em vez de definir a senha agora. Se definir, a pessoa poderá trocá-la depois em Configurações.</p>
             {firstUserIncomplete && <p className="text-sm text-destructive">Informe nome e e-mail para convidar o primeiro usuário.</p>}
           </div>
           <DialogFooter>
-            <Button type="submit" disabled={isSubmitting || !name.trim() || Boolean(cnpjError) || firstUserIncomplete} className="gap-1.5">
+            <Button type="submit" disabled={isSubmitting || !name.trim() || Boolean(cnpjError) || firstUserIncomplete || Boolean(passwordError)} className="gap-1.5">
               {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
               Adicionar empresa
             </Button>
@@ -143,18 +181,22 @@ function InviteMemberDialog({ company }: { company: Company }) {
   const [open, setOpen] = useState(false);
   const [fullName, setFullName] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const inviteMember = useInviteCompanyMember();
+
+  const passwordError = password.length > 0 && password.length < MIN_PASSWORD_LENGTH ? `A senha precisa ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres` : null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!fullName.trim() || !email.trim()) return;
+    if (!fullName.trim() || !email.trim() || passwordError) return;
     inviteMember.mutate(
-      { company_id: company.id, full_name: fullName.trim(), email: email.trim() },
+      { company_id: company.id, full_name: fullName.trim(), email: email.trim(), password: password.trim() || undefined },
       {
         onSuccess: () => {
           setOpen(false);
           setFullName("");
           setEmail("");
+          setPassword("");
         },
       }
     );
@@ -172,7 +214,7 @@ function InviteMemberDialog({ company }: { company: Company }) {
         <DialogHeader>
           <DialogTitle>Convidar usuário para {company.name}</DialogTitle>
           <DialogDescription>
-            Enviamos um e-mail para a pessoa definir a senha. Se o e-mail já tiver conta sem empresa, associamos direto.
+            Defina uma senha inicial para a conta já nascer pronta, ou deixe em branco para enviar um e-mail com link para a pessoa definir a senha. Se o e-mail já tiver conta sem empresa, associamos direto.
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
@@ -184,10 +226,11 @@ function InviteMemberDialog({ company }: { company: Company }) {
             <Label htmlFor="member-email">E-mail</Label>
             <Input id="member-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
           </div>
+          <PasswordField id="member-password" label="Senha inicial (opcional)" value={password} onChange={setPassword} error={passwordError} />
           <DialogFooter>
-            <Button type="submit" disabled={inviteMember.isPending || !fullName.trim() || !email.trim()} className="gap-1.5">
+            <Button type="submit" disabled={inviteMember.isPending || !fullName.trim() || !email.trim() || Boolean(passwordError)} className="gap-1.5">
               {inviteMember.isPending && <Loader2 className="w-4 h-4 animate-spin" />}
-              Enviar convite
+              {password.trim() ? "Criar usuário" : "Enviar convite"}
             </Button>
           </DialogFooter>
         </form>
