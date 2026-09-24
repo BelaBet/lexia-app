@@ -18,7 +18,7 @@ Deno.serve(async (req) => {
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
-  const siteUrl = Deno.env.get("SITE_URL") || "https://lexia-app-rho.vercel.app";
+  const siteUrl = Deno.env.get("SITE_URL") || "https://lexia.meuhub.site";
   if (!supabaseUrl || !supabaseAnonKey || !serviceRoleKey) return json({ error: "Configuração do Supabase ausente" }, 500);
 
   const authHeader = req.headers.get("Authorization");
