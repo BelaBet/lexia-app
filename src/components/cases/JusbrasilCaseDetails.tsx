@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Download, ExternalLink, FileText, Loader2, RefreshCw, Search, X } from "lucide-react";
+import { AlertTriangle, Download, ExternalLink, Eye, EyeOff, FileText, Loader2, RefreshCw, Search, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 
@@ -235,6 +235,7 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
   const [showUpdatePassword, setShowUpdatePassword] = useState(false);
   const [updatePassword, setUpdatePassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
   const [autoSyncDone, setAutoSyncDone] = useState(false);
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -247,7 +248,20 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle();
-      if (error) throw error;
+      if (error) {
+        // Supabase FunctionsHttpError hides the JSON response behind context.
+        // Surface the backend message (e.g. invalid release password) instead
+        // of the generic "Edge Function returned a non-2xx status code".
+        let backendMessage = "";
+        try {
+          const context = (error as { context?: Response }).context;
+          if (context && typeof context.clone === "function") {
+            const payload = await context.clone().json();
+            backendMessage = typeof payload?.error === "string" ? payload.error : typeof payload?.message === "string" ? payload.message : "";
+          }
+        } catch { /* keep fallback below */ }
+        throw new Error(backendMessage || error.message);
+      }
       return data as JsonRecord;
     },
   });
@@ -287,7 +301,7 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
     setSyncMessage(null);
     try {
       const { data: syncData, error } = await supabase.functions.invoke("sync-case-details", {
-        body: { case_id: caseId, force, ...(force ? { update_password: updatePasswordValue ?? "" } : {}) },
+        body: { case_id: caseId, force, ...(force ? { update_password: (updatePasswordValue ?? "").trim() } : {}) },
       });
       if (error) throw error;
       if (syncData?.success === false || syncData?.provider_unavailable) {
@@ -298,6 +312,7 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
       if (force) {
         setShowUpdatePassword(false);
         setUpdatePassword("");
+        setShowPassword(false);
       }
       await Promise.all([
         refetch(),
@@ -427,17 +442,22 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
             <p className="text-sm font-medium">Atualização protegida</p>
             <p className="mt-1 text-sm text-muted-foreground">Para solicitar a atualização dos dados deste processo, informe a senha de liberação.</p>
             <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <input
-                type="password"
-                value={updatePassword}
-                onChange={(e) => setUpdatePassword(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter" && updatePassword) void syncDetails(true, updatePassword); }}
-                placeholder="Senha de liberação"
-                autoComplete="off"
-                className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm sm:max-w-xs"
-              />
+              <div className="relative w-full sm:max-w-xs">
+                <input
+                  type={showPassword ? "text" : "password"}
+                  value={updatePassword}
+                  onChange={(e) => setUpdatePassword(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && updatePassword) void syncDetails(true, updatePassword); }}
+                  placeholder="Senha de liberação"
+                  autoComplete="off"
+                  className="h-9 w-full rounded-md border border-input bg-background px-3 pr-10 text-sm"
+                />
+                <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"} title={showPassword ? "Ocultar senha" : "Mostrar senha"} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground">
+                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
               <Button size="sm" onClick={() => void syncDetails(true, updatePassword)} disabled={!updatePassword}>Liberar atualização</Button>
-              <Button variant="ghost" size="sm" onClick={() => { setShowUpdatePassword(false); setUpdatePassword(""); }}>Cancelar</Button>
+              <Button variant="ghost" size="sm" onClick={() => { setShowUpdatePassword(false); setUpdatePassword(""); setShowPassword(false); }}>Cancelar</Button>
             </div>
           </div>
         )}
