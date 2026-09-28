@@ -1,7 +1,7 @@
-// Núcleo do "sincronizar detalhes do processo" — busca a fotografia já
-// existente na base do provedor (endpoint base-judicial/tribproc, NÃO
-// atualiza_tribunal nem atualiza_tribunal_anexos — sem custo/consulta nova
-// ao tribunal) e atualiza process_search_results + process_search_documents.
+// Núcleo do sincronismo de detalhes. A abertura automática apenas lê a
+// fotografia existente no provedor. Quando force=true (clique explícito do
+// usuário), solicita atualização real no tribunal e usa o webhook tipo 13
+// para receber e persistir o resultado concluído.
 // Compartilhado entre sync-case-details (chamada manual/automática ao abrir
 // a tela do processo, por usuário) e sync-all-case-details (varredura
 // diária via pg_cron, todos os processos).
@@ -47,6 +47,7 @@ export interface SyncCaseDetailsResult {
   autos: number;
   hearings: number;
   updated_at?: string;
+  update_requested?: boolean;
 }
 
 // Cache de 24h por processo (salvo com force=true): dentro desse intervalo
@@ -71,7 +72,12 @@ export async function syncCaseDetails(
   const cnj = String(result.process_number ?? "").trim();
   if (!cnj) throw new Error("Número CNJ ausente");
 
-  const url = `${JUSBRASIL_API_BASE_URL}/api/base-judicial/tribproc/${encodeURIComponent(cnj)}?tipo_numero=5`;
+  const params = new URLSearchParams({ tipo_numero: "5" });
+  // id_update_callback já solicita a atualização no tribunal e faz o provedor
+  // devolver o resultado final via evento 13. Não pedimos nova baixa de autos
+  // aqui; isso permanece uma operação separada.
+  if (force) params.set("id_update_callback", result.id);
+  const url = `${JUSBRASIL_API_BASE_URL}/api/base-judicial/tribproc/${encodeURIComponent(cnj)}?${params.toString()}`;
   const provider = await fetch(url, { headers: { Authorization: `Bearer ${token}`, Accept: "application/json", "Content-Type": "application/json" } });
   const txt = await provider.text();
   // deno-lint-ignore no-explicit-any
@@ -81,7 +87,14 @@ export async function syncCaseDetails(
     throw new Error(`Não foi possível sincronizar os detalhes já existentes do processo (status ${provider.status})`);
   }
 
-  const mergedRaw = { ...existingRaw, ...payload, _details_synced_at: new Date().toISOString(), _details_source: "base-judicial-cache" };
+  const now = new Date().toISOString();
+  const mergedRaw = {
+    ...existingRaw,
+    ...payload,
+    _details_synced_at: now,
+    _details_source: force ? "tribunal-update-requested" : "base-judicial-cache",
+    ...(force ? { _tribunal_update_requested_at: now } : {}),
+  };
   const movs = Array.isArray(payload.movs) ? payload.movs : [];
   const anexos = Array.isArray(payload.anexos) ? payload.anexos : [];
   const audiencias = Array.isArray(payload.audiencias) ? payload.audiencias : [];
@@ -130,5 +143,5 @@ export async function syncCaseDetails(
     }
   }
 
-  return { cached: false, movements: movs.length, autos: anexos.length, hearings: audiencias.length, updated_at: mergedRaw._details_synced_at as string };
+  return { cached: false, movements: movs.length, autos: anexos.length, hearings: audiencias.length, updated_at: mergedRaw._details_synced_at as string, update_requested: force };
 }
