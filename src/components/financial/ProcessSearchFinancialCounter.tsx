@@ -1,5 +1,5 @@
 import { useMemo, useState } from "react";
-import { Wallet, Search, PlayCircle, Radio, Loader2 } from "lucide-react";
+import { Wallet, Search, PlayCircle, Radio, FileSearch, FileDown, Loader2 } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -18,6 +18,7 @@ const documentTypeLabels: Record<DocumentType, string> = {
   cpf: "CPF",
   cnpj: "CNPJ",
   oab: "OAB",
+  nome: "Nome",
   outro: "Outro",
 };
 
@@ -50,7 +51,9 @@ export function ProcessSearchFinancialCounter() {
     const totalCharged = filteredCharges.reduce((sum, c) => sum + Number(c.charged_amount), 0);
     const totalManual = filteredCharges.filter((c) => c.search_type === "manual").length;
     const totalPoll = filteredCharges.filter((c) => c.search_type === "poll").length;
-    return { totalSearches, totalCharged, totalManual, totalPoll };
+    const totalName = filteredCharges.filter((c) => c.search_type === "busca_nome").length;
+    const totalAutos = filteredCharges.filter((c) => c.search_type === "autos").length;
+    return { totalSearches, totalCharged, totalManual, totalPoll, totalName, totalAutos };
   }, [filteredCharges]);
 
   return (
@@ -61,8 +64,8 @@ export function ProcessSearchFinancialCounter() {
           Contador Financeiro
         </h1>
         <p className="text-muted-foreground mt-1">
-          Quantidade e valor cobrado por CNPJ/CPF (ou OAB) monitorado em cada pesquisa processual realizada via
-          API — busca ativa diária e buscas manuais.
+          Quantidade e valor cobrado por documento/nome pesquisado em cada operação realizada via API — busca ativa
+          diária, buscas manuais, buscas por nome e downloads de autos.
         </p>
       </div>
 
@@ -111,7 +114,7 @@ export function ProcessSearchFinancialCounter() {
         ))}
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-6 gap-6">
         <div className="stat-card">
           <div className="flex items-center justify-between">
             <Search className="w-8 h-8 text-primary" />
@@ -141,6 +144,24 @@ export function ProcessSearchFinancialCounter() {
         </div>
         <div className="stat-card">
           <div className="flex items-center justify-between">
+            <FileSearch className="w-8 h-8 text-primary" />
+          </div>
+          <div className="mt-4">
+            <p className="stat-value">{totals.totalName}</p>
+            <p className="stat-label">Buscas por nome</p>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="flex items-center justify-between">
+            <FileDown className="w-8 h-8 text-primary" />
+          </div>
+          <div className="mt-4">
+            <p className="stat-value">{totals.totalAutos}</p>
+            <p className="stat-label">Downloads de autos</p>
+          </div>
+        </div>
+        <div className="stat-card">
+          <div className="flex items-center justify-between">
             <Wallet className="w-8 h-8 text-success" />
           </div>
           <div className="mt-4">
@@ -152,7 +173,7 @@ export function ProcessSearchFinancialCounter() {
 
       <Card>
         <CardContent className="p-4">
-          <h3 className="font-semibold mb-4">Por CNPJ/CPF/OAB monitorado</h3>
+          <h3 className="font-semibold mb-4">Por documento/nome pesquisado</h3>
 
           {isLoading ? (
             <div className="flex justify-center py-6">
@@ -173,6 +194,8 @@ export function ProcessSearchFinancialCounter() {
                     <TableHead>Fonte</TableHead>
                     <TableHead className="text-right">Manuais</TableHead>
                     <TableHead className="text-right">Busca ativa</TableHead>
+                    <TableHead className="text-right">Busca por nome</TableHead>
+                    <TableHead className="text-right">Autos</TableHead>
                     <TableHead className="text-right">Total pesquisas</TableHead>
                     <TableHead className="text-right">Valor total cobrado</TableHead>
                     <TableHead>Última pesquisa</TableHead>
@@ -190,6 +213,8 @@ export function ProcessSearchFinancialCounter() {
                       <TableCell className="capitalize">{row.source}</TableCell>
                       <TableCell className="text-right">{row.manualSearches}</TableCell>
                       <TableCell className="text-right">{row.pollSearches}</TableCell>
+                      <TableCell className="text-right">{row.nameSearches}</TableCell>
+                      <TableCell className="text-right">{row.autosSearches}</TableCell>
                       <TableCell className="text-right font-medium">{row.totalSearches}</TableCell>
                       <TableCell className="text-right font-medium text-success">
                         {currencyFormatter.format(row.totalCharged)}

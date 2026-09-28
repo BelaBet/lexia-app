@@ -2,13 +2,14 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 
 // Contador financeiro de pesquisas processuais: cada busca ativa
-// (poll-jusbrasil, agendada 1x/dia) e cada busca manual disparada pelo
-// usuário na tela de Integrações grava um registro aqui, com o valor
-// cobrado do cliente (CNPJ/CPF monitorado) configurado em
-// publication_integrations.price_per_search.
+// (poll-jusbrasil, agendada 1x/dia), busca manual disparada pelo usuário na
+// tela de Integrações, busca por nome (create-name-search/confirm-name-search)
+// e download de autos (request-case-autos) grava um registro aqui, com o
+// valor cobrado configurado em publication_integrations (price_per_search,
+// price_per_name_search, price_per_autos).
 
-export type SearchType = "manual" | "poll";
-export type DocumentType = "cpf" | "cnpj" | "oab" | "outro";
+export type SearchType = "manual" | "poll" | "busca_nome" | "autos";
+export type DocumentType = "cpf" | "cnpj" | "oab" | "nome" | "outro";
 
 export interface ProcessSearchCharge {
   id: string;
@@ -30,6 +31,8 @@ export interface ProcessSearchDocumentSummary {
   totalSearches: number;
   manualSearches: number;
   pollSearches: number;
+  nameSearches: number;
+  autosSearches: number;
   totalCharged: number;
   lastSearchAt: string;
 }
@@ -60,7 +63,9 @@ export function summarizeByDocument(charges: ProcessSearchCharge[]): ProcessSear
     if (existing) {
       existing.totalSearches += 1;
       if (charge.search_type === "manual") existing.manualSearches += 1;
-      else existing.pollSearches += 1;
+      else if (charge.search_type === "poll") existing.pollSearches += 1;
+      else if (charge.search_type === "busca_nome") existing.nameSearches += 1;
+      else if (charge.search_type === "autos") existing.autosSearches += 1;
       existing.totalCharged += Number(charge.charged_amount);
       if (charge.created_at > existing.lastSearchAt) existing.lastSearchAt = charge.created_at;
     } else {
@@ -71,6 +76,8 @@ export function summarizeByDocument(charges: ProcessSearchCharge[]): ProcessSear
         totalSearches: 1,
         manualSearches: charge.search_type === "manual" ? 1 : 0,
         pollSearches: charge.search_type === "poll" ? 1 : 0,
+        nameSearches: charge.search_type === "busca_nome" ? 1 : 0,
+        autosSearches: charge.search_type === "autos" ? 1 : 0,
         totalCharged: Number(charge.charged_amount),
         lastSearchAt: charge.created_at,
       });
