@@ -88,27 +88,14 @@ function ResultSummary({ data, cnj }: { data: unknown; cnj: string }) {
 
 export function CnjSearchCard() {
   const [cnj, setCnj] = useState("");
-  const [validatedCnj, setValidatedCnj] = useState<string | null>(null);
   const [result, setResult] = useState<JusbrasilCnjResponse | null>(null);
   const consultation = useJusbrasilCnj();
 
-  const handleValidate = async () => {
-    try {
-      const data = await consultation.mutateAsync({ cnj, dryRun: true });
-      setValidatedCnj(data.cnj);
-      setResult(null);
-      toast.success("CNJ validado. Você já pode consultar o processo.");
-    } catch (error) {
-      setValidatedCnj(null);
-      setResult(null);
-      toast.error(error instanceof Error ? error.message : "Não foi possível validar o CNJ");
-    }
-  };
-
   const handleConsult = async () => {
-    if (!validatedCnj || consultation.isPending) return;
+    const value = cnj.trim();
+    if (!value || consultation.isPending) return;
     try {
-      const data = await consultation.mutateAsync({ cnj: validatedCnj, dryRun: false, confirmCharge: true });
+      const data = await consultation.mutateAsync({ cnj: value });
       setResult(data);
       toast.success("Consulta concluída no JusBrasil.");
     } catch (error) {
@@ -126,17 +113,21 @@ export function CnjSearchCard() {
         </div>
       </CardHeader>
       <CardContent className="space-y-4">
-        <p className="text-sm text-muted-foreground">Digite o número CNJ. A LEXIA valida primeiro sem cobrança e só consulta o JusBrasil quando você confirmar no segundo botão.</p>
+        <p className="text-sm text-muted-foreground">Digite o número CNJ e consulte diretamente pela integração JusBrasil da LEXIA.</p>
         <div className="flex flex-col gap-3 sm:flex-row">
-          <Input value={cnj} onChange={(event) => { setCnj(event.target.value); setValidatedCnj(null); setResult(null); }} onKeyDown={(event) => event.key === "Enter" && handleValidate()} placeholder="0000000-00.0000.0.00.0000" aria-label="Número CNJ do processo" />
-          <Button onClick={handleValidate} disabled={consultation.isPending || !cnj.trim()} variant="outline" className="sm:w-44">
-            {consultation.isPending && !validatedCnj ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <ShieldCheck className="mr-2 h-4 w-4" />}Validar CNJ
+          <Input
+            value={cnj}
+            onChange={(event) => { setCnj(event.target.value); setResult(null); }}
+            onKeyDown={(event) => event.key === "Enter" && void handleConsult()}
+            placeholder="0000000-00.0000.0.00.0000"
+            aria-label="Número CNJ do processo"
+          />
+          <Button onClick={handleConsult} disabled={consultation.isPending || !cnj.trim()} className="sm:w-52">
+            {consultation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}
+            Consultar processo
           </Button>
         </div>
-
-        {validatedCnj && !result && <div className="rounded-lg border bg-muted/40 p-4 space-y-3"><div className="flex flex-wrap items-center gap-2 text-sm"><span className="font-medium">CNJ válido:</span><code>{validatedCnj}</code><Badge variant="outline">sem cobrança até aqui</Badge></div><Button onClick={handleConsult} disabled={consultation.isPending}>{consultation.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Search className="mr-2 h-4 w-4" />}Consultar processo no JusBrasil</Button><p className="text-xs text-muted-foreground">Ao clicar em consultar, a LEXIA executa uma única consulta real usando a integração central.</p></div>}
-
-        {result && !result.dry_run && <ResultSummary data={result.data} cnj={result.cnj} />}
+        {result && <ResultSummary data={result.data} cnj={result.cnj} />}
       </CardContent>
     </Card>
   );
