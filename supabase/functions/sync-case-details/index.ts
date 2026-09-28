@@ -27,20 +27,9 @@ Deno.serve(async (req) => {
   const { data: { user }, error: authError } = await userClient.auth.getUser();
   if (authError || !user) return json({ error: "Sessão inválida" }, 401);
 
-  let body: { case_id?: string; force?: boolean; update_password?: string };
+  let body: { case_id?: string; force?: boolean };
   try { body = await req.json(); } catch { return json({ error: "JSON inválido" }, 400); }
   if (!body.case_id) return json({ error: "case_id é obrigatório" }, 400);
-
-  // Atualizações manuais forçadas exigem a senha de liberação. A senha em si
-  // nunca fica no frontend nem no código: somente o SHA-256 esperado é comparado.
-  if (body.force) {
-    const password = typeof body.update_password === "string" ? body.update_password : "";
-    const digest = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(password));
-    const hash = Array.from(new Uint8Array(digest)).map((b) => b.toString(16).padStart(2, "0")).join("");
-    if (hash !== "6ffe46e661afcb326620e905ef4346793cc0415db339566e93c5ea931a013624") {
-      return json({ error: "Senha de liberação inválida" }, 403);
-    }
-  }
 
   const admin = createClient(supabaseUrl, serviceRole);
   const { data: result, error: resultError } = await admin.from("process_search_results")
