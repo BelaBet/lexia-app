@@ -101,6 +101,18 @@ async function resolveDestinations(
   admin: ReturnType<typeof createClient>,
   event: JusbrasilEvent,
 ): Promise<Destination[]> {
+  // Atualização sob demanda de um processo: id_update_callback recebe o ID
+  // de process_search_results. O evento 13 volta com esse valor em
+  // source_user_custom, permitindo rotear sem depender de integration_id.
+  if (event.evt_type === 13 && isUuid(String(event.source_user_custom ?? ""))) {
+    const { data: result } = await admin
+      .from("process_search_results")
+      .select("user_id")
+      .eq("id", String(event.source_user_custom))
+      .maybeSingle();
+    if (result?.user_id) return [{ user_id: result.user_id, integration_id: null }];
+  }
+
   const integrationIds = sourceIntegrationIds(event);
 
   if (integrationIds.length > 0) {
@@ -141,6 +153,77 @@ async function resolveDestinations(
   }
 
   return [{ user_id: owners[0], integration_id: null }];
+}
+
+async function persistTribunalUpdate(
+  admin: ReturnType<typeof createClient>,
+  event: JusbrasilEvent,
+): Promise<void> {
+  if (event.evt_type !== 13 || !isUuid(String(event.source_user_custom ?? ""))) return;
+  const payload = event.data && typeof event.data === "object" && !Array.isArray(event.data)
+    ? event.data as Record<string, unknown>
+    : null;
+  if (!payload) return;
+
+  const resultId = String(event.source_user_custom);
+  const { data: result, error } = await admin
+    .from("process_search_results")
+    .select("*")
+    .eq("id", resultId)
+    .maybeSingle();
+  if (error || !result) return;
+
+  const existingRaw = result.raw_data && typeof result.raw_data === "object" && !Array.isArray(result.raw_data)
+    ? result.raw_data as Record<string, unknown>
+    : {};
+  const movs = Array.isArray(payload.movs) ? payload.movs as unknown[][] : [];
+  const anexos = Array.isArray(payload.anexos) ? payload.anexos as unknown[][] : [];
+  const ultima = movs.length ? movs[0] : null;
+  const completedAt = new Date().toISOString();
+
+  const { error: updateError } = await admin.from("process_search_results").update({
+    raw_data: {
+      ...existingRaw,
+      ...payload,
+      _details_synced_at: completedAt,
+      _details_source: "tribunal-update-callback",
+      _tribunal_updated_at: completedAt,
+    },
+    comarca: payload.comarca ?? result.comarca,
+    foro: payload.foro ?? result.foro,
+    vara: payload.vara_original ?? payload.vara ?? result.vara,
+    valor: payload.valor ?? result.valor,
+    data_distribuicao: payload.distribuicaoData ?? result.data_distribuicao,
+    ultima_movimentacao_data: ultima?.[0] ?? result.ultima_movimentacao_data,
+    ultima_movimentacao_tipo: ultima?.[1] ?? result.ultima_movimentacao_tipo,
+    ultima_movimentacao_texto: ultima?.[2] ?? result.ultima_movimentacao_texto,
+    juiz: payload.juiz ?? result.juiz,
+    status_processual: payload.situacao ?? result.status_processual,
+  }).eq("id", resultId);
+  if (updateError) {
+    console.error("jusbrasil-webhook: erro ao persistir atualização do tribunal", updateError);
+    return;
+  }
+
+  for (const item of anexos) {
+    if (!Array.isArray(item)) continue;
+    const sourceUrl = typeof item[1] === "string" ? item[1] : null;
+    if (!sourceUrl) continue;
+    const title = typeof item[7] === "string" && item[7].trim() ? item[7].trim() : `Anexo ${item[0] ?? ""}`.trim();
+    const { data: exists } = await admin.from("process_search_documents")
+      .select("id").eq("result_id", resultId).eq("source_url", sourceUrl).maybeSingle();
+    if (!exists) {
+      await admin.from("process_search_documents").insert({
+        result_id: resultId,
+        user_id: result.user_id,
+        file_name: title,
+        file_path: sourceUrl,
+        file_size: null,
+        file_type: "application/pdf",
+        source_url: sourceUrl,
+      });
+    }
+  }
 }
 
 Deno.serve(async (req) => {
@@ -200,6 +283,7 @@ Deno.serve(async (req) => {
   const deadlineRules = await loadDeadlineRules(admin);
 
   for (const event of events) {
+    await persistTribunalUpdate(admin, event);
     const destinations = await resolveDestinations(admin, event);
 
     if (destinations.length === 0) {
