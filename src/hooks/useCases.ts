@@ -103,7 +103,17 @@ export function useTrackCasePublications() {
       const { data, error } = await supabase.functions.invoke("jusbrasil-monitor-process", {
         body: { case_id: caseId },
       });
-      if (error) throw new Error((data as { error?: string } | null)?.error || error.message);
+      if (error) {
+        let message = (data as { error?: string } | null)?.error || error.message;
+        const context = (error as { context?: Response }).context;
+        if (context instanceof Response) {
+          try {
+            const payload = await context.clone().json() as { error?: string; details?: unknown };
+            if (payload?.error) message = payload.error;
+          } catch { /* mantém a mensagem original */ }
+        }
+        throw new Error(message);
+      }
       if ((data as { error?: string } | null)?.error) throw new Error((data as { error?: string }).error);
       return data as { success: boolean; already_active?: boolean; message?: string };
     },
