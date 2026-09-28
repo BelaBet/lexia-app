@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
 
   const { data: result, error: resultError } = await adminClient
     .from("process_search_results")
-    .select("id, process_number, autos_download_locked")
+    .select("id, user_id, process_number, autos_download_locked")
     .eq("id", resultId)
     .maybeSingle();
 
@@ -79,12 +79,17 @@ Deno.serve(async (req) => {
     return json({ error: "Erro ao liberar novo download" }, 500);
   }
 
-  await adminClient.from("notifications").insert({
-    user_id: user.id,
-    title: "Download de autos liberado",
-    message: `Um novo download dos autos do processo ${result.process_number ?? resultId} foi liberado.`,
-    link_tab: "process-search",
-  });
+  // Notifica o dono do processo (não quem executou a ação) — antes o SELECT
+  // acima não buscava user_id e a notificação era inserida com o id do
+  // próprio admin, que nunca precisava ser avisado da própria ação.
+  if (result.user_id) {
+    await adminClient.from("notifications").insert({
+      user_id: result.user_id,
+      title: "Download de autos liberado",
+      message: `Um novo download dos autos do processo ${result.process_number ?? resultId} foi liberado.`,
+      link_tab: "process-search",
+    });
+  }
 
   return json({ success: true });
 });

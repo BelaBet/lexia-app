@@ -158,20 +158,26 @@ Deno.serve(async (req) => {
       })
       .eq("id", resultId);
 
-    // Usa o preço configurado em Integrações (price_per_autos) — antes era
-    // gravado sempre 0, mesmo com um valor configurado, o que zerava o
-    // contador financeiro independente da configuração comercial.
-    const unitPrice = integration.price_per_autos ?? 0;
-    await adminClient.from("process_search_charges").insert({
-      user_id: user.id,
-      integration_id: integration.id,
-      source: "jusbrasil",
-      document: result.process_number,
-      document_type: "nome",
-      search_type: "autos",
-      unit_price: unitPrice,
-      charged_amount: unitPrice,
-    });
+    // Só cobra quando ao menos um documento foi efetivamente baixado e
+    // salvo — antes a cobrança era gravada mesmo com saved === 0 (todos os
+    // downloads/uploads falharam), cobrando o usuário por uma busca que não
+    // produziu nenhum documento utilizável.
+    if (saved > 0) {
+      // Usa o preço configurado em Integrações (price_per_autos) — antes era
+      // gravado sempre 0, mesmo com um valor configurado, o que zerava o
+      // contador financeiro independente da configuração comercial.
+      const unitPrice = integration.price_per_autos ?? 0;
+      await adminClient.from("process_search_charges").insert({
+        user_id: user.id,
+        integration_id: integration.id,
+        source: "jusbrasil",
+        document: result.process_number,
+        document_type: "nome",
+        search_type: "autos",
+        unit_price: unitPrice,
+        charged_amount: unitPrice,
+      });
+    }
 
     return json({ success: saved > 0, documents_saved: saved, locked: false });
   } catch (err) {

@@ -62,7 +62,8 @@ Deno.serve(async (req) => {
         .in("case_id", caseIds);
       const paths = (clientDocs ?? []).map((d) => d.file_path as string);
       if (paths.length > 0) {
-        await adminClient.storage.from("client-documents").remove(paths).catch(() => {});
+        const { error: removeError } = await adminClient.storage.from("client-documents").remove(paths);
+        if (removeError) console.error("Error removing client-documents files:", removeError);
       }
 
       await adminClient.from("client_documents").delete().in("case_id", caseIds);
@@ -88,12 +89,36 @@ Deno.serve(async (req) => {
       .eq("publications.user_id", userId);
     const pubPaths = (pubAttachments ?? []).map((a) => a.file_path as string);
     if (pubPaths.length > 0) {
-      await adminClient.storage.from("publication-attachments").remove(pubPaths).catch(() => {});
+      const { error: removeError } = await adminClient.storage.from("publication-attachments").remove(pubPaths);
+      if (removeError) console.error("Error removing publication-attachments files:", removeError);
     }
 
     const { data: eventFiles } = await adminClient.storage.from("event-files").list(userId);
     if (eventFiles && eventFiles.length > 0) {
-      await adminClient.storage.from("event-files").remove(eventFiles.map((f) => `${userId}/${f.name}`)).catch(() => {});
+      const { error: removeError } = await adminClient.storage
+        .from("event-files")
+        .remove(eventFiles.map((f) => `${userId}/${f.name}`));
+      if (removeError) console.error("Error removing event-files:", removeError);
+    }
+
+    // Autos processuais baixados via "Buscar Processos" (request-case-autos)
+    // ficam em process-search-documents/{userId}/{resultId}/... — sem esta
+    // limpeza, os arquivos ficavam órfãos no Storage após a exclusão da
+    // conta (as linhas em process_search_documents somem via cascade, mas
+    // os blobs no bucket não).
+    const { data: autosFolders } = await adminClient.storage.from("process-search-documents").list(userId);
+    if (autosFolders && autosFolders.length > 0) {
+      const autosPaths: string[] = [];
+      for (const folder of autosFolders) {
+        const { data: files } = await adminClient.storage
+          .from("process-search-documents")
+          .list(`${userId}/${folder.name}`);
+        (files ?? []).forEach((f) => autosPaths.push(`${userId}/${folder.name}/${f.name}`));
+      }
+      if (autosPaths.length > 0) {
+        const { error: removeError } = await adminClient.storage.from("process-search-documents").remove(autosPaths);
+        if (removeError) console.error("Error removing process-search-documents files:", removeError);
+      }
     }
 
     // 4) Tabelas com user_id direto — events/checklists/publications já
