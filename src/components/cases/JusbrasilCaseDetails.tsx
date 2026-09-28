@@ -93,6 +93,18 @@ function parseDate(value: unknown) {
     const d = new Date(Number(br[3]), Number(br[2]) - 1, Number(br[1]));
     return Number.isNaN(d.getTime()) ? null : d;
   }
+  // Datas processuais YYYY-MM-DD não são instantes UTC. Criar a data com
+  // componentes locais evita que 2026-09-15 apareça como 14/09 no Brasil.
+  const isoDay = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoDay) {
+    const d = new Date(Number(isoDay[1]), Number(isoDay[2]) - 1, Number(isoDay[3]));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const naive = value.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (naive) {
+    const d = new Date(Number(naive[1]), Number(naive[2]) - 1, Number(naive[3]), Number(naive[4]), Number(naive[5]), Number(naive[6] || 0));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
   const d = new Date(value);
   return Number.isNaN(d.getTime()) ? null : d;
 }
@@ -100,15 +112,21 @@ function parseDate(value: unknown) {
 function fmtDate(value: unknown) {
   const str = text(value);
   if (!str) return "—";
+  const isoDay = str.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (isoDay) return `${isoDay[3]}/${isoDay[2]}/${isoDay[1]}`;
   const d = parseDate(str);
-  return d ? d.toLocaleDateString("pt-BR") : str;
+  return d ? d.toLocaleDateString("pt-BR", { timeZone: "America/Recife" }) : str;
 }
 
 function fmtDateTime(value: unknown) {
   const str = text(value);
   if (!str) return "—";
+  // O provedor também envia horários sem offset. Nesse caso preservamos
+  // exatamente a hora informada em vez de inventar uma conversão de fuso.
+  const naive = str.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
+  if (naive) return `${naive[3]}/${naive[2]}/${naive[1]}, ${naive[4]}:${naive[5]}${naive[6] ? `:${naive[6]}` : ""}`;
   const d = parseDate(str);
-  return d ? d.toLocaleString("pt-BR") : str;
+  return d ? d.toLocaleString("pt-BR", { timeZone: "America/Recife" }) : str;
 }
 
 function lawyerName(value: JsonRecord) {
@@ -402,7 +420,24 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
   const firstHearing = hearings[0] || null;
   const courtUnit = text(raw.vara_original) ? `${text(raw.vara_original)}ª Vara` : text(data.vara);
   const instance = text(raw.instancia) ? `${text(raw.instancia)}ª instância` : "—";
-  const updatedAt = text(raw.alteradoEm) || data.updated_at || data.created_at;
+  const updateRequestedAt = text(raw._tribunal_update_requested_at);
+  const updateCompletedAt = text(raw._tribunal_updated_at);
+  const detailsSyncedAt = text(raw._details_synced_at);
+  const providerAlteredAt = text(raw.alteradoEm);
+  const accessDates = Array.isArray(raw.acessos) ? raw.acessos.map(text).filter(Boolean).sort() : [];
+  const lastTribunalAccess = accessDates.length ? accessDates[accessDates.length - 1] : "";
+  const updatePending = Boolean(updateRequestedAt) && (!updateCompletedAt || new Date(updateCompletedAt).getTime() < new Date(updateRequestedAt).getTime());
+  const updateStatus = updatePending
+    ? `Atualização solicitada em ${fmtDateTime(updateRequestedAt)} — aguardando retorno do tribunal`
+    : updateCompletedAt
+      ? `Atualizado no tribunal em ${fmtDateTime(lastTribunalAccess || updateCompletedAt)}`
+      : lastTribunalAccess
+        ? `Último acesso ao tribunal em ${fmtDateTime(lastTribunalAccess)}`
+        : detailsSyncedAt
+          ? `Dados sincronizados na LEXIA em ${fmtDateTime(detailsSyncedAt)}`
+          : providerAlteredAt
+            ? `Dados do provedor alterados em ${fmtDateTime(providerAlteredAt)}`
+            : "Data de atualização indisponível";
 
   const providerMovements = rawArray(raw.movs).map((mov: JsonRecord, index: number) => ({
     id: `provider-${mov?.[4] ?? index}`,
@@ -459,10 +494,10 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
             <p className="mt-3 text-sm text-muted-foreground">{text(data.foro) || text(raw.fonte_sistema) || "—"}</p>
           </div>
           <div className="flex flex-col items-start gap-2 lg:items-end">
-            <div className="text-sm text-muted-foreground">Atualizado em {fmtDateTime(updatedAt)}</div>
+            <div className="text-sm text-muted-foreground">{updateStatus}</div>
             <Button variant="outline" size="sm" onClick={() => { setSyncMessage(null); void syncDetails(true); }} disabled={syncing}>
               <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
-              Sincronizar detalhes
+              Atualizar no tribunal
             </Button>
           </div>
         </div>
