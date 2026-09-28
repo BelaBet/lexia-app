@@ -16,7 +16,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import {
-  Plus,
   FileSearch,
   Loader2,
   MoreVertical,
@@ -129,7 +128,6 @@ function ExistingCasesTracking() {
 
 export function PublicationsManager() {
   const [statusFilter, setStatusFilter] = useState<PublicationStatus | "all">("all");
-  const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<Publication | null>(null);
   const [viewing, setViewing] = useState<Publication | null>(null);
 
@@ -149,9 +147,6 @@ export function PublicationsManager() {
             Publicações do Diário, prazos internos/externos, followups e teses
           </p>
         </div>
-        <Button onClick={() => setCreateOpen(true)} className="gap-2">
-          <Plus className="w-4 h-4" /> Nova Publicação
-        </Button>
       </div>
 
       <ExistingCasesTracking />
@@ -184,9 +179,6 @@ export function PublicationsManager() {
             <p className="text-sm text-muted-foreground mt-1 max-w-sm">
               Cadastre publicações manualmente para acompanhar prazos internos e externos, followups e teses.
             </p>
-            <Button className="mt-4 gap-2" onClick={() => setCreateOpen(true)}>
-              <Plus className="w-4 h-4" /> Nova Publicação
-            </Button>
           </CardContent>
         </Card>
       ) : (
@@ -269,7 +261,6 @@ export function PublicationsManager() {
         </div>
       )}
 
-      <PublicationDialog open={createOpen} onOpenChange={setCreateOpen} />
       <PublicationDialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)} publication={editing} />
       <PublicationDetailDialog publication={viewing} onOpenChange={(open) => !open && setViewing(null)} />
     </div>
