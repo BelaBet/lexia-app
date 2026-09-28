@@ -28,10 +28,9 @@ Deno.serve(async (req) => {
   const { data: { user }, error: authError } = await userClient.auth.getUser();
   if (authError || !user) return json({ error: "Sessão inválida ou expirada" }, 401);
 
-  let body: { report_id?: string; confirm_charge?: boolean; excluded_variation_ids?: Array<number | null> };
+  let body: { report_id?: string; excluded_variation_ids?: Array<number | null> };
   try { body = await req.json(); } catch { return json({ error: "JSON inválido" }, 400); }
   if (!body.report_id) return json({ error: "Prévia não informada" }, 400);
-  if (body.confirm_charge !== true) return json({ error: "Confirmação da consulta paga obrigatória" }, 409);
 
   const admin = createClient(supabaseUrl, serviceRoleKey);
   const { data: report, error: reportError } = await admin
