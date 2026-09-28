@@ -29,7 +29,7 @@ import {
   RadioTower,
   CheckCircle2,
 } from "lucide-react";
-import { format, isPast, isToday, differenceInDays } from "date-fns";
+import { format, isPast, isToday, differenceInDays, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { cn } from "@/lib/utils";
 import {
@@ -60,7 +60,12 @@ const sourceLabels: Record<string, string> = {
 
 function deadlineBadge(date: string | null) {
   if (!date) return null;
-  const d = new Date(date);
+  // external_deadline/internal_deadline são colunas DATE (sem horário) —
+  // new Date("YYYY-MM-DD") interpreta como meia-noite UTC, o que no fuso do
+  // Brasil (UTC-3) mostra o prazo um dia atrasado na maior parte do dia.
+  // parseISO interpreta a data-only string como meia-noite LOCAL, como já é
+  // feito para os mesmos campos em PublicationDetailDialog.tsx.
+  const d = parseISO(date);
   const days = differenceInDays(d, new Date());
   const label = format(d, "dd/MM/yyyy", { locale: ptBR });
 

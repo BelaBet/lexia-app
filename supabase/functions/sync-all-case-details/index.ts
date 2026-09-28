@@ -53,8 +53,16 @@ Deno.serve(async (req) => {
 
   let body: RequestBody = {};
   try { body = await req.json(); } catch { /* corpo vazio é ok */ }
-  const batchSize = Math.min(Math.max(body.limit ?? 40, 1), 100);
-  const maxChain = Math.min(Math.max(body.max_chain ?? 25, 1), 50);
+  // Lote padrão reduzido de 40 para 10: um lote de 40 processos, cada um
+  // exigindo uma chamada de rede síncrona ao JusBrasil, estava estourando o
+  // tempo máximo de execução da Edge Function (HTTP 546 — worker derrubado
+  // pela plataforma no meio do lote), o que também impedia o encadeamento
+  // pro próximo lote e o registro em automation_health de sequer rodar.
+  // max_chain sobe de 25 para 100 (100 * 10 = 1000 processos/dia, mesma
+  // capacidade diária de antes: 25 * 40 = 1000) para não reduzir quantos
+  // processos são sincronizados por dia, só o tamanho de cada execução.
+  const batchSize = Math.min(Math.max(body.limit ?? 10, 1), 100);
+  const maxChain = Math.min(Math.max(body.max_chain ?? 100, 1), 150);
   const chainDepth = body.chain_depth ?? 0;
 
   let queueIds: string[];
