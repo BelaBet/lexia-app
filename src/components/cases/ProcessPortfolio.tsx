@@ -29,7 +29,7 @@ function downloadCsv(filename:string, rows:ResultRow[]) {
   const url=URL.createObjectURL(blob); const link=document.createElement("a"); link.href=url; link.download=filename; document.body.appendChild(link); link.click(); link.remove(); URL.revokeObjectURL(url);
 }
 function getExpectedTotal(report:ReportRow){ const preview=report.preview_data as {total_procs?:unknown}|null; const expected=Number(preview?.total_procs); return Number.isFinite(expected)&&expected>=0 ? expected : Number(report.result_count||0); }
-function latestDate(rows:ResultRow[]){ const dates=rows.map((item)=>item.ultima_movimentacao_data||safeText(raw(item).alteradoEm)).filter((v):v is string=>Boolean(v)).sort(); return dates.length?dates[dates.length-1]:null; }
+function latestDate(rows:ResultRow[]){ const dates=rows.map((item)=>item.ultima_movimentacao_data).filter((v):v is string=>Boolean(v)).sort(); return dates.length?dates[dates.length-1]:null; }
 function countBy(rows:ResultRow[], getter:(row:ResultRow)=>string){ const map=new Map<string,number>(); rows.forEach((row)=>{const name=getter(row)||"Não informado";map.set(name,(map.get(name)||0)+1);}); return [...map.entries()].map(([name,value])=>({name,value})).sort((a,b)=>b.value-a.value); }
 function yearData(rows:ResultRow[]){ return countBy(rows,(row)=>{const value=row.data_distribuicao||"";const match=value.match(/\d{4}/);return match?.[0]||"Sem data";}).sort((a,b)=>a.name.localeCompare(b.name)); }
 function natureData(rows:ResultRow[]){ return countBy(rows,(row)=>row.area?.trim()||safeText(raw(row).classeNatureza)||row.natureza?.trim()||"OUTROS").slice(0,8); }
