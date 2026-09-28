@@ -200,42 +200,67 @@ function MovementTimeline({ movements }: { movements: JsonRecord[] }) {
 
   if (!chronological.length) return null;
 
-  const maxPoints = 7;
-  const points = chronological.length <= maxPoints
-    ? chronological
-    : Array.from({ length: maxPoints }, (_, index) => chronological[Math.round(index * (chronological.length - 1) / (maxPoints - 1))]);
+  // A linha do tempo não amostra mais apenas alguns pontos. Agrupa TODOS os
+  // eventos pela data processual e exibe cada movimentação no respectivo dia.
+  const days = chronological.reduce<Array<{ key: string; date: Date; items: JsonRecord[] }>>((groups, item) => {
+    const date = parseDate(item.event_date);
+    if (!date) return groups;
+    const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+    const current = groups[groups.length - 1];
+    if (current?.key === key) current.items.push(item);
+    else groups.push({ key, date, items: [item] });
+    return groups;
+  }, []);
 
   return (
     <div className="rounded-xl border bg-background px-4 py-5 sm:px-6">
-      <div className="mb-5 flex items-center justify-between gap-3">
+      <div className="mb-6 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-sm font-semibold">Linha do tempo das movimentações</p>
-          <p className="mt-1 text-xs text-muted-foreground">Do primeiro ao último evento dentro dos filtros aplicados.</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Todas as movimentações, agrupadas no respectivo dia, do primeiro ao último evento.
+          </p>
         </div>
-        <span className="shrink-0 rounded-full bg-muted px-3 py-1 text-xs font-medium">{movements.length} eventos</span>
+        <span className="w-fit shrink-0 rounded-full bg-muted px-3 py-1 text-xs font-medium">
+          {movements.length} eventos em {days.length} {days.length === 1 ? "dia" : "dias"}
+        </span>
       </div>
-      <div className="overflow-x-auto pb-2">
-        <div className="min-w-[620px] px-2">
-          <div className="relative h-16">
-            <div className="absolute left-2 right-2 top-5 h-0.5 bg-primary/25" />
-            <div className="relative flex items-start justify-between">
-              {points.map((item, index) => {
-                const isLatest = index === points.length - 1;
-                return (
-                  <div key={`${item.id}-${index}`} className="group relative flex w-8 flex-col items-center">
-                    <div
-                      className={`z-10 mt-2 h-4 w-4 rounded-full border-4 border-background shadow-sm transition-transform group-hover:scale-125 ${isLatest ? "bg-destructive" : "bg-primary/65"}`}
-                      title={`${fmtDate(item.event_date)} — ${item.title || "Movimentação"}`}
-                    />
-                    <div className={`absolute top-9 whitespace-nowrap text-[10px] ${index === 0 ? "left-0" : index === points.length - 1 ? "right-0" : "left-1/2 -translate-x-1/2"}`}>
-                      {fmtDate(item.event_date)}
-                    </div>
+
+      <div className="relative space-y-0">
+        <div className="absolute bottom-2 left-[7px] top-2 w-px bg-border" aria-hidden="true" />
+        {days.map((day, dayIndex) => (
+          <div key={day.key} className="relative grid grid-cols-[16px_minmax(0,1fr)] gap-4 pb-7 last:pb-0">
+            <div className={`relative z-10 mt-1.5 h-[15px] w-[15px] rounded-full border-[3px] border-background shadow-sm ${dayIndex === days.length - 1 ? "bg-destructive" : "bg-primary"}`} />
+            <div className="min-w-0">
+              <div className="mb-3 flex flex-wrap items-center gap-2">
+                <time className="text-sm font-semibold" dateTime={day.key}>
+                  {day.date.toLocaleDateString("pt-BR")}
+                </time>
+                <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">
+                  {day.items.length} {day.items.length === 1 ? "movimentação" : "movimentações"}
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                {day.items.map((item, itemIndex) => (
+                  <div key={`${text(item.id) || day.key}-${itemIndex}`} className="rounded-lg border bg-muted/10 p-3">
+                    <p className="text-sm font-medium">{text(item.title) || "Movimentação"}</p>
+                    {(text(item.client_summary) || text(item.internal_note)) && (
+                      <p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+                        {text(item.client_summary) || text(item.internal_note)}
+                      </p>
+                    )}
+                    {text(item.client_summary) && text(item.internal_note) && text(item.client_summary) !== text(item.internal_note) && (
+                      <p className="mt-2 whitespace-pre-wrap text-xs leading-relaxed text-muted-foreground">
+                        {text(item.internal_note)}
+                      </p>
+                    )}
                   </div>
-                );
-              })}
+                ))}
+              </div>
             </div>
           </div>
-        </div>
+        ))}
       </div>
     </div>
   );
