@@ -13,23 +13,12 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Método não permitido" }, 405);
 
-  let body: { cnj?: string; dry_run?: boolean; confirm_charge?: boolean };
+  let body: { cnj?: string };
   try { body = await req.json(); } catch { return json({ error: "JSON inválido" }, 400); }
 
   const cnj = normalizeCnj(body.cnj ?? "");
   if (!cnj) return json({ error: "CNJ inválido. Informe um número com 20 dígitos." }, 400);
   const requestUrl = buildJusbrasilCnjUrl(cnj);
-
-  if (body.dry_run !== false) {
-    return json({
-      success: true,
-      dry_run: true,
-      cnj,
-      provider: "jusbrasil",
-      operation: "consulta_cnj",
-      message: "CNJ validado. A consulta real ainda não foi executada.",
-    });
-  }
 
   const authHeader = req.headers.get("Authorization");
   if (!authHeader?.startsWith("Bearer ")) return json({ error: "Autenticação obrigatória" }, 401);
@@ -42,11 +31,6 @@ Deno.serve(async (req) => {
   const userClient = createClient(supabaseUrl, anonKey, { global: { headers: { Authorization: authHeader } } });
   const { data: { user }, error: authError } = await userClient.auth.getUser();
   if (authError || !user) return json({ error: "Sessão inválida ou expirada" }, 401);
-
-  // Uma chamada paga só pode ocorrer após confirmação explícita enviada pela própria tela da LEXIA.
-  if (body.confirm_charge !== true) {
-    return json({ error: "Confirmação da consulta obrigatória", requires_confirmation: true, cnj }, 409);
-  }
 
   const adminClient = createClient(supabaseUrl, serviceRoleKey);
   let token: string;
@@ -70,5 +54,5 @@ Deno.serve(async (req) => {
     return json({ error: "Erro na consulta JusBrasil", provider_status: response.status, details: data }, 502);
   }
 
-  return json({ success: true, dry_run: false, cnj, provider: "jusbrasil", operation: "consulta_cnj", data });
+  return json({ success: true, cnj, provider: "jusbrasil", operation: "consulta_cnj", data });
 });
