@@ -171,9 +171,23 @@ Deno.serve(async (req) => {
     }
   }
 
+  // CORRIGIDO (falso sucesso na sincronização): antes, o status só virava
+  // "error" quando TODOS os itens do lote falhavam (failed>0 && synced===0
+  // && cached===0) — um lote com, por exemplo, 5 sucessos e 5 falhas era
+  // gravado como "ok", escondendo a falha parcial de quem monitora essa
+  // automação (automation_health.last_success_at inclusive avançava mesmo
+  // com metade do lote falhando). Agora falhas parciais viram "warning"
+  // (status já suportado pela tabela) — só "ok" quando o lote inteiro
+  // teve sucesso.
+  const healthStatus = tokenError || (failed > 0 && synced === 0 && cached === 0)
+    ? "error"
+    : failed > 0
+    ? "warning"
+    : "ok";
+
   await admin.rpc("record_automation_health", {
     p_key: "daily_case_details_sync",
-    p_status: tokenError || (failed > 0 && synced === 0 && cached === 0) ? "error" : "ok",
+    p_status: healthStatus,
     p_details: tokenError
       ? `Falha ao obter token JusBrasil: ${tokenError}`
       : `Lote ${chainDepth + 1}: ${synced} sincronizado(s), ${cached} em cache, ${failed} falha(s) de ${batchIds.length}. ${hasMore ? `${remainingIds.length} restante(s) na fila.` : "Fila concluída."}`,
