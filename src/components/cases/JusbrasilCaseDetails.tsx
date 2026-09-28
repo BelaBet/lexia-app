@@ -289,6 +289,13 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
       if (error) throw error;
       return data as JsonRecord;
     },
+    refetchInterval: (query) => {
+      const row = query.state.data as JsonRecord | undefined;
+      const raw = safeObject(row?.raw_data);
+      const requested = text(raw._tribunal_update_requested_at);
+      const completed = text(raw._tribunal_updated_at);
+      return requested && (!completed || new Date(completed).getTime() < new Date(requested).getTime()) ? 15000 : false;
+    },
   });
 
   const { data: timelineEvents = [] } = useQuery({
@@ -333,7 +340,9 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
         setSyncMessage(syncData?.message || "O provedor de dados está temporariamente indisponível. Os dados já existentes foram preservados.");
         return;
       }
-      setSyncMessage(`${syncData?.movements ?? 0} movimentação(ões) e ${syncData?.autos ?? 0} auto(s) sincronizados.`);
+      setSyncMessage(syncData?.update_requested
+        ? "Atualização solicitada ao tribunal. A LEXIA atualizará esta tela automaticamente quando o provedor concluir a consulta."
+        : `${syncData?.movements ?? 0} movimentação(ões) e ${syncData?.autos ?? 0} auto(s) sincronizados.`);
       await Promise.all([
         refetch(),
         refetchAutos(),
@@ -355,7 +364,7 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
     // a checagem antiga considerava isso "já sincronizado" e nunca disparava
     // a sincronização automática — o processo ficava com a aba de
     // Movimentações permanentemente vazia até alguém clicar manualmente em
-    // "Sincronizar detalhes". Só conta como já sincronizado quando há
+    // "Atualizar no tribunal". Só conta como já sincronizado quando há
     // conteúdo de fato ou um _details_synced_at registrado (prova de que o
     // detalhe completo já foi buscado ao menos uma vez, mesmo que vazio por
     // motivo legítimo como segredo de justiça).
@@ -457,7 +466,7 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
             </Button>
           </div>
         </div>
-        {syncing && <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">Sincronizando movimentações e autos já existentes no provedor...</div>}
+        {syncing && <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">Solicitando atualização do processo no tribunal...</div>}
         {syncMessage && !syncing && <div className="rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground">{syncMessage}</div>}
 
         <div>
@@ -562,7 +571,7 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
         </div>
       </details>
 
-      <div className="flex items-center gap-2 text-xs text-muted-foreground"><FileText className="h-4 w-4" />A tela usa os dados já existentes na base do provedor e não solicita atualização no tribunal nem nova baixa de autos.</div>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground"><FileText className="h-4 w-4" />Ao abrir a tela, a LEXIA exibe os dados já salvos. Ao clicar em “Atualizar no tribunal”, solicita uma atualização real do processo e incorpora as novas movimentações assim que o provedor concluir. A baixa de novos autos permanece uma ação separada.</div>
     </div>
   );
 }
