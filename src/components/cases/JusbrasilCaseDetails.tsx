@@ -102,7 +102,9 @@ function parseDate(value: unknown) {
   }
   const naive = value.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
   if (naive) {
-    const d = new Date(Number(naive[1]), Number(naive[2]) - 1, Number(naive[3]), Number(naive[4]), Number(naive[5]), Number(naive[6] || 0));
+    // A documentação do JusBrasil define todas as horas da API como UTC,
+    // inclusive strings ISO sem sufixo de timezone.
+    const d = new Date(`${naive[1]}-${naive[2]}-${naive[3]}T${naive[4]}:${naive[5]}:${naive[6] || "00"}Z`);
     return Number.isNaN(d.getTime()) ? null : d;
   }
   const d = new Date(value);
@@ -121,10 +123,6 @@ function fmtDate(value: unknown) {
 function fmtDateTime(value: unknown) {
   const str = text(value);
   if (!str) return "—";
-  // O provedor também envia horários sem offset. Nesse caso preservamos
-  // exatamente a hora informada em vez de inventar uma conversão de fuso.
-  const naive = str.match(/^(\d{4})-(\d{2})-(\d{2})[ T](\d{2}):(\d{2})(?::(\d{2}))?$/);
-  if (naive) return `${naive[3]}/${naive[2]}/${naive[1]}, ${naive[4]}:${naive[5]}${naive[6] ? `:${naive[6]}` : ""}`;
   const d = parseDate(str);
   return d ? d.toLocaleString("pt-BR", { timeZone: "America/Recife" }) : str;
 }
