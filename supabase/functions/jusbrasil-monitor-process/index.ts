@@ -6,12 +6,6 @@
 // source_user_custom, então este endpoint não precisa criar nem depender de
 // nenhuma linha em publication_integrations — essa tela de configuração foi
 // removida do sistema).
-//
-// Trava de segurança financeira: registrar um processo pode ter custo no
-// provedor, então isso só acontece de verdade quando o secret
-// JUSBRASIL_REAL_CALLS_ENABLED estiver como "true" nas Edge Functions do
-// Supabase. Enquanto não estiver, a chamada é recusada com uma mensagem
-// clara em vez de silenciosamente simular sucesso.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
@@ -65,10 +59,6 @@ Deno.serve(async (req) => {
 
   const cnj = normalizeCnj(caseRow.case_number ?? "");
   if (!cnj) return json({ error: "Este processo não tem um número CNJ válido para rastrear." }, 400);
-
-  if (Deno.env.get("JUSBRASIL_REAL_CALLS_ENABLED") !== "true") {
-    return json({ error: "O rastreamento de publicações ainda não foi habilitado no backend (secret JUSBRASIL_REAL_CALLS_ENABLED)." }, 403);
-  }
 
   let token: string;
   try { token = await getJusbrasilApiToken(admin); }
