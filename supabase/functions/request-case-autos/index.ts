@@ -1,31 +1,11 @@
-// "Baixar autos" de um processo encontrado na busca por nome. Baixa os
-// documentos/peças do JusBrasil e guarda no Storage (bucket privado
-// process-search-documents).
-//
-// TRAVA DE DOWNLOAD: um processo só pode ter os autos baixados UMA vez por
-// um usuário comum. Depois disso, autos_download_locked fica true e
-// qualquer nova tentativa é bloqueada aqui (mesmo que o botão apareça de
-// novo na tela por algum motivo) — só a função admin-unlock-autos-download,
-// chamada por um admin/supremo, consegue destravar. As colunas de trava só
-// podem ser alteradas pela service role (ver migração
-// name_search_autos_download_lock), então mesmo um usuário tentando bater
-// direto na tabela não consegue burlar isso.
-//
-// CONDIÇÃO DE CORRIDA (corrigido): antes, a checagem de "já travado?" era um
-// SELECT separado do UPDATE que efetivamente trava — duas requisições quase
-// simultâneas para o MESMO result_id podiam passar pela checagem antes que
-// qualquer uma gravasse o bloqueio, e as duas baixavam os autos (documentos
-// e cobranças duplicados, chamadas repetidas à API externa). A correção usa
-// um UPDATE atômico com WHERE autos_download_locked = false AND
-// autos_status <> 'solicitado' como "reserva" do direito de baixar: o
-// Postgres serializa updates concorrentes na mesma linha, então só a
-// primeira requisição encontra a condição satisfeita e recebe a linha de
-// volta — a segunda recebe zero linhas afetadas e é rejeitada aqui, antes de
-// chamar a API externa.
+// Baixa autos de um processo via JusBrasil e guarda os documentos no Storage privado.
+// Downloads podem ser solicitados novamente. Mantemos somente uma trava transitória
+// enquanto uma requisição está em andamento, evitando chamadas simultâneas duplicadas.
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
 import { fetchCaseAutos } from "../_shared/jusbrasilNameSearch.ts";
+import { getJusbrasilApiToken } from "../_shared/jusbrasilToken.ts";
 
 Deno.serve(async (req) => {
   const corsHeaders = buildCorsHeaders(req);
@@ -72,13 +52,7 @@ Deno.serve(async (req) => {
   if (!result) return json({ error: "Processo não encontrado" }, 404);
   if (!result.process_number) return json({ error: "Processo sem número CNJ identificado — não é possível baixar os autos" }, 400);
 
-  if (result.autos_download_locked) {
-    return json({
-      error: "Os autos deste processo já foram baixados. Um novo download só pode ser liberado por um administrador.",
-      locked: true,
-    }, 403);
-  }
-
+  // A trava persistente antiga não bloqueia mais novos downloads.
   // RESERVA ATÔMICA: só avança se, no exato momento do UPDATE, a linha
   // ainda não estiver travada NEM já reservada por outra requisição em
   // andamento (autos_status = "solicitado"). Se outra requisição concorrente
@@ -88,7 +62,6 @@ Deno.serve(async (req) => {
     .update({ autos_status: "solicitado", autos_requested_at: new Date().toISOString() })
     .eq("id", resultId)
     .eq("user_id", user.id)
-    .eq("autos_download_locked", false)
     .neq("autos_status", "solicitado")
     .select("id")
     .maybeSingle();
@@ -99,8 +72,8 @@ Deno.serve(async (req) => {
   }
   if (!claimed) {
     return json({
-      error: "Já existe um download em andamento (ou já concluído) para este processo. Aguarde ou verifique o status.",
-      locked: true,
+      error: "Já existe um download em andamento para este processo. Aguarde a conclusão e tente novamente.",
+      locked: false,
     }, 409);
   }
 
@@ -112,22 +85,31 @@ Deno.serve(async (req) => {
 
   const { data: integration } = await adminClient
     .from("publication_integrations")
-    .select("id, api_key, price_per_autos")
+    .select("id, price_per_autos")
     .eq("id", report?.integration_id)
     .maybeSingle();
 
-  if (!integration?.api_key) {
-    // Libera a reserva — não há como prosseguir, então não faz sentido
-    // deixar o processo preso em "solicitado" impedindo novas tentativas.
+  if (!integration) {
     await adminClient
       .from("process_search_results")
-      .update({ autos_status: "erro", autos_error: "Integração JusBrasil não encontrada ou sem chave" })
+      .update({ autos_status: "erro", autos_error: "Integração JusBrasil não encontrada" })
       .eq("id", resultId);
-    return json({ error: "Integração JusBrasil não encontrada ou sem chave" }, 400);
+    return json({ error: "Integração JusBrasil não encontrada" }, 400);
+  }
+
+  let apiToken: string;
+  try {
+    apiToken = await getJusbrasilApiToken(adminClient);
+  } catch {
+    await adminClient
+      .from("process_search_results")
+      .update({ autos_status: "erro", autos_error: "Integração JusBrasil não configurada no backend" })
+      .eq("id", resultId);
+    return json({ error: "Integração JusBrasil não configurada no backend" }, 500);
   }
 
   try {
-    const documents = await fetchCaseAutos(integration.api_key, result.process_number);
+    const documents = await fetchCaseAutos(apiToken, result.process_number);
     if (documents.length === 0) {
       await adminClient
         .from("process_search_results")
@@ -165,14 +147,12 @@ Deno.serve(async (req) => {
       }
     }
 
-    // Marca como pronto e TRAVA — mesmo que só parte dos documentos tenha
-    // baixado com sucesso, a tentativa já contou (evita repetir cobrança
-    // no JusBrasil ficando preso num loop de novas tentativas).
+    // Finaliza a tentativa sem bloquear futuros downloads.
     await adminClient
       .from("process_search_results")
       .update({
         autos_status: saved > 0 ? "pronto" : "erro",
-        autos_download_locked: true,
+        autos_download_locked: false,
         autos_downloaded_at: new Date().toISOString(),
         autos_error: saved > 0 ? null : "Falha ao baixar os documentos retornados pelo JusBrasil.",
       })
@@ -193,7 +173,7 @@ Deno.serve(async (req) => {
       charged_amount: unitPrice,
     });
 
-    return json({ success: saved > 0, documents_saved: saved, locked: true });
+    return json({ success: saved > 0, documents_saved: saved, locked: false });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     console.error("Error fetching case autos:", message);
