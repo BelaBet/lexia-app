@@ -63,7 +63,6 @@ export function useConfirmNameSearch() {
     mutationFn: ({ reportId, excludedVariationIds }: { reportId: string; excludedVariationIds: Array<number | null> }) =>
       invoke<{ success: boolean; report_id: string; no_results?: boolean; message: string }>("confirm-name-search", {
         report_id: reportId,
-        confirm_charge: true,
         excluded_variation_ids: excludedVariationIds,
       }),
     onSuccess: () => {
