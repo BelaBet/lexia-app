@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, Download, ExternalLink, Eye, EyeOff, FileText, Loader2, RefreshCw, Search, X } from "lucide-react";
+import { AlertTriangle, Download, ExternalLink, FileText, Loader2, RefreshCw, Search, X } from "lucide-react";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
 
@@ -18,7 +18,7 @@ function safeObject(value: unknown): JsonRecord {
 // supabase.functions.invoke() só expõe o corpo JSON de uma resposta de erro
 // via error.context (a Response crua) — por padrão error.message é o texto
 // genérico "Edge Function returned a non-2xx status code", que esconde a
-// mensagem real do backend (ex: "Senha de liberação inválida").
+// mensagem real retornada pelo backend.
 async function extractFunctionErrorMessage(error: unknown): Promise<string> {
   const context = (error as { context?: Response } | null)?.context;
   if (context && typeof context.clone === "function") {
@@ -249,9 +249,6 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
   const [movementDateTo, setMovementDateTo] = useState("");
   const [syncing, setSyncing] = useState(false);
   const [syncMessage, setSyncMessage] = useState<string | null>(null);
-  const [showUpdatePassword, setShowUpdatePassword] = useState(false);
-  const [updatePassword, setUpdatePassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
   const [autoSyncDone, setAutoSyncDone] = useState(false);
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -298,13 +295,13 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
     },
   });
 
-  const syncDetails = async (force = false, updatePasswordValue?: string) => {
+  const syncDetails = async (force = false) => {
     if (syncing) return;
     setSyncing(true);
     setSyncMessage(null);
     try {
       const { data: syncData, error } = await supabase.functions.invoke("sync-case-details", {
-        body: { case_id: caseId, force, ...(force ? { update_password: (updatePasswordValue ?? "").trim() } : {}) },
+        body: { case_id: caseId, force },
       });
       if (error) throw new Error(await extractFunctionErrorMessage(error));
       if (syncData?.success === false || syncData?.provider_unavailable) {
@@ -312,11 +309,6 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
         return;
       }
       setSyncMessage(`${syncData?.movements ?? 0} movimentação(ões) e ${syncData?.autos ?? 0} auto(s) sincronizados.`);
-      if (force) {
-        setShowUpdatePassword(false);
-        setUpdatePassword("");
-        setShowPassword(false);
-      }
       await Promise.all([
         refetch(),
         refetchAutos(),
@@ -434,36 +426,12 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
           </div>
           <div className="flex flex-col items-start gap-2 lg:items-end">
             <div className="text-sm text-muted-foreground">Atualizado em {fmtDateTime(updatedAt)}</div>
-            <Button variant="outline" size="sm" onClick={() => { setSyncMessage(null); setShowUpdatePassword(true); }} disabled={syncing}>
+            <Button variant="outline" size="sm" onClick={() => { setSyncMessage(null); void syncDetails(true); }} disabled={syncing}>
               <RefreshCw className={`mr-2 h-4 w-4 ${syncing ? "animate-spin" : ""}`} />
               Sincronizar detalhes
             </Button>
           </div>
         </div>
-        {showUpdatePassword && !syncing && (
-          <div className="rounded-lg border bg-muted/20 p-4">
-            <p className="text-sm font-medium">Atualização protegida</p>
-            <p className="mt-1 text-sm text-muted-foreground">Para solicitar a atualização dos dados deste processo, informe a senha de liberação.</p>
-            <div className="mt-3 flex flex-col gap-2 sm:flex-row">
-              <div className="relative w-full sm:max-w-xs">
-                <input
-                  type={showPassword ? "text" : "password"}
-                  value={updatePassword}
-                  onChange={(e) => setUpdatePassword(e.target.value)}
-                  onKeyDown={(e) => { if (e.key === "Enter" && updatePassword) void syncDetails(true, updatePassword); }}
-                  placeholder="Senha de liberação"
-                  autoComplete="off"
-                  className="h-9 w-full rounded-md border border-input bg-background px-3 pr-10 text-sm"
-                />
-                <button type="button" onClick={() => setShowPassword((value) => !value)} aria-label={showPassword ? "Ocultar senha" : "Mostrar senha"} title={showPassword ? "Ocultar senha" : "Mostrar senha"} className="absolute right-2 top-1/2 -translate-y-1/2 rounded p-1 text-muted-foreground hover:text-foreground">
-                  {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                </button>
-              </div>
-              <Button size="sm" onClick={() => void syncDetails(true, updatePassword)} disabled={!updatePassword}>Liberar atualização</Button>
-              <Button variant="ghost" size="sm" onClick={() => { setShowUpdatePassword(false); setUpdatePassword(""); setShowPassword(false); }}>Cancelar</Button>
-            </div>
-          </div>
-        )}
         {syncing && <div className="rounded-lg border bg-muted/30 p-3 text-sm text-muted-foreground">Sincronizando movimentações e autos já existentes no provedor...</div>}
         {syncMessage && !syncing && <div className="rounded-lg border bg-muted/20 p-3 text-sm text-muted-foreground">{syncMessage}</div>}
 
