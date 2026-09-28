@@ -14,6 +14,8 @@ export interface PublicationIntegration {
   monitor_oab: string | null;
   jusbrasil_report_id: string | null;
   price_per_search: number | null;
+  price_per_name_search: number | null;
+  price_per_autos: number | null;
   last_poll_status: string | null;
   last_poll_error: string | null;
   is_active: boolean;
@@ -124,6 +126,8 @@ export interface UpdatePublicationIntegrationInput {
   monitor_name?: string | null;
   monitor_oab?: string | null;
   price_per_search?: number | null;
+  price_per_name_search?: number | null;
+  price_per_autos?: number | null;
 }
 
 export function useUpdatePublicationIntegrationConfig() {

@@ -59,21 +59,32 @@ function JusbrasilPollingConfig({ integration }: { integration: PublicationInteg
   const [name, setName] = useState(integration.monitor_name || "");
   const [oab, setOab] = useState(integration.monitor_oab || "");
   const [pricePerSearch, setPricePerSearch] = useState(integration.price_per_search != null ? String(integration.price_per_search) : "");
+  const [pricePerNameSearch, setPricePerNameSearch] = useState(integration.price_per_name_search != null ? String(integration.price_per_name_search) : "");
+  const [pricePerAutos, setPricePerAutos] = useState(integration.price_per_autos != null ? String(integration.price_per_autos) : "");
 
   useEffect(() => {
     setName(integration.monitor_name || "");
     setOab(integration.monitor_oab || "");
     setPricePerSearch(integration.price_per_search != null ? String(integration.price_per_search) : "");
-  }, [integration.id, integration.monitor_name, integration.monitor_oab, integration.price_per_search]);
+    setPricePerNameSearch(integration.price_per_name_search != null ? String(integration.price_per_name_search) : "");
+    setPricePerAutos(integration.price_per_autos != null ? String(integration.price_per_autos) : "");
+  }, [integration.id, integration.monitor_name, integration.monitor_oab, integration.price_per_search, integration.price_per_name_search, integration.price_per_autos]);
+
+  const parsePrice = (value: string) => {
+    const normalized = value.trim().replace(",", ".");
+    if (!normalized) return null;
+    const parsed = Number(normalized);
+    return Number.isNaN(parsed) ? null : parsed;
+  };
 
   const handleSave = () => {
-    const normalizedPrice = pricePerSearch.trim().replace(",", ".");
-    const parsedPrice = normalizedPrice ? Number(normalizedPrice) : null;
     updateConfig.mutate({
       id: integration.id,
       monitor_name: name || null,
       monitor_oab: oab || null,
-      price_per_search: parsedPrice != null && !Number.isNaN(parsedPrice) ? parsedPrice : null,
+      price_per_search: parsePrice(pricePerSearch),
+      price_per_name_search: parsePrice(pricePerNameSearch),
+      price_per_autos: parsePrice(pricePerAutos),
     });
   };
 
@@ -87,11 +98,21 @@ function JusbrasilPollingConfig({ integration }: { integration: PublicationInteg
       <div className="space-y-1"><Label htmlFor={`name-${integration.id}`} className="text-xs">Nome ou razão social</Label><Input id={`name-${integration.id}`} value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome completo ou razão social" /></div>
       <div className="space-y-1"><Label htmlFor={`oab-${integration.id}`} className="text-xs">Número da OAB</Label><Input id={`oab-${integration.id}`} value={oab} onChange={(e) => setOab(e.target.value)} placeholder="123456/SP" /></div>
     </div>
-    <div className="space-y-1">
-      <Label htmlFor={`price-${integration.id}`} className="text-xs flex items-center gap-1"><DollarSign className="w-3 h-3" /> Valor cobrado por pesquisa (R$)</Label>
-      <Input id={`price-${integration.id}`} value={pricePerSearch} onChange={(e) => setPricePerSearch(e.target.value)} placeholder="0,00" inputMode="decimal" />
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+      <div className="space-y-1">
+        <Label htmlFor={`price-${integration.id}`} className="text-xs flex items-center gap-1"><DollarSign className="w-3 h-3" /> Valor por pesquisa (monitoramento) (R$)</Label>
+        <Input id={`price-${integration.id}`} value={pricePerSearch} onChange={(e) => setPricePerSearch(e.target.value)} placeholder="0,00" inputMode="decimal" />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor={`price-name-${integration.id}`} className="text-xs flex items-center gap-1"><DollarSign className="w-3 h-3" /> Valor por busca de nome (R$)</Label>
+        <Input id={`price-name-${integration.id}`} value={pricePerNameSearch} onChange={(e) => setPricePerNameSearch(e.target.value)} placeholder="0,00" inputMode="decimal" />
+      </div>
+      <div className="space-y-1">
+        <Label htmlFor={`price-autos-${integration.id}`} className="text-xs flex items-center gap-1"><DollarSign className="w-3 h-3" /> Valor por download de autos (R$)</Label>
+        <Input id={`price-autos-${integration.id}`} value={pricePerAutos} onChange={(e) => setPricePerAutos(e.target.value)} placeholder="0,00" inputMode="decimal" />
+      </div>
     </div>
-    <p className="text-[11px] text-muted-foreground">A busca por nome é assíncrona e pode levar até 72 horas. Operações pagas só devem ser iniciadas por ação manual explícita; o agendamento não cria novas cobranças automaticamente.</p>
+    <p className="text-[11px] text-muted-foreground">A busca por nome é assíncrona e pode levar até 72 horas. Operações pagas só devem ser iniciadas por ação manual explícita; o agendamento não cria novas cobranças automaticamente. Sem um valor configurado aqui, a operação é registrada no Financeiro com R$ 0,00.</p>
     {integration.last_poll_status === "error" && integration.last_poll_error && <div className="flex items-start gap-1.5 text-xs text-destructive bg-destructive/10 rounded p-2"><AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" /><span>Última busca falhou: {integration.last_poll_error}</span></div>}
     <div className="flex flex-wrap gap-2">
       <Button type="button" size="sm" variant="outline" onClick={handleSave} disabled={updateConfig.isPending}>{updateConfig.isPending && <Loader2 className="w-3.5 h-3.5 mr-1.5 animate-spin" />}Salvar configuração</Button>
