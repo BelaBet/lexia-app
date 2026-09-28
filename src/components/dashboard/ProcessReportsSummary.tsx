@@ -30,13 +30,15 @@ const formatDateTime = (value?: string | null) => {
   if (!value) return "—";
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "—";
-  return `${date.toLocaleDateString("pt-BR")} ${date.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+  return date.toLocaleString("pt-BR", { timeZone: "America/Recife", day: "2-digit", month: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 };
 
 const formatDate = (value?: string | null) => {
   if (!value) return "—";
+  const day = value.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (day) return `${day[3]}/${day[2]}/${day[1]}`;
   const date = new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString("pt-BR");
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString("pt-BR", { timeZone: "America/Recife" });
 };
 
 export function ProcessReportsSummary({ onTabChange }: ProcessReportsSummaryProps) {
