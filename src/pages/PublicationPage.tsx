@@ -365,7 +365,7 @@ export default function PublicationPage() {
           ) : (
             <div className="space-y-2">
               {stageHistory.map((h) => (
-                <div key={h.id} className="flex items-center justify-between gap-2 bg-muted/40 rounded-lg p-2.5 text-sm">
+                <div key={h.id} className="flex flex-col gap-1 bg-muted/40 rounded-lg p-2.5 text-sm sm:flex-row sm:items-center sm:justify-between">
                   <span>
                     {h.from_stage ? (
                       <>{stageLabel(h.from_stage)} → <span className="font-medium">{stageLabel(h.to_stage)}</span></>
@@ -373,7 +373,8 @@ export default function PublicationPage() {
                       <>Criada em <span className="font-medium">{stageLabel(h.to_stage)}</span></>
                     )}
                   </span>
-                  <span className="text-xs text-muted-foreground shrink-0">
+                  <span className="text-xs text-muted-foreground sm:text-right">
+                    <span className="font-medium text-foreground">{h.user_name?.trim() || "Usuário sem nome"}</span>{" · "}
                     {format(new Date(h.changed_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}
                   </span>
                 </div>
