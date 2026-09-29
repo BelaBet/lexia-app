@@ -1701,6 +1701,7 @@ export type Database = {
             | Database["public"]["Enums"]["publication_responsible_role"]
             | null
           is_demo: boolean
+          pipeline_stage: string
           process_number: string | null
           published_date: string
           raw_payload: Json | null
@@ -1739,6 +1740,7 @@ export type Database = {
             | Database["public"]["Enums"]["publication_responsible_role"]
             | null
           is_demo?: boolean
+          pipeline_stage?: string
           process_number?: string | null
           published_date: string
           raw_payload?: Json | null
@@ -1777,6 +1779,7 @@ export type Database = {
             | Database["public"]["Enums"]["publication_responsible_role"]
             | null
           is_demo?: boolean
+          pipeline_stage?: string
           process_number?: string | null
           published_date?: string
           raw_payload?: Json | null
@@ -1794,6 +1797,41 @@ export type Database = {
             columns: ["case_id"]
             isOneToOne: false
             referencedRelation: "cases"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      publication_stage_history: {
+        Row: {
+          changed_at: string
+          from_stage: string | null
+          id: string
+          publication_id: string
+          to_stage: string
+          user_id: string
+        }
+        Insert: {
+          changed_at?: string
+          from_stage?: string | null
+          id?: string
+          publication_id: string
+          to_stage: string
+          user_id: string
+        }
+        Update: {
+          changed_at?: string
+          from_stage?: string | null
+          id?: string
+          publication_id?: string
+          to_stage?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "publication_stage_history_publication_id_fkey"
+            columns: ["publication_id"]
+            isOneToOne: false
+            referencedRelation: "publications"
             referencedColumns: ["id"]
           },
         ]

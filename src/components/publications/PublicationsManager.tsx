@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
@@ -28,6 +29,8 @@ import {
   AlertTriangle,
   RadioTower,
   CheckCircle2,
+  List,
+  Kanban as KanbanIcon,
 } from "lucide-react";
 import { format, isPast, isToday, differenceInDays, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -40,7 +43,7 @@ import {
 } from "@/hooks/usePublications";
 import { useCases, useTrackAllCasePublications, useTrackCasePublications } from "@/hooks/useCases";
 import { PublicationDialog } from "./PublicationDialog";
-import { PublicationDetailDialog } from "./PublicationDetailDialog";
+import { PublicationKanban } from "./PublicationKanban";
 
 const statusConfig: Record<PublicationStatus, { label: string; color: string }> = {
   pending: { label: "Pendente", color: "bg-yellow-500/10 text-yellow-600" },
@@ -64,7 +67,7 @@ function deadlineBadge(date: string | null) {
   // new Date("YYYY-MM-DD") interpreta como meia-noite UTC, o que no fuso do
   // Brasil (UTC-3) mostra o prazo um dia atrasado na maior parte do dia.
   // parseISO interpreta a data-only string como meia-noite LOCAL, como já é
-  // feito para os mesmos campos em PublicationDetailDialog.tsx.
+  // feito para os mesmos campos em PublicationPage.tsx.
   const d = parseISO(date);
   const days = differenceInDays(d, new Date());
   const label = format(d, "dd/MM/yyyy", { locale: ptBR });
@@ -170,9 +173,10 @@ function ExistingCasesTracking() {
 }
 
 export function PublicationsManager() {
+  const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<PublicationStatus | "all">("all");
   const [editing, setEditing] = useState<Publication | null>(null);
-  const [viewing, setViewing] = useState<Publication | null>(null);
+  const [view, setView] = useState<"lista" | "kanban">("lista");
 
   const { data: publications = [], isLoading } = usePublications(
     statusFilter !== "all" ? { status: statusFilter } : undefined
@@ -180,6 +184,8 @@ export function PublicationsManager() {
   const deletePublication = useDeletePublication();
 
   const sorted = useMemo(() => publications, [publications]);
+
+  const openPublication = (pub: Publication) => navigate(`/publicacoes/${pub.id}`, { state: { from: "publications" } });
 
   return (
     <div className="space-y-6">
@@ -194,7 +200,7 @@ export function PublicationsManager() {
 
       <ExistingCasesTracking />
 
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 flex-wrap">
         <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v as PublicationStatus | "all")}>
           <SelectTrigger className="w-[200px]">
             <SelectValue />
@@ -208,6 +214,27 @@ export function PublicationsManager() {
             <SelectItem value="cancelled">Cancelado</SelectItem>
           </SelectContent>
         </Select>
+
+        <div className="flex items-center gap-1 rounded-md border p-0.5">
+          <Button
+            type="button"
+            size="sm"
+            variant={view === "lista" ? "secondary" : "ghost"}
+            className="gap-1.5"
+            onClick={() => setView("lista")}
+          >
+            <List className="w-3.5 h-3.5" /> Lista
+          </Button>
+          <Button
+            type="button"
+            size="sm"
+            variant={view === "kanban" ? "secondary" : "ghost"}
+            className="gap-1.5"
+            onClick={() => setView("kanban")}
+          >
+            <KanbanIcon className="w-3.5 h-3.5" /> Kanban
+          </Button>
+        </div>
       </div>
 
       {isLoading ? (
@@ -224,13 +251,15 @@ export function PublicationsManager() {
             </p>
           </CardContent>
         </Card>
+      ) : view === "kanban" ? (
+        <PublicationKanban publications={sorted} />
       ) : (
         <div className="space-y-3">
           {sorted.map((pub) => (
             <Card key={pub.id} className="hover:shadow-md transition-shadow">
               <CardContent className="p-4">
                 <div className="flex items-start justify-between gap-3">
-                  <div className="min-w-0 flex-1 cursor-pointer" onClick={() => setViewing(pub)}>
+                  <div className="min-w-0 flex-1 cursor-pointer" onClick={() => openPublication(pub)}>
                     <div className="flex items-center gap-2 flex-wrap mb-1">
                       <span className="font-medium truncate">
                         {pub.process_number || "Sem número de processo"}
@@ -279,7 +308,7 @@ export function PublicationsManager() {
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem onClick={() => setViewing(pub)}>
+                      <DropdownMenuItem onClick={() => openPublication(pub)}>
                         <Eye className="w-4 h-4 mr-2" /> Ver detalhes
                       </DropdownMenuItem>
                       <DropdownMenuItem onClick={() => setEditing(pub)}>
@@ -305,7 +334,6 @@ export function PublicationsManager() {
       )}
 
       <PublicationDialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)} publication={editing} />
-      <PublicationDetailDialog publication={viewing} onOpenChange={(open) => !open && setViewing(null)} />
     </div>
   );
 }
