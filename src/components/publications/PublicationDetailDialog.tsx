@@ -49,6 +49,20 @@ const areaLabels: Record<string, string> = {
   administrativo_tributario: "Administrativo/Tributário",
 };
 
+// Publicações do Diário Oficial (JusBrasil) trazem duas datas distintas:
+// disponibilização (quando o ato entra no sistema) e publicação (o
+// primeiro dia útil seguinte, por força da Lei 11.419/2006 art. 4º §3º —
+// é essa a data usada para contar prazo, e a que fica em published_date).
+// Mostramos as duas para deixar claro que a diferença de um dia é
+// esperada, não um erro.
+function extractAvailableDate(rawPayload: unknown): Date | null {
+  if (!rawPayload || typeof rawPayload !== "object") return null;
+  const availableAt = (rawPayload as Record<string, unknown>).available_at;
+  if (!availableAt || typeof availableAt !== "object") return null;
+  const ms = (availableAt as Record<string, unknown>).$date;
+  return typeof ms === "number" ? new Date(ms) : null;
+}
+
 export function PublicationDetailDialog({ publication, onOpenChange }: PublicationDetailDialogProps) {
   const [note, setNote] = useState("");
   const { data: followups = [], isLoading } = usePublicationFollowups(publication?.id || null);
@@ -61,6 +75,9 @@ export function PublicationDetailDialog({ publication, onOpenChange }: Publicati
   const currencyFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
   if (!publication) return null;
+
+  const availableDate = extractAvailableDate(publication.raw_payload);
+  const availableDateStr = availableDate ? format(availableDate, "yyyy-MM-dd") : null;
 
   const handleAddFollowup = async () => {
     if (!note.trim()) return;
@@ -100,6 +117,12 @@ export function PublicationDetailDialog({ publication, onOpenChange }: Publicati
             <p className="text-sm whitespace-pre-wrap">{publication.content}</p>
             <p className="text-xs text-muted-foreground mt-2">
               Publicado em {format(parseISO(publication.published_date), "dd/MM/yyyy", { locale: ptBR })}
+              {availableDate && availableDateStr !== publication.published_date && (
+                <>
+                  {" "}· Disponibilizado em {format(availableDate, "dd/MM/yyyy", { locale: ptBR })}
+                  {" "}(a data de publicação é o 1º dia útil seguinte, por força da Lei 11.419/2006)
+                </>
+              )}
             </p>
           </div>
 

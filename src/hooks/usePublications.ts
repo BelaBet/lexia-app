@@ -54,6 +54,10 @@ export interface Publication {
   created_at: string;
   updated_at: string;
   followups?: PublicationFollowup[];
+  /** Payload bruto do provedor (ex.: JusBrasil) — usado para exibir detalhes
+   * que não têm coluna própria, como a data de disponibilização das
+   * publicações do Diário Oficial (ver PublicationDetailDialog.tsx). */
+  raw_payload?: unknown;
 }
 
 export interface CreatePublicationData {
