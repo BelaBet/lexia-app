@@ -75,7 +75,7 @@ export function NotificationBell({ onTabChange, onOpenAgendaEvent, className }: 
                 onClick={() => {
                   if (!n.is_read) markRead.mutate(n.id);
                   const target = notificationTarget(n);
-                  if (target?.kind === "case") navigate(`/processos/${target.id}`);
+                  if (target?.kind === "case") navigate(`/processos/${target.id}`, { state: { from: "cases" } });
                   else if (target?.kind === "event") onOpenAgendaEvent(target.id);
                   else if (target?.kind === "tab") onTabChange(target.tab);
                 }}
