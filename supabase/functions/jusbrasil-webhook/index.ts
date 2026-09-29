@@ -1,5 +1,5 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
-import { findOrCreateCaseId } from "../_shared/findOrCreateCase.ts";
+import { findOrCreateCaseId, type ProcessualData } from "../_shared/findOrCreateCase.ts";
 import { computeFallbackExternalId } from "../_shared/externalId.ts";
 import { loadBlockedRanges } from "../_shared/businessDays.ts";
 import { loadDeadlineRules, loadCaseType, classifyDeadline } from "../_shared/deadlineClassifier.ts";
@@ -47,11 +47,50 @@ function firstDate(...values: unknown[]): string {
     : new Date().toISOString().slice(0, 10);
 }
 
+// Diferente de firstDate(): quando não há nenhum candidato reconhecível,
+// devolve null em vez de "hoje" — usada para campos processuais nuláveis
+// (data_abertura_tribunal etc.) onde inventar uma data seria pior do que
+// deixar em branco.
+function firstNullableDate(...values: unknown[]): string | null {
+  const raw = firstString(...values);
+  if (!raw) return null;
+  const parsed = new Date(raw);
+  return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
+}
+
+// Mesma heurística usada em publication-webhook/index.ts e
+// _shared/pollJusbrasilIntegration.ts: aceita tanto "12.345,67" (BR) quanto
+// "12345.67" (americano, como o JusBrasil já envia) sem inflar o valor em
+// 100x quando ele já vem no segundo formato.
+function firstNumber(...values: unknown[]): number | null {
+  for (const v of values) {
+    if (typeof v === "number" && !Number.isNaN(v)) return v;
+    if (typeof v === "string" && v.trim()) {
+      const raw = v.trim();
+      const hasComma = raw.includes(",");
+      const hasDot = raw.includes(".");
+      let normalized: string;
+      if (hasComma && hasDot) {
+        const lastComma = raw.lastIndexOf(",");
+        const lastDot = raw.lastIndexOf(".");
+        normalized = lastComma > lastDot ? raw.replace(/\./g, "").replace(",", ".") : raw.replace(/,/g, "");
+      } else if (hasComma) {
+        normalized = raw.replace(/\./g, "").replace(",", ".");
+      } else {
+        normalized = raw;
+      }
+      const parsed = Number(normalized);
+      if (!Number.isNaN(parsed)) return parsed;
+    }
+  }
+  return null;
+}
+
 interface EventRow {
   content: string;
   date: string;
   processNumber: string | null;
-  vara: string | null;
+  processualData: ProcessualData;
   raw: unknown;
   eventKey: string;
 }
@@ -63,7 +102,7 @@ function movementTuplesToRows(
   tuples: unknown[],
   event: JusbrasilEvent,
   processNumber: string | null,
-  vara: string | null,
+  processualData: ProcessualData,
 ): EventRow[] {
   return tuples
     .filter(Array.isArray)
@@ -77,7 +116,7 @@ function movementTuplesToRows(
         content: detail ? `${title}: ${detail}` : title,
         date,
         processNumber,
-        vara,
+        processualData,
         raw: { event, movement },
         eventKey: `mov-${movementId}`,
       };
@@ -104,13 +143,12 @@ function djenItemToRow(item: Record<string, unknown>, fallbackProcessNumber: str
   const date = publishedMs
     ? new Date(publishedMs).toISOString().slice(0, 10)
     : firstDate();
-  const vara = firstString(item.secao_diario);
   const idPart = firstString(item.recorte_id, item.source_id) ?? date;
   return {
     content,
     date,
     processNumber,
-    vara,
+    processualData: { vara: firstString(item.secao_diario) },
     raw: item,
     eventKey: `djen-${idPart}`,
   };
@@ -120,7 +158,7 @@ function eventRows(event: JusbrasilEvent): EventRow[] {
   const processNumber = firstString(event.target_number);
 
   if (event.evt_type === 1 && Array.isArray(event.data)) {
-    return movementTuplesToRows(event.data, event, processNumber, null);
+    return movementTuplesToRows(event.data, event, processNumber, {});
   }
 
   const data = event.data && typeof event.data === "object" && !Array.isArray(event.data)
@@ -132,14 +170,20 @@ function eventRows(event: JusbrasilEvent): EventRow[] {
   // source_user_custom não aponta para um process_search_results existente
   // — processo vindo do monitoramento contínuo, não da busca avulsa), os
   // movimentos reais do payload eram descartados e só sobrava o rótulo
-  // genérico abaixo. Aproveitamos os movimentos de verdade nesse caso.
+  // genérico abaixo. Aproveitamos os movimentos e os dados processuais de
+  // verdade nesse caso.
   if (data && Array.isArray(data.movs) && data.movs.length > 0) {
     // "foro" é o texto legível ("VARA DO TRABALHO"); "vara"/"vara_original"
     // neste formato de snapshot são só um código numérico interno do
     // provedor (ex.: "3"), não o nome da vara.
-    const vara = firstString(data.foro, data.vara_original, data.vara);
+    const processualData: ProcessualData = {
+      vara: firstString(data.foro, data.vara_original, data.vara),
+      comarca: firstString(data.comarca),
+      valor_causa: firstNumber(data.valor),
+      data_abertura_tribunal: firstNullableDate(data.distribuicaoData),
+    };
     const dataProcessNumber = firstString(data.numero, data.numero_processo, data.process_number, data.cnj);
-    return movementTuplesToRows(data.movs, event, processNumber ?? dataProcessNumber, vara);
+    return movementTuplesToRows(data.movs, event, processNumber ?? dataProcessNumber, processualData);
   }
 
   // Publicação no Diário Oficial (evt_type 2) — `data` é um array de
@@ -166,7 +210,7 @@ function eventRows(event: JusbrasilEvent): EventRow[] {
     content: label,
     date: firstDate(event.created_at, data?.distribuicaoData, data?.data_distribuicao),
     processNumber: resolvedProcess,
-    vara: null,
+    processualData: {},
     raw: event,
     eventKey: `evt-${event.id ?? event.evt_type ?? "unknown"}`,
   }];
@@ -375,7 +419,7 @@ Deno.serve(async (req) => {
       const blockedRanges = await loadBlockedRanges(admin, destination.user_id);
 
       for (const row of eventRows(event)) {
-        const caseId = await findOrCreateCaseId(admin, destination.user_id, row.processNumber);
+        const caseId = await findOrCreateCaseId(admin, destination.user_id, row.processNumber, row.processualData);
         const externalId = await computeFallbackExternalId([
           "jusbrasil-central-webhook",
           destination.user_id,
@@ -398,7 +442,10 @@ Deno.serve(async (req) => {
             content: row.content,
             published_date: row.date,
             process_number: row.processNumber,
-            vara: row.vara,
+            vara: row.processualData.vara ?? null,
+            comarca: row.processualData.comarca ?? null,
+            valor_causa: row.processualData.valor_causa ?? null,
+            data_abertura_tribunal: row.processualData.data_abertura_tribunal ?? null,
             case_id: caseId,
             external_id: externalId,
             raw_payload: row.raw,
