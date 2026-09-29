@@ -3,6 +3,7 @@ import { findOrCreateCaseId, type ProcessualData } from "../_shared/findOrCreate
 import { computeFallbackExternalId } from "../_shared/externalId.ts";
 import { loadBlockedRanges } from "../_shared/businessDays.ts";
 import { loadDeadlineRules, loadCaseType, classifyDeadline } from "../_shared/deadlineClassifier.ts";
+import { syncDeadlineEvents } from "../_shared/syncPublicationExtras.ts";
 
 interface JusbrasilEvent {
   id?: string | number;
@@ -465,7 +466,20 @@ Deno.serve(async (req) => {
           console.error("jusbrasil-webhook: erro ao inserir publicação", error);
           continue;
         }
-        if (inserted) imported += 1;
+        if (inserted) {
+          imported += 1;
+          await syncDeadlineEvents(admin, destination.user_id, {
+            id: inserted.id,
+            case_id: caseId,
+            process_number: row.processNumber,
+            content: row.content,
+            external_deadline: null,
+            internal_deadline: null,
+            classified_deadline: classification?.deadline ?? null,
+            classified_act_name: classification?.actName ?? null,
+            classified_needs_review: classification?.needsReview ?? false,
+          });
+        }
       }
 
       if (destination.integration_id) {

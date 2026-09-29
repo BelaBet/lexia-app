@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Kanban, Loader2, Send, Trash2, Scale, Gavel, Users, Landmark, Upload, FileText, Download, Sparkles, AlertTriangle, History } from "lucide-react";
+import { ArrowLeft, Kanban, Loader2, Send, Trash2, Scale, Gavel, Users, Landmark, Upload, FileText, Download, Sparkles, AlertTriangle, History, Pencil } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -22,7 +22,16 @@ import {
   PIPELINE_STAGES,
   PipelineStage,
 } from "@/hooks/usePublications";
+import { PublicationDialog } from "@/components/publications/PublicationDialog";
 import { toast } from "sonner";
+
+// Textos que costumam trazer prazo (sentença, intimação) — quando nenhum
+// prazo foi definido manualmente nem detectado pelo classificador
+// automático, avisamos para o advogado conferir, em vez de deixar passar
+// batido. O classificador só reconhece um conjunto fixo de "atos" (ver
+// _shared/deadlineClassifier.ts) e não cobre tudo — ex.: uma sentença não
+// cita o nome do recurso cabível nela mesma.
+const DEADLINE_HINT_PATTERN = /sentença|intimaç/i;
 
 const sourceLabels: Record<string, string> = {
   manual: "Manual",
@@ -75,6 +84,7 @@ export default function PublicationPage() {
 
   const { data: publication, isLoading, isError } = usePublication(id || null);
   const [note, setNote] = useState("");
+  const [editing, setEditing] = useState(false);
   const { data: followups = [], isLoading: isLoadingFollowups } = usePublicationFollowups(id || null);
   const addFollowup = useAddPublicationFollowup();
   const deleteFollowup = useDeletePublicationFollowup();
@@ -128,9 +138,14 @@ export default function PublicationPage() {
     <div className="min-h-screen bg-background">
       <main className="mx-auto w-full max-w-[900px] p-4 pb-10 md:p-8 space-y-6">
         <div>
-          <Button variant="ghost" onClick={goBack} className="-ml-3">
-            <ArrowLeft className="mr-2 h-4 w-4" />Voltar para Publicações
-          </Button>
+          <div className="flex items-center justify-between">
+            <Button variant="ghost" onClick={goBack} className="-ml-3">
+              <ArrowLeft className="mr-2 h-4 w-4" />Voltar para Publicações
+            </Button>
+            <Button variant="outline" size="sm" onClick={() => setEditing(true)} className="gap-1.5">
+              <Pencil className="w-3.5 h-3.5" /> Editar
+            </Button>
+          </div>
           <div className="flex items-center gap-2 flex-wrap mt-2">
             <h1 className="font-serif text-2xl font-bold">
               {publication.process_number || "Publicação sem número de processo"}
@@ -138,6 +153,17 @@ export default function PublicationPage() {
             <Badge variant="outline">{sourceLabels[publication.source]}</Badge>
           </div>
         </div>
+
+        {!publication.external_deadline && !publication.internal_deadline && !publication.classified_act_name &&
+          DEADLINE_HINT_PATTERN.test(publication.content) && (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 dark:bg-amber-950/20 p-3 flex items-start gap-2">
+            <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+            <p className="text-sm text-amber-800 dark:text-amber-400">
+              Este teor menciona sentença/intimação, mas nenhum prazo foi definido nem detectado automaticamente.
+              Confira se há prazo a cumprir e defina manualmente em "Editar".
+            </p>
+          </div>
+        )}
 
         {/* Kanban de acompanhamento */}
         <div className="rounded-lg border p-4">
@@ -438,6 +464,8 @@ export default function PublicationPage() {
           )}
         </div>
       </main>
+
+      <PublicationDialog open={editing} onOpenChange={setEditing} publication={publication} />
     </div>
   );
 }

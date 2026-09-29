@@ -17,6 +17,12 @@ export async function syncDeadlineEvents(
     content: string;
     external_deadline: string | null;
     internal_deadline: string | null;
+    // Prazo sugerido pelo classificador automático (ver
+    // _shared/deadlineClassifier.ts) — opcional, só presente quando o
+    // chamador já rodou classifyDeadline() para esta publicação.
+    classified_deadline?: string | null;
+    classified_act_name?: string | null;
+    classified_needs_review?: boolean;
   },
 ): Promise<void> {
   const identifier = publication.process_number || publication.content.slice(0, 60);
@@ -24,6 +30,20 @@ export async function syncDeadlineEvents(
     { type: "prazo_externo", date: publication.external_deadline, label: "Prazo externo", priority: "high" },
     { type: "prazo_interno", date: publication.internal_deadline, label: "Prazo interno", priority: "medium" },
   ];
+
+  // Vai para a Agenda automaticamente por decisão explícita do usuário —
+  // mesmo sendo uma sugestão do classificador, não uma confirmação do
+  // advogado. Só quando o cálculo é confiável (needsReview=false; prazos
+  // variáveis/faixa não têm data para adicionar de qualquer forma). O
+  // título deixa isso claro para não ser confundido com prazo confirmado.
+  if (publication.classified_deadline && publication.classified_needs_review === false) {
+    deadlines.push({
+      type: "prazo_sugerido",
+      date: publication.classified_deadline,
+      label: `Prazo sugerido automaticamente (${publication.classified_act_name ?? "ato detectado"}) — confira`,
+      priority: "medium",
+    });
+  }
 
   for (const deadline of deadlines) {
     const { data: existing, error: findError } = await adminClient
