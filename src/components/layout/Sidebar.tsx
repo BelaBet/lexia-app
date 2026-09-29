@@ -23,7 +23,9 @@ import {
   FileSearch,
   Palette,
   Wallet,
-  Search
+  Search,
+  PanelLeftClose,
+  PanelLeftOpen
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/contexts/AuthContext";
@@ -48,6 +50,8 @@ interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
   onOpenAgendaEvent: (eventId: string) => void;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
 }
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -68,7 +72,7 @@ const settingsSubItems: Array<{ id: string; label: string; icon: typeof Settings
   { id: "billing", label: "Planos e Pagamentos", icon: CreditCard },
   { id: "branding", label: "Marca da Plataforma", icon: Palette, adminOnly: true },
 ];
-export function Sidebar({ activeTab, onTabChange, onOpenAgendaEvent }: SidebarProps) {
+export function Sidebar({ activeTab, onTabChange, onOpenAgendaEvent, collapsed, onToggleCollapsed }: SidebarProps) {
   const { user, profile, signOut, hasRole } = useAuth();
   const isSupremo = hasRole("supremo");
   const isAdmin = hasRole("admin");
@@ -89,41 +93,57 @@ export function Sidebar({ activeTab, onTabChange, onOpenAgendaEvent }: SidebarPr
       .toUpperCase()
       .slice(0, 2);
   };
+  // Recolhido: barra só com ícones (nome no tooltip nativo via title), para
+  // sobrar espaço ao conteúdo em notebooks e telas menores.
+  const itemClass = (active: boolean, extra?: string) => cn(
+    "sidebar-nav-item w-full min-w-0",
+    collapsed && "justify-center px-0",
+    active && "active",
+    extra,
+  );
+  const label = (text: string, extra?: string) => (
+    <span className={cn("min-w-0 truncate font-medium", collapsed && "sr-only", extra)}>{text}</span>
+  );
   return (
-    <aside className="fixed left-0 top-0 hidden h-screen w-56 flex-col bg-sidebar md:flex lg:w-60 xl:w-64">
+    <aside
+      className={cn(
+        "fixed left-0 top-0 z-30 hidden h-screen flex-col bg-sidebar transition-[width] duration-200 md:flex",
+        collapsed ? "w-16" : "w-56 lg:w-60 xl:w-64",
+      )}
+    >
       {/* Logo */}
-      <div className="border-b border-sidebar-border p-4 xl:p-6">
-        <div className="flex min-w-0 items-center gap-2.5 xl:gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-sidebar-primary">
+      <div className={cn("border-b border-sidebar-border", collapsed ? "px-2 py-3" : "p-4 xl:p-6")}>
+        <div className={cn("flex min-w-0 items-center", collapsed ? "flex-col gap-2" : "gap-2.5 xl:gap-3")}>
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-sidebar-primary" title={brandName}>
             {brandLogo ? (
               <img src={brandLogo} alt={brandName} className="h-full w-full object-contain p-0.5" />
             ) : (
               <Scale className="h-6 w-6 text-sidebar-primary-foreground" />
             )}
           </div>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate font-serif text-lg font-bold text-sidebar-foreground xl:text-xl" title={brandName}>{brandName}</h1>
-            <p className="truncate text-[11px] text-sidebar-foreground/60 xl:text-xs" title={brandTagline}>{brandTagline}</p>
-          </div>
+          {!collapsed && (
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate font-serif text-lg font-bold text-sidebar-foreground xl:text-xl" title={brandName}>{brandName}</h1>
+              <p className="truncate text-[11px] text-sidebar-foreground/60 xl:text-xs" title={brandTagline}>{brandTagline}</p>
+            </div>
+          )}
           <div className="shrink-0">
             <NotificationBell onTabChange={onTabChange} onOpenAgendaEvent={onOpenAgendaEvent} className="text-sidebar-foreground hover:bg-sidebar-accent" />
           </div>
         </div>
       </div>
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 overflow-y-auto p-3 xl:p-4">
+      <nav className={cn("flex-1 space-y-1 overflow-y-auto overflow-x-hidden", collapsed ? "p-2" : "p-3 xl:p-4")}>
         {navItems.filter((item) => !item.supremoOnly || isSupremo).map((item) => (
           <button
             key={item.id}
             onClick={() => onTabChange(item.id)}
             title={item.label}
-            className={cn(
-              "sidebar-nav-item w-full min-w-0",
-              activeTab === item.id && "active"
-            )}
+            aria-label={item.label}
+            className={itemClass(activeTab === item.id)}
           >
             <item.icon className="h-5 w-5 shrink-0" />
-            <span className="min-w-0 truncate font-medium">{item.label}</span>
+            {label(item.label)}
           </button>
         ))}
         <Separator className="my-4 bg-sidebar-border" />
@@ -131,49 +151,48 @@ export function Sidebar({ activeTab, onTabChange, onOpenAgendaEvent }: SidebarPr
         <button
           onClick={() => onTabChange("sales")}
           title="Planos"
-          className={cn(
-            "sidebar-nav-item w-full min-w-0 text-emerald-400 hover:text-emerald-300",
-            activeTab === "sales" && "active"
-          )}
+          aria-label="Planos"
+          className={itemClass(activeTab === "sales", "text-emerald-400 hover:text-emerald-300")}
         >
           <ShoppingBag className="h-5 w-5 shrink-0" />
-          <span className="min-w-0 truncate font-medium">Planos</span>
+          {label("Planos")}
         </button>
         {/* Settings with submenu */}
         <Collapsible open={settingsOpen} onOpenChange={setSettingsOpen}>
           <CollapsibleTrigger asChild>
             <button
               title="Configurações"
-              className={cn(
-                "sidebar-nav-item w-full min-w-0",
-                isSettingsTab && "active"
-              )}
+              aria-label="Configurações"
+              className={itemClass(isSettingsTab)}
             >
               <Settings className="h-5 w-5 shrink-0" />
-              <span className="min-w-0 flex-1 truncate text-left font-medium">Configurações</span>
-              {settingsOpen ? (
+              {label("Configurações", "flex-1 text-left")}
+              {!collapsed && (settingsOpen ? (
                 <ChevronDown className="h-4 w-4 shrink-0" />
               ) : (
                 <ChevronRight className="h-4 w-4 shrink-0" />
-              )}
+              ))}
             </button>
           </CollapsibleTrigger>
-          <CollapsibleContent className="mt-1 space-y-1 pl-2 lg:pl-3 xl:pl-4">
+          <CollapsibleContent className={cn("mt-1 space-y-1", !collapsed && "pl-2 lg:pl-3 xl:pl-4")}>
             {visibleSettingsSubItems.map((item) => (
               <button
                 key={item.id}
                 onClick={() => onTabChange(item.id)}
                 title={item.label}
-                className={cn(
-                  "sidebar-nav-item w-full min-w-0 text-sm",
-                  activeTab === item.id && "active",
-                  item.highlight && "text-amber-500 hover:text-amber-400",
-                  item.premium && "text-purple-400 hover:text-purple-300"
+                aria-label={item.label}
+                className={itemClass(
+                  activeTab === item.id,
+                  cn(
+                    "text-sm",
+                    item.highlight && "text-amber-500 hover:text-amber-400",
+                    item.premium && "text-purple-400 hover:text-purple-300",
+                  ),
                 )}
               >
                 <item.icon className="h-4 w-4 shrink-0" />
-                <span className="min-w-0 truncate font-medium">{item.label}</span>
-                {item.premium && isSupremo && (
+                {label(item.label)}
+                {item.premium && isSupremo && !collapsed && (
                   <Crown className="ml-auto h-3 w-3 shrink-0 text-purple-400" />
                 )}
               </button>
@@ -186,63 +205,75 @@ export function Sidebar({ activeTab, onTabChange, onOpenAgendaEvent }: SidebarPr
             <button
               onClick={() => onTabChange("admin")}
               title="Administração"
-              className={cn(
-                "sidebar-nav-item w-full min-w-0 text-red-400 hover:text-red-300",
-                activeTab === "admin" && "active"
-              )}
+              aria-label="Administração"
+              className={itemClass(activeTab === "admin", "text-red-400 hover:text-red-300")}
             >
               <ShieldCheck className="h-5 w-5 shrink-0" />
-              <span className="min-w-0 truncate font-medium">Administração</span>
+              {label("Administração")}
             </button>
             <button
               onClick={() => onTabChange("companies")}
               title="Empresas"
-              className={cn(
-                "sidebar-nav-item w-full min-w-0 text-red-400 hover:text-red-300",
-                activeTab === "companies" && "active"
-              )}
+              aria-label="Empresas"
+              className={itemClass(activeTab === "companies", "text-red-400 hover:text-red-300")}
             >
               <Building2 className="h-5 w-5 shrink-0" />
-              <span className="min-w-0 truncate font-medium">Empresas</span>
+              {label("Empresas")}
             </button>
           </>
         )}
       </nav>
       {/* User Profile */}
-      <div className="space-y-2 border-t border-sidebar-border p-3 xl:p-4">
+      <div className={cn("space-y-2 border-t border-sidebar-border", collapsed ? "p-2" : "p-3 xl:p-4")}>
         <button
           onClick={() => onTabChange("profile")}
           title="Meu Perfil"
-          className={cn(
-            "sidebar-nav-item w-full min-w-0",
-            activeTab === "profile" && "active"
-          )}
+          aria-label="Meu Perfil"
+          className={itemClass(activeTab === "profile")}
         >
           <User className="h-5 w-5 shrink-0" />
-          <span className="min-w-0 truncate font-medium">Meu Perfil</span>
+          {label("Meu Perfil")}
+        </button>
+        <button
+          onClick={onToggleCollapsed}
+          title={collapsed ? "Expandir menu" : "Recolher menu"}
+          aria-label={collapsed ? "Expandir menu" : "Recolher menu"}
+          aria-expanded={!collapsed}
+          className={itemClass(false)}
+        >
+          {collapsed ? <PanelLeftOpen className="h-5 w-5 shrink-0" /> : <PanelLeftClose className="h-5 w-5 shrink-0" />}
+          {label(collapsed ? "Expandir menu" : "Recolher menu")}
         </button>
         <Separator className="my-2 bg-sidebar-border" />
         {/* User Info */}
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <button className="flex w-full min-w-0 items-center gap-2.5 rounded-lg p-2 transition-colors hover:bg-sidebar-accent xl:gap-3">
+            <button
+              title={profile?.full_name || user?.email || "Usuário"}
+              className={cn(
+                "flex w-full min-w-0 items-center rounded-lg p-2 transition-colors hover:bg-sidebar-accent",
+                collapsed ? "justify-center" : "gap-2.5 xl:gap-3",
+              )}
+            >
               <Avatar className="h-8 w-8 shrink-0">
                 <AvatarImage src={profile?.avatar_url || ""} />
                 <AvatarFallback className="bg-primary text-xs text-primary-foreground">
                   {getInitials(profile?.full_name)}
                 </AvatarFallback>
               </Avatar>
-              <div className="min-w-0 flex-1 text-left">
-                <p className="truncate text-sm font-medium text-sidebar-foreground">
-                  {profile?.full_name || "Usuário"}
-                </p>
-                <p className="truncate text-xs text-sidebar-foreground/60">
-                  {user?.email}
-                </p>
-              </div>
+              {!collapsed && (
+                <div className="min-w-0 flex-1 text-left">
+                  <p className="truncate text-sm font-medium text-sidebar-foreground">
+                    {profile?.full_name || "Usuário"}
+                  </p>
+                  <p className="truncate text-xs text-sidebar-foreground/60">
+                    {user?.email}
+                  </p>
+                </div>
+              )}
             </button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuContent align={collapsed ? "start" : "end"} side={collapsed ? "right" : "bottom"} className="w-56">
             <DropdownMenuLabel>Minha Conta</DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem onClick={() => onTabChange("profile")}>

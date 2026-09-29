@@ -178,6 +178,13 @@
     @apply bg-sidebar-accent text-sidebar-primary;
   }
 
+  /* Notebooks com tela baixa: itens mais compactos para o menu caber sem rolar. */
+  @media (max-height: 820px) {
+    .sidebar-nav-item {
+      @apply py-2;
+    }
+  }
+
   .stat-card {
     @apply legal-card flex flex-col gap-2;
   }
