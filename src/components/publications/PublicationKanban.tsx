@@ -1,7 +1,9 @@
-import { useMemo } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { Card, CardContent } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -57,8 +59,52 @@ export function PublicationKanban({ publications }: PublicationKanbanProps) {
     return map;
   }, [publications]);
 
+  // Com colunas longas, a barra de rolagem nativa do quadro fica lá embaixo,
+  // fora da tela. Esta barra fica presa no rodapé da janela e rola o quadro
+  // junto (nos dois sentidos), para navegar por todas as colunas.
+  const boardRef = useRef<HTMLDivElement>(null);
+  const barRef = useRef<HTMLDivElement>(null);
+  const [scrollWidth, setScrollWidth] = useState(0);
+  const [overflowing, setOverflowing] = useState(false);
+
+  useEffect(() => {
+    const board = boardRef.current;
+    if (!board) return;
+    const measure = () => {
+      setScrollWidth(board.scrollWidth);
+      setOverflowing(board.scrollWidth > board.clientWidth + 1);
+    };
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(board);
+    if (board.firstElementChild) observer.observe(board.firstElementChild);
+    return () => observer.disconnect();
+  }, [publications]);
+
+  // Quadro e barra têm larguras visíveis diferentes, então a posição é
+  // repassada proporcionalmente; só escreve quando muda, o que evita o
+  // vai-e-volta entre os dois eventos de scroll.
+  const syncScroll = (from: HTMLDivElement | null, to: HTMLDivElement | null) => {
+    if (!from || !to) return;
+    const fromMax = from.scrollWidth - from.clientWidth;
+    const toMax = to.scrollWidth - to.clientWidth;
+    const target = fromMax > 0 ? (from.scrollLeft / fromMax) * toMax : 0;
+    if (Math.abs(to.scrollLeft - target) > 1) to.scrollLeft = target;
+  };
+
+  // Uma coluna (w-80 = 320px) + o espaço entre colunas (gap-4 = 16px).
+  const scrollByColumn = (direction: 1 | -1) => {
+    boardRef.current?.scrollBy({ left: direction * 336, behavior: "smooth" });
+  };
+
   return (
-    <div className="flex gap-4 overflow-x-auto pb-2">
+    <div>
+    <div
+      ref={boardRef}
+      onScroll={() => syncScroll(boardRef.current, barRef.current)}
+      className="overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+    >
+    <div className="flex w-max gap-4">
       {PIPELINE_STAGES.map((stage) => {
         const items = byStage.get(stage.value) || [];
         return (
@@ -116,6 +162,26 @@ export function PublicationKanban({ publications }: PublicationKanbanProps) {
           </div>
         );
       })}
+    </div>
+    </div>
+      {overflowing && (
+        <div className="sticky bottom-0 z-10 -mx-1 mt-2 flex items-center gap-2 rounded-lg border bg-background/95 px-2 py-1.5 shadow-sm backdrop-blur">
+          <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => scrollByColumn(-1)} aria-label="Coluna anterior">
+            <ChevronLeft className="h-4 w-4" />
+          </Button>
+          <div
+            ref={barRef}
+            onScroll={() => syncScroll(barRef.current, boardRef.current)}
+            className="h-3 min-w-0 flex-1 overflow-x-auto overflow-y-hidden [scrollbar-color:hsl(var(--muted-foreground)/0.45)_hsl(var(--muted))] [scrollbar-width:thin] [&::-webkit-scrollbar-thumb:hover]:bg-muted-foreground/70 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-muted-foreground/45 [&::-webkit-scrollbar-track]:rounded-full [&::-webkit-scrollbar-track]:bg-muted [&::-webkit-scrollbar]:h-2.5"
+            aria-label="Rolar colunas do Kanban"
+          >
+            <div style={{ width: scrollWidth, height: 1 }} />
+          </div>
+          <Button type="button" variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => scrollByColumn(1)} aria-label="Próxima coluna">
+            <ChevronRight className="h-4 w-4" />
+          </Button>
+        </div>
+      )}
     </div>
   );
 }
