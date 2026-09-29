@@ -28,6 +28,7 @@ import {
   Sparkles,
   AlertTriangle,
   RadioTower,
+  ChevronDown,
   CheckCircle2,
   List,
   Kanban as KanbanIcon,
@@ -88,8 +89,15 @@ function ExistingCasesTracking() {
   const { data: cases = [], isLoading } = useCases();
   const trackCase = useTrackCasePublications();
   const trackAll = useTrackAllCasePublications();
+  const [expanded, setExpanded] = useState<boolean | null>(null);
   const inactiveCases = cases.filter((item) => !item.jusbrasil_monitoring_active);
   const activeCount = cases.length - inactiveCases.length;
+  const allTracked = cases.length > 0 && inactiveCases.length === 0;
+  const showDetails = expanded ?? !allTracked;
+
+  useEffect(() => {
+    setExpanded(null);
+  }, [allTracked]);
 
   if (isLoading || !cases.length) return null;
 
@@ -97,75 +105,90 @@ function ExistingCasesTracking() {
     <Card>
       <CardContent className="p-4 space-y-3">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-          <div>
-            <p className="font-medium flex items-center gap-2"><RadioTower className="w-4 h-4 text-primary" /> Processos existentes</p>
-            <p className="text-sm text-muted-foreground mt-0.5">
-              Ative o rastreamento para receber publicações futuras de processos já cadastrados automaticamente aqui.
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">
-              {activeCount} de {cases.length} processo(s) em rastreamento.
-            </p>
-          </div>
-          <Button
-            className="shrink-0 gap-2"
-            disabled={trackAll.isPending || inactiveCases.length === 0}
-            onClick={() => {
-              if (inactiveCases.length === 0) return;
-              const confirmed = confirm(
-                `Ativar o rastreamento de publicações para ${inactiveCases.length} processo(s)? Essa ação registra cada processo elegível no provedor e pode gerar cobrança conforme o contrato da integração.`,
-              );
-              if (confirmed) trackAll.mutate(cases);
-            }}
+          <button
+            type="button"
+            className="flex min-w-0 flex-1 items-center justify-between gap-3 text-left"
+            aria-expanded={showDetails}
+            aria-controls="existing-cases-tracking-details"
+            onClick={() => setExpanded(!showDetails)}
           >
-            {trackAll.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RadioTower className="h-4 w-4" />}
-            {trackAll.isPending
-              ? "Rastreando processos..."
-              : inactiveCases.length > 0
-                ? `Rastrear todos (${inactiveCases.length})`
-                : "Todos rastreados"}
-          </Button>
-        </div>
-        {trackAll.data?.failed?.length ? (
-          <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
-            <p className="font-medium text-amber-700">
-              {trackAll.data.activated} ativado(s), {trackAll.data.alreadyActive} já ativo(s) e {trackAll.data.failed.length} com falha.
-            </p>
-            <div className="mt-2 max-h-28 space-y-1 overflow-y-auto text-xs text-muted-foreground">
-              {trackAll.data.failed.map((failure) => (
-                <p key={failure.caseId}><span className="font-medium">{failure.caseNumber || "Sem CNJ"}</span>: {failure.message}</p>
-              ))}
-            </div>
-          </div>
-        ) : null}
-        <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
-          {cases.map((c) => (
-            <div key={c.id} className="flex items-center justify-between gap-3 rounded-md border p-2.5">
-              <div className="min-w-0">
-                <p className="text-sm font-medium truncate">{c.case_number}</p>
-                <p className="text-xs text-muted-foreground truncate">{c.title}</p>
-              </div>
-              {c.jusbrasil_monitoring_active ? (
-                <Badge variant="outline" className="shrink-0 gap-1.5 border-green-500/30 text-green-600">
-                  <CheckCircle2 className="w-3.5 h-3.5" /> Rastreando
-                </Badge>
-              ) : (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  className="shrink-0 gap-1.5"
-                  disabled={trackCase.isPending || trackAll.isPending}
-                  onClick={() => trackCase.mutate(c.id)}
-                >
-                  {trackCase.isPending && trackCase.variables === c.id ? (
-                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                  ) : (
-                    <RadioTower className="w-3.5 h-3.5" />
-                  )}
-                  Rastrear
-                </Button>
+            <span>
+              <span className="font-medium flex items-center gap-2"><RadioTower className="w-4 h-4 text-primary" /> Processos existentes</span>
+              {showDetails && (
+                <span className="block text-sm text-muted-foreground mt-0.5">
+                  Ative o rastreamento para receber publicações futuras de processos já cadastrados automaticamente aqui.
+                </span>
               )}
+              <span className="block mt-1 text-xs text-muted-foreground">
+                {activeCount} de {cases.length} processo(s) em rastreamento.
+              </span>
+            </span>
+            <ChevronDown className={cn("h-4 w-4 shrink-0 transition-transform", showDetails && "rotate-180")} aria-hidden="true" />
+          </button>
+          {showDetails && (
+            <Button
+              className="shrink-0 gap-2"
+              disabled={trackAll.isPending || inactiveCases.length === 0}
+              onClick={() => {
+                if (inactiveCases.length === 0) return;
+                const confirmed = confirm(
+                  `Ativar o rastreamento de publicações para ${inactiveCases.length} processo(s)? Essa ação registra cada processo elegível no provedor e pode gerar cobrança conforme o contrato da integração.`,
+                );
+                if (confirmed) trackAll.mutate(cases);
+              }}
+            >
+              {trackAll.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <RadioTower className="h-4 w-4" />}
+              {trackAll.isPending
+                ? "Rastreando processos..."
+                : inactiveCases.length > 0
+                  ? `Rastrear todos (${inactiveCases.length})`
+                  : "Todos rastreados"}
+            </Button>
+          )}
+        </div>
+        <div id="existing-cases-tracking-details" hidden={!showDetails} className="space-y-3">
+          {trackAll.data?.failed?.length ? (
+            <div className="rounded-md border border-amber-500/30 bg-amber-500/5 p-3 text-sm">
+              <p className="font-medium text-amber-700">
+                {trackAll.data.activated} ativado(s), {trackAll.data.alreadyActive} já ativo(s) e {trackAll.data.failed.length} com falha.
+              </p>
+              <div className="mt-2 max-h-28 space-y-1 overflow-y-auto text-xs text-muted-foreground">
+                {trackAll.data.failed.map((failure) => (
+                  <p key={failure.caseId}><span className="font-medium">{failure.caseNumber || "Sem CNJ"}</span>: {failure.message}</p>
+                ))}
+              </div>
             </div>
-          ))}
+          ) : null}
+          <div className="max-h-72 space-y-2 overflow-y-auto pr-1">
+            {cases.map((c) => (
+              <div key={c.id} className="flex items-center justify-between gap-3 rounded-md border p-2.5">
+                <div className="min-w-0">
+                  <p className="text-sm font-medium truncate">{c.case_number}</p>
+                  <p className="text-xs text-muted-foreground truncate">{c.title}</p>
+                </div>
+                {c.jusbrasil_monitoring_active ? (
+                  <Badge variant="outline" className="shrink-0 gap-1.5 border-green-500/30 text-green-600">
+                    <CheckCircle2 className="w-3.5 h-3.5" /> Rastreando
+                  </Badge>
+                ) : (
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    className="shrink-0 gap-1.5"
+                    disabled={trackCase.isPending || trackAll.isPending}
+                    onClick={() => trackCase.mutate(c.id)}
+                  >
+                    {trackCase.isPending && trackCase.variables === c.id ? (
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    ) : (
+                      <RadioTower className="w-3.5 h-3.5" />
+                    )}
+                    Rastrear
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       </CardContent>
     </Card>
