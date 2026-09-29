@@ -132,7 +132,14 @@ Deno.serve(async (req) => {
           console.error("Error uploading autos document:", uploadError);
           continue;
         }
-        await adminClient.from("process_search_documents").insert({
+        // Verifica o {error} do insert antes de contar como salvo — antes,
+        // saved era incrementado incondicionalmente logo após o upload,
+        // então uma falha silenciosa no INSERT (RLS, erro transitório etc.)
+        // deixava o arquivo no Storage sem nenhuma linha correspondente em
+        // process_search_documents, mas ainda assim marcava os autos como
+        // "pronto" e gerava a cobrança para um documento que o usuário não
+        // consegue ver nem baixar pelo sistema.
+        const { error: insertError } = await adminClient.from("process_search_documents").insert({
           result_id: resultId,
           user_id: user.id,
           file_name: doc.nome,
@@ -141,6 +148,10 @@ Deno.serve(async (req) => {
           file_type: doc.tipo || "application/pdf",
           source_url: doc.url,
         });
+        if (insertError) {
+          console.error("Error recording autos document row:", insertError);
+          continue;
+        }
         saved += 1;
       } catch (docErr) {
         console.error("Error downloading individual autos document:", docErr);

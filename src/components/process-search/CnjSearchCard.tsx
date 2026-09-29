@@ -26,11 +26,31 @@ function getFirst(obj: AnyRecord, keys: string[]): unknown {
   return undefined;
 }
 
+// CORRIGIDO: o payload real da API (mesmo usado em JusbrasilCaseDetails.tsx
+// e _shared/syncCaseDetails.ts) grava as movimentações em "movs", como
+// array de tuplas posicionais ([data, titulo, resumo_cliente, nota_interna,
+// id, ...]) — não em "movimentacoes"/"movements"/"andamentos" como objetos
+// nomeados, que essa tela procurava. O resultado é que processos com
+// movimentações reais (confirmados 26 registros com "movs" no banco)
+// apareciam sem nenhuma movimentação nesta tela de consulta avulsa.
+function movementFields(item: unknown): { date: unknown; description: unknown } {
+  if (Array.isArray(item)) {
+    const title = item[1];
+    const summary = item[2];
+    return { date: item[0], description: [title, summary].filter(Boolean).join(" — ") || title || summary };
+  }
+  const movement = asRecord(item);
+  return {
+    date: getFirst(movement, ["data", "date", "data_movimentacao", "created_at"]),
+    description: getFirst(movement, ["texto", "descricao", "description", "conteudo", "movimento"]),
+  };
+}
+
 function ResultSummary({ data, cnj }: { data: unknown; cnj: string }) {
   const [showRaw, setShowRaw] = useState(false);
   const record = asRecord(data);
   const parties = getFirst(record, ["partes", "parties", "envolvidos"]);
-  const movements = getFirst(record, ["movimentacoes", "movements", "andamentos"]);
+  const movements = getFirst(record, ["movimentacoes", "movements", "andamentos", "movs"]);
   const tribunal = getFirst(record, ["tribunal", "tribunal_nome", "court"]);
   const location = getFirst(record, ["comarca", "foro", "local", "orgao_julgador"]);
   const subject = getFirst(record, ["assunto", "assuntos", "subject", "classe"]);
@@ -68,9 +88,7 @@ function ResultSummary({ data, cnj }: { data: unknown; cnj: string }) {
           <h4 className="text-sm font-medium mb-2">Últimas movimentações</h4>
           <div className="space-y-2">
             {movementItems.map((item, index) => {
-              const movement = asRecord(item);
-              const description = getFirst(movement, ["texto", "descricao", "description", "conteudo", "movimento"]);
-              const date = getFirst(movement, ["data", "date", "data_movimentacao", "created_at"]);
+              const { date, description } = movementFields(item);
               return <div key={index} className="rounded-md bg-muted/40 p-3 text-sm"><div className="text-xs text-muted-foreground">{text(date)}</div><div className="break-words">{text(description)}</div></div>;
             })}
           </div>

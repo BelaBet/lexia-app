@@ -95,7 +95,18 @@ Deno.serve(async (req) => {
     .from("cases")
     .update({ jusbrasil_monitoring_active: true, jusbrasil_monitoring_started_at: new Date().toISOString() })
     .eq("id", caseRow.id);
-  if (updateError) console.error("jusbrasil-monitor-process: erro ao marcar processo como rastreado", updateError);
+  if (updateError) {
+    // CORRIGIDO (falso sucesso): antes esse erro só ia pro log e a função
+    // ainda respondia success:true — o registro no JusBrasil tinha
+    // acontecido de fato, mas a LEXIA continuava mostrando o processo como
+    // "não rastreado" (jusbrasil_monitoring_active nunca virou true), ao
+    // mesmo tempo em que dizia ao usuário que o rastreamento foi ativado.
+    console.error("jusbrasil-monitor-process: erro ao marcar processo como rastreado", updateError);
+    return json({
+      error: "O rastreamento foi registrado no JusBrasil, mas não foi possível salvar isso no sistema. Contate o suporte antes de tentar novamente.",
+      jusbrasil_registered: true,
+    }, 500);
+  }
 
   return json({ success: true, cnj, data });
 });

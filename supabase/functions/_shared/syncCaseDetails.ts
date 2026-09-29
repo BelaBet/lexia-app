@@ -107,7 +107,15 @@ export async function syncCaseDetails(
   const advogados = partes.flatMap((p: any) => Array.isArray(p?.advogados) ? p.advogados : []).filter(Boolean);
   const ultima = movs.length ? movs[0] : null;
 
-  await admin.from("process_search_results").update({
+  // CORRIGIDO (falso sucesso): nem o UPDATE de process_search_results nem
+  // os INSERTs de process_search_documents abaixo verificavam o {error}
+  // retornado — uma falha silenciosa (RLS, erro transitório) deixava a
+  // função seguir e devolver um resultado de sucesso (movements/autos/
+  // hearings contados a partir do payload já buscado do provedor) mesmo
+  // que nada tivesse sido persistido no banco. Agora qualquer erro aqui
+  // lança uma exceção, que os dois chamadores (sync-case-details e
+  // sync-all-case-details) já tratam corretamente como falha.
+  const { error: updateError } = await admin.from("process_search_results").update({
     raw_data: mergedRaw,
     partes_ativas: ativas.length ? ativas : result.partes_ativas,
     partes_passivas: passivas.length ? passivas : result.partes_passivas,
@@ -123,15 +131,17 @@ export async function syncCaseDetails(
     juiz: ultima?.[3] ?? payload.juiz ?? result.juiz,
     status_processual: payload.situacao ?? result.status_processual,
   }).eq("id", result.id);
+  if (updateError) throw new Error(`Falha ao salvar os detalhes sincronizados: ${updateError.message}`);
 
   for (const item of anexos) {
     if (!Array.isArray(item)) continue;
     const sourceUrl = typeof item[1] === "string" ? item[1] : null;
     const title = typeof item[7] === "string" && item[7].trim() ? item[7].trim() : `Anexo ${item[0] ?? ""}`.trim();
     if (!sourceUrl) continue;
-    const { data: exists } = await admin.from("process_search_documents").select("id").eq("result_id", result.id).eq("source_url", sourceUrl).maybeSingle();
+    const { data: exists, error: existsError } = await admin.from("process_search_documents").select("id").eq("result_id", result.id).eq("source_url", sourceUrl).maybeSingle();
+    if (existsError) throw new Error(`Falha ao verificar anexo já registrado: ${existsError.message}`);
     if (!exists) {
-      await admin.from("process_search_documents").insert({
+      const { error: insertError } = await admin.from("process_search_documents").insert({
         result_id: result.id,
         user_id: result.user_id,
         file_name: title,
@@ -140,6 +150,7 @@ export async function syncCaseDetails(
         file_type: "application/pdf",
         source_url: sourceUrl,
       });
+      if (insertError) throw new Error(`Falha ao registrar anexo: ${insertError.message}`);
     }
   }
 
