@@ -1822,6 +1822,7 @@ export type Database = {
       user_settings: {
         Row: {
           created_at: string
+          intimacoes_email: string | null
           language: string
           notify_cases: boolean
           notify_deadlines: boolean
@@ -1833,6 +1834,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          intimacoes_email?: string | null
           language?: string
           notify_cases?: boolean
           notify_deadlines?: boolean
@@ -1844,6 +1846,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          intimacoes_email?: string | null
           language?: string
           notify_cases?: boolean
           notify_deadlines?: boolean

@@ -5,9 +5,10 @@ import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { Badge } from "@/components/ui/badge";
-import { Bell, Moon, Sun, Globe, Shield, CreditCard, Crown, User, Loader2 } from "lucide-react";
+import { Bell, Moon, Sun, Globe, Shield, CreditCard, Crown, User, Loader2, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { AgendaBlockedDatesCard } from "@/components/settings/AgendaBlockedDatesCard";
 import { useUserSettings, useSaveUserSettings, DEFAULT_USER_SETTINGS, UserSettings } from "@/hooks/useUserSettings";
@@ -177,6 +178,36 @@ export function SettingsPage({ onTabChange }: SettingsPageProps) {
                 checked={draft.notify_cases}
                 onCheckedChange={(checked) => setDraft((prev) => ({ ...prev, notify_cases: checked }))}
               />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Intimações Eletrônicas (JusBrasil) */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Mail className="w-5 h-5" />
+              Intimações Eletrônicas
+            </CardTitle>
+            <CardDescription>
+              E-mail usado para cadastro na integração de intimações da JusBrasil
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <div className="space-y-2">
+              <Label htmlFor="intimacoes-email">E-mail para intimações</Label>
+              <Input
+                id="intimacoes-email"
+                type="email"
+                placeholder="seuemail@escritorio.com.br"
+                disabled={isLoadingSettings}
+                value={draft.intimacoes_email}
+                onChange={(e) => setDraft((prev) => ({ ...prev, intimacoes_email: e.target.value }))}
+              />
+              <p className="text-xs text-muted-foreground">
+                Este e-mail é salvo aqui para uso na integração de intimações da JusBrasil. O cadastro automático
+                junto à JusBrasil ainda não está ativo — por enquanto o e-mail fica apenas guardado nesta tela.
+              </p>
             </div>
           </CardContent>
         </Card>
