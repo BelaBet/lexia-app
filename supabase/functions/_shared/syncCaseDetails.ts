@@ -7,6 +7,7 @@
 // diária via pg_cron, todos os processos).
 
 import type { SupabaseClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
+import { dedupeLawyers, dedupeParties, isActiveParty, isPassiveParty, lawyersOf } from "./dedupeParties.ts";
 
 const JUSBRASIL_API_BASE_URL = "https://op.digesto.com.br";
 
@@ -99,12 +100,10 @@ export async function syncCaseDetails(
   const anexos = Array.isArray(payload.anexos) ? payload.anexos : [];
   const audiencias = Array.isArray(payload.audiencias) ? payload.audiencias : [];
   const partes = Array.isArray(payload.partes) ? payload.partes : [];
-  // deno-lint-ignore no-explicit-any
-  const ativas = partes.filter((p: any) => p && (p.is_autora || p.is_coautora));
-  // deno-lint-ignore no-explicit-any
-  const passivas = partes.filter((p: any) => p && p.is_re);
-  // deno-lint-ignore no-explicit-any
-  const advogados = partes.flatMap((p: any) => Array.isArray(p?.advogados) ? p.advogados : []).filter(Boolean);
+  // As partes chegam como tuplas ou objetos; os helpers aceitam os dois.
+  const ativas = dedupeParties(partes.filter(isActiveParty));
+  const passivas = dedupeParties(partes.filter(isPassiveParty));
+  const advogados = dedupeLawyers(partes.flatMap(lawyersOf));
   const ultima = movs.length ? movs[0] : null;
 
   // CORRIGIDO (falso sucesso): nem o UPDATE de process_search_results nem

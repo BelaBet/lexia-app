@@ -141,6 +141,45 @@ function lawyerKey(value: JsonRecord) {
   return text(value?.advogadoID) || text(value?.oab) || text(value?.nomeNormalizado) || "";
 }
 
+function partyKey(value: JsonRecord) {
+  const id = text(value?.parteID);
+  if (id) return `id:${id}`;
+  const name = (text(value?.nomeNormalizado) || text(value?.nomeParte)).trim().toUpperCase();
+  const doc = (text(value?.cnpj) || text(value?.cpf) || text(value?.documento)).replace(/\D/g, "");
+  return name || doc ? `nd:${name}|${doc}` : "";
+}
+
+// O provedor devolve a MESMA parte (mesmo parteID) várias vezes, uma para
+// cada rótulo de relação ("REU" e "REU RE", "POLO PASSIVO PRINCIPAL" e
+// "RECLAMADO"...), cada uma com a mesma lista de advogados — sem isso o nome
+// do réu e do seu advogado aparecem duplicados na tabela. Mantém a primeira
+// ocorrência e une os advogados (sem repetir) das demais.
+function dedupeParties(parties: JsonRecord[]): JsonRecord[] {
+  const byKey = new Map<string, JsonRecord>();
+  const result: JsonRecord[] = [];
+  parties.forEach((party) => {
+    const lawyers = Array.isArray(party?.advogados)
+      ? (party.advogados as unknown[]).map(normalizeLawyer).filter((item): item is JsonRecord => Boolean(item))
+      : [];
+    const key = partyKey(party);
+    const existing = key ? byKey.get(key) : undefined;
+    const target = existing ?? { ...party, advogados: [] as JsonRecord[] };
+    const merged = target.advogados as JsonRecord[];
+    const seen = new Set(merged.map(lawyerKey).filter(Boolean));
+    lawyers.forEach((lawyer) => {
+      const lk = lawyerKey(lawyer);
+      if (lk && seen.has(lk)) return;
+      if (lk) seen.add(lk);
+      merged.push(lawyer);
+    });
+    if (!existing) {
+      if (key) byKey.set(key, target);
+      result.push(target);
+    }
+  });
+  return result;
+}
+
 // Coleta as chaves de advogado que aparecem tanto do lado do autor quanto do
 // réu — um mesmo advogado não pode representar as duas partes de uma ação.
 // Quando isso acontece, o dado veio assim do provedor (JusBrasil); nunca
@@ -406,8 +445,8 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
   const storedPassive = safeArray(data.partes_passivas);
   const activeFromProvider = providerParties.filter((p) => Boolean(p.is_autora) || /AUTOR|ATIVO/i.test(text(p.relacaoNormalizado)));
   const passiveFromProvider = providerParties.filter((p) => Boolean(p.is_re) || /REU|RÉU|PASSIVO/i.test(text(p.relacaoNormalizado)));
-  const activeParties = activeFromProvider.length ? activeFromProvider : storedActive;
-  const passiveParties = passiveFromProvider.length ? passiveFromProvider : storedPassive;
+  const activeParties = dedupeParties(activeFromProvider.length ? activeFromProvider : storedActive);
+  const passiveParties = dedupeParties(passiveFromProvider.length ? passiveFromProvider : storedPassive);
   const conflictingLawyerKeys = findConflictingLawyerKeys(activeParties, passiveParties);
   const classesFromProvider = rawArray(raw.classes).map((item) => text(item).trim()).filter(Boolean);
   const assuntoExtra = text(raw.assuntoExtra).split(",").map((item) => item.trim()).filter(Boolean);
