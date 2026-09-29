@@ -6,6 +6,19 @@ export type PublicationSource = "manual" | "jusbrasil" | "escavador" | "webjur" 
 export type PublicationStatus = "pending" | "in_progress" | "completed" | "overdue" | "cancelled";
 export type PublicationResponsibleRole = "advogado" | "operacional";
 
+// Etapas do Kanban de acompanhamento — independente do campo `status`
+// (que controla prazo/vencimento). Toda mudança fica registrada em
+// publication_stage_history (ver migration 20260929040000).
+export type PipelineStage = "novo" | "em_analise" | "prazo_definido" | "providencia_tomada" | "concluido";
+
+export const PIPELINE_STAGES: { value: PipelineStage; label: string }[] = [
+  { value: "novo", label: "Novo" },
+  { value: "em_analise", label: "Em Análise" },
+  { value: "prazo_definido", label: "Prazo Definido" },
+  { value: "providencia_tomada", label: "Providência Tomada" },
+  { value: "concluido", label: "Concluído" },
+];
+
 export interface PublicationFollowup {
   id: string;
   publication_id: string;
@@ -41,6 +54,7 @@ export interface Publication {
   data_abertura_tribunal: string | null;
   /** Data de aceitação do processo. */
   data_aceitacao: string | null;
+  pipeline_stage: PipelineStage;
   /** Área do direito detectada (via cases.type) para a classificação automática do ato. */
   classified_area: "civel" | "criminal" | "trabalhista" | "administrativo_tributario" | null;
   /** Nome do ato processual detectado automaticamente no conteúdo (ex.: "Contestação"). */
@@ -56,7 +70,7 @@ export interface Publication {
   followups?: PublicationFollowup[];
   /** Payload bruto do provedor (ex.: JusBrasil) — usado para exibir detalhes
    * que não têm coluna própria, como a data de disponibilização das
-   * publicações do Diário Oficial (ver PublicationDetailDialog.tsx). */
+   * publicações do Diário Oficial (ver PublicationPage.tsx). */
   raw_payload?: unknown;
 }
 
@@ -99,6 +113,74 @@ export function usePublications(filters?: { status?: PublicationStatus | "all" }
       const { data, error } = await query;
       if (error) throw error;
       return (data || []) as Publication[];
+    },
+  });
+}
+
+export function usePublication(id: string | null) {
+  return useQuery({
+    queryKey: ["publication", id],
+    enabled: !!id,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("publications")
+        .select("*")
+        .eq("id", id as string)
+        .single();
+      if (error) throw error;
+      return data as Publication;
+    },
+  });
+}
+
+export interface PublicationStageHistoryEntry {
+  id: string;
+  publication_id: string;
+  user_id: string;
+  from_stage: PipelineStage | null;
+  to_stage: PipelineStage;
+  changed_at: string;
+}
+
+export function usePublicationStageHistory(publicationId: string | null) {
+  return useQuery({
+    queryKey: ["publication_stage_history", publicationId],
+    enabled: !!publicationId,
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from("publication_stage_history")
+        .select("*")
+        .eq("publication_id", publicationId as string)
+        .order("changed_at", { ascending: false });
+      if (error) throw error;
+      return (data || []) as PublicationStageHistoryEntry[];
+    },
+  });
+}
+
+export function useUpdatePublicationStage() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async ({ id, pipeline_stage }: { id: string; pipeline_stage: PipelineStage }) => {
+      const { data, error } = await supabase
+        .from("publications")
+        .update({ pipeline_stage })
+        .eq("id", id)
+        .select()
+        .single();
+      if (error) throw error;
+      return data as Publication;
+    },
+    onSuccess: (_data, variables) => {
+      queryClient.invalidateQueries({ queryKey: ["publications"] });
+      queryClient.invalidateQueries({ queryKey: ["publication", variables.id] });
+      queryClient.invalidateQueries({ queryKey: ["publication_stage_history", variables.id] });
+      toast.success("Etapa atualizada!");
+    },
+    onError: (error) => {
+      console.error("Error updating publication stage:", error);
+      toast.error("Erro ao mover a publicação");
     },
   });
 }

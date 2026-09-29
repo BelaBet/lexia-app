@@ -14,6 +14,7 @@ import PrivacyPolicy from "./pages/PrivacyPolicy";
 import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
 import CaseDetails from "./pages/CaseDetails";
+import PublicationPage from "./pages/PublicationPage";
 import PortalAuth from "./pages/portal/PortalAuth";
 import PortalSetPassword from "./pages/portal/PortalSetPassword";
 import PortalLayout from "./pages/portal/PortalLayout";
@@ -52,6 +53,14 @@ const App = () => (
                 element={
                   <ProtectedRoute>
                     <CaseDetails />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/publicacoes/:id"
+                element={
+                  <ProtectedRoute>
+                    <PublicationPage />
                   </ProtectedRoute>
                 }
               />
