@@ -363,6 +363,9 @@ Deno.serve(async (req) => {
         content: row.content,
         external_deadline: externalDeadline,
         internal_deadline: internalDeadline,
+        classified_deadline: classification?.deadline ?? null,
+        classified_act_name: classification?.actName ?? null,
+        classified_needs_review: classification?.needsReview ?? false,
       });
       await attachDocumentIfAvailable(adminClient, inserted.id, (row.rawPayload ?? {}) as Record<string, unknown>);
     }

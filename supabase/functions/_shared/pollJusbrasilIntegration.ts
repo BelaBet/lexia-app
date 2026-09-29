@@ -579,6 +579,9 @@ export async function pollJusbrasilIntegration(
           content,
           external_deadline: deadlines.external,
           internal_deadline: deadlines.internal,
+          classified_deadline: classification?.deadline ?? null,
+          classified_act_name: classification?.actName ?? null,
+          classified_needs_review: classification?.needsReview ?? false,
         });
         await attachDocumentIfAvailable(adminClient, inserted.id, item);
 
