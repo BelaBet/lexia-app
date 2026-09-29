@@ -16,6 +16,12 @@ export interface UserSettings {
   notify_cases: boolean;
   theme: ThemePreference;
   language: LanguagePreference;
+  // E-mail para cadastro na API de Intimações da JusBrasil (produto
+  // separado da integração já usada para publicações/monitoramento).
+  // Por enquanto só é salvo aqui — a sincronização real com a JusBrasil
+  // ainda não foi implementada, ver comentário na migration
+  // 20260929030000_intimacoes_email.sql.
+  intimacoes_email: string;
 }
 
 export const DEFAULT_USER_SETTINGS: UserSettings = {
@@ -25,6 +31,7 @@ export const DEFAULT_USER_SETTINGS: UserSettings = {
   notify_cases: true,
   theme: "system",
   language: "pt-BR",
+  intimacoes_email: "",
 };
 
 export function useUserSettings() {
@@ -46,7 +53,13 @@ export function useUserSettings() {
       // banco como `string` (a restrição real é um CHECK, não um enum),
       // daí o cast para as uniões usadas no app.
       return data
-        ? { ...DEFAULT_USER_SETTINGS, ...data, theme: data.theme as ThemePreference, language: data.language as LanguagePreference }
+        ? {
+            ...DEFAULT_USER_SETTINGS,
+            ...data,
+            theme: data.theme as ThemePreference,
+            language: data.language as LanguagePreference,
+            intimacoes_email: data.intimacoes_email ?? "",
+          }
         : DEFAULT_USER_SETTINGS;
     },
   });
