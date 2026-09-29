@@ -137,6 +137,7 @@ export interface PublicationStageHistoryEntry {
   id: string;
   publication_id: string;
   user_id: string;
+  user_name?: string | null;
   from_stage: PipelineStage | null;
   to_stage: PipelineStage;
   changed_at: string;
@@ -153,7 +154,17 @@ export function usePublicationStageHistory(publicationId: string | null) {
         .eq("publication_id", publicationId as string)
         .order("changed_at", { ascending: false });
       if (error) throw error;
-      return (data || []) as PublicationStageHistoryEntry[];
+      const entries = (data || []) as PublicationStageHistoryEntry[];
+      if (!entries.length) return entries;
+
+      const userIds = [...new Set(entries.map((entry) => entry.user_id))];
+      const { data: profiles, error: profileError } = await supabase
+        .from("profiles")
+        .select("user_id, full_name")
+        .in("user_id", userIds);
+      if (profileError) console.error("Error loading publication history users:", profileError);
+      const names = new Map((profiles || []).map((profile) => [profile.user_id, profile.full_name]));
+      return entries.map((entry) => ({ ...entry, user_name: names.get(entry.user_id) ?? null }));
     },
   });
 }
