@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileNav } from "@/components/layout/MobileNav";
 import { StatsCards } from "@/components/dashboard/StatsCards";
@@ -28,14 +28,19 @@ import { useAuth } from "@/contexts/AuthContext";
 import { DemoDataBanner } from "@/components/layout/DemoDataBanner";
 
 const Index = () => {
-  const [activeTab, setActiveTab] = useState("dashboard");
+  const location = useLocation();
+  // Ao voltar de /processos/:id (ver handleOpenCase abaixo), restaura a aba
+  // em que o usuário estava antes de abrir o processo — sem isto, como a
+  // troca de aba aqui é só estado local (a URL continua "/"), o botão
+  // "Voltar" da página do processo sempre caía no Dashboard.
+  const [activeTab, setActiveTab] = useState(() => (location.state as { activeTab?: string } | null)?.activeTab || "dashboard");
   const [focusedAgendaEventId, setFocusedAgendaEventId] = useState<string | null>(null);
   const { profile, hasRole } = useAuth();
   const isSupremo = hasRole("supremo");
   const navigate = useNavigate();
 
   const handleOpenCase = (caseId: string) => {
-    navigate(`/processos/${caseId}`);
+    navigate(`/processos/${caseId}`, { state: { from: activeTab } });
   };
 
   const handleOpenAgendaEvent = (eventId: string) => {
