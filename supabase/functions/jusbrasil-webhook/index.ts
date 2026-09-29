@@ -47,38 +47,112 @@ function firstDate(...values: unknown[]): string {
     : new Date().toISOString().slice(0, 10);
 }
 
-function eventRows(event: JusbrasilEvent): Array<{
+interface EventRow {
   content: string;
   date: string;
   processNumber: string | null;
+  vara: string | null;
   raw: unknown;
   eventKey: string;
-}> {
+}
+
+// Tuplas de movimentação: [data, título, detalhe, null, movement_id, ...].
+// Usado tanto pelo evt_type 1 (data é a lista direto) quanto pelo snapshot
+// completo do evt_type 13 (lista em data.movs — ver eventRows abaixo).
+function movementTuplesToRows(
+  tuples: unknown[],
+  event: JusbrasilEvent,
+  processNumber: string | null,
+  vara: string | null,
+): EventRow[] {
+  return tuples
+    .filter(Array.isArray)
+    .map((movement) => {
+      const tuple = movement as unknown[];
+      const date = firstDate(tuple[0], event.created_at);
+      const title = firstString(tuple[1]) ?? "Movimentação processual";
+      const detail = firstString(tuple[2]);
+      const movementId = firstString(tuple[4]) ?? date;
+      return {
+        content: detail ? `${title}: ${detail}` : title,
+        date,
+        processNumber,
+        vara,
+        raw: { event, movement },
+        eventKey: `mov-${movementId}`,
+      };
+    });
+}
+
+// Extrai o valor de um campo no formato Mongo extended JSON ({ "$date": ms }),
+// usado pelo JusBrasil em published_at/available_at/detected_at.
+function extractDateMs(value: unknown): number | null {
+  if (value && typeof value === "object" && "$date" in (value as Record<string, unknown>)) {
+    const raw = (value as Record<string, unknown>).$date;
+    return typeof raw === "number" ? raw : null;
+  }
+  return null;
+}
+
+// Publicação no Diário Oficial (evt_type 2 confirmado) — cada item de
+// `data` traz o teor integral do ato (`texto`), não uma tupla resumida.
+function djenItemToRow(item: Record<string, unknown>, fallbackProcessNumber: string | null): EventRow {
+  const processNumber = firstString(item.proc, fallbackProcessNumber);
+  const content = firstString(item.texto, item.snippet)
+    ?? "Publicação recebida do JusBrasil sem teor — ver anexo bruto.";
+  const publishedMs = extractDateMs(item.published_at) ?? extractDateMs(item.available_at);
+  const date = publishedMs
+    ? new Date(publishedMs).toISOString().slice(0, 10)
+    : firstDate();
+  const vara = firstString(item.secao_diario);
+  const idPart = firstString(item.recorte_id, item.source_id) ?? date;
+  return {
+    content,
+    date,
+    processNumber,
+    vara,
+    raw: item,
+    eventKey: `djen-${idPart}`,
+  };
+}
+
+function eventRows(event: JusbrasilEvent): EventRow[] {
   const processNumber = firstString(event.target_number);
 
   if (event.evt_type === 1 && Array.isArray(event.data)) {
-    return (event.data as unknown[])
-      .filter(Array.isArray)
-      .map((movement) => {
-        const tuple = movement as unknown[];
-        const date = firstDate(tuple[0], event.created_at);
-        const title = firstString(tuple[1]) ?? "Movimentação processual";
-        const detail = firstString(tuple[2]);
-        const movementId = firstString(tuple[4]) ?? date;
-        return {
-          content: detail ? `${title}: ${detail}` : title,
-          date,
-          processNumber,
-          raw: { event, movement },
-          eventKey: `mov-${movementId}`,
-        };
-      });
+    return movementTuplesToRows(event.data, event, processNumber, null);
   }
 
   const data = event.data && typeof event.data === "object" && !Array.isArray(event.data)
     ? event.data as Record<string, unknown>
-    : {};
-  const dataProcessNumber = firstString(data.numero, data.numero_processo, data.process_number, data.cnj);
+    : null;
+
+  // Snapshot completo do processo (comum no evt_type 13, "Atualização
+  // processual concluída"). Quando persistTribunalUpdate() não grava (ex.:
+  // source_user_custom não aponta para um process_search_results existente
+  // — processo vindo do monitoramento contínuo, não da busca avulsa), os
+  // movimentos reais do payload eram descartados e só sobrava o rótulo
+  // genérico abaixo. Aproveitamos os movimentos de verdade nesse caso.
+  if (data && Array.isArray(data.movs) && data.movs.length > 0) {
+    // "foro" é o texto legível ("VARA DO TRABALHO"); "vara"/"vara_original"
+    // neste formato de snapshot são só um código numérico interno do
+    // provedor (ex.: "3"), não o nome da vara.
+    const vara = firstString(data.foro, data.vara_original, data.vara);
+    const dataProcessNumber = firstString(data.numero, data.numero_processo, data.process_number, data.cnj);
+    return movementTuplesToRows(data.movs, event, processNumber ?? dataProcessNumber, vara);
+  }
+
+  // Publicação no Diário Oficial (evt_type 2) — `data` é um array de
+  // objetos com o teor integral do ato, não tuplas de movimento.
+  if (Array.isArray(event.data) && event.data.some(
+    (item) => item && typeof item === "object" && !Array.isArray(item) && typeof (item as Record<string, unknown>).texto === "string",
+  )) {
+    return (event.data as Record<string, unknown>[])
+      .filter((item) => item && typeof item === "object" && !Array.isArray(item))
+      .map((item) => djenItemToRow(item, processNumber));
+  }
+
+  const dataProcessNumber = data ? firstString(data.numero, data.numero_processo, data.process_number, data.cnj) : null;
   const resolvedProcess = processNumber ?? dataProcessNumber;
   const label = event.evt_type === 4
     ? "Nova distribuição localizada pelo JusBrasil"
@@ -90,8 +164,9 @@ function eventRows(event: JusbrasilEvent): Array<{
 
   return [{
     content: label,
-    date: firstDate(event.created_at, data.distribuicaoData, data.data_distribuicao),
+    date: firstDate(event.created_at, data?.distribuicaoData, data?.data_distribuicao),
     processNumber: resolvedProcess,
+    vara: null,
     raw: event,
     eventKey: `evt-${event.id ?? event.evt_type ?? "unknown"}`,
   }];
@@ -323,6 +398,7 @@ Deno.serve(async (req) => {
             content: row.content,
             published_date: row.date,
             process_number: row.processNumber,
+            vara: row.vara,
             case_id: caseId,
             external_id: externalId,
             raw_payload: row.raw,
