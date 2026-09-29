@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { cn } from "@/lib/utils";
 import { useLocation, useNavigate } from "react-router-dom";
 import { Sidebar } from "@/components/layout/Sidebar";
 import { MobileNav } from "@/components/layout/MobileNav";
@@ -38,6 +39,21 @@ const Index = () => {
   const { profile, hasRole } = useAuth();
   const isSupremo = hasRole("supremo");
   const navigate = useNavigate();
+  // Menu lateral do desktop: recolhido (só ícones) ou expandido. Lembra a
+  // escolha do usuário; sem escolha salva, começa recolhido em telas < 1280px
+  // (notebooks), onde o menu completo tomaria espaço demais do conteúdo.
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+    try {
+      const saved = localStorage.getItem("sidebar-collapsed");
+      if (saved !== null) return saved === "1";
+    } catch { /* storage indisponível */ }
+    return typeof window !== "undefined" && window.innerWidth < 1280;
+  });
+  const toggleSidebar = () => setSidebarCollapsed((prev) => {
+    const next = !prev;
+    try { localStorage.setItem("sidebar-collapsed", next ? "1" : "0"); } catch { /* storage indisponível */ }
+    return next;
+  });
 
   const handleOpenCase = (caseId: string) => {
     navigate(`/processos/${caseId}`, { state: { from: activeTab } });
@@ -74,7 +90,7 @@ const Index = () => {
     }
   };
 
-  return <div className="min-h-screen bg-background"><MobileNav activeTab={activeTab} onTabChange={setActiveTab} onOpenAgendaEvent={handleOpenAgendaEvent} /><Sidebar activeTab={activeTab} onTabChange={setActiveTab} onOpenAgendaEvent={handleOpenAgendaEvent} /><main className="min-w-0 p-4 pt-20 md:ml-56 md:p-6 md:pt-6 lg:ml-60 lg:p-7 xl:ml-64 xl:p-8"><DemoDataBanner />{renderContent()}</main></div>;
+  return <div className="min-h-screen bg-background"><MobileNav activeTab={activeTab} onTabChange={setActiveTab} onOpenAgendaEvent={handleOpenAgendaEvent} /><Sidebar activeTab={activeTab} onTabChange={setActiveTab} onOpenAgendaEvent={handleOpenAgendaEvent} collapsed={sidebarCollapsed} onToggleCollapsed={toggleSidebar} /><main className={cn("min-w-0 p-4 pt-20 transition-[margin] duration-200 md:p-6 md:pt-6 lg:p-7 xl:p-8", sidebarCollapsed ? "md:ml-16" : "md:ml-56 lg:ml-60 xl:ml-64")}><DemoDataBanner />{renderContent()}</main></div>;
 };
 
 export default Index;
