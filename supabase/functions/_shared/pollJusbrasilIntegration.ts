@@ -588,7 +588,8 @@ export async function pollJusbrasilIntegration(
           message: processNumber
             ? `Processo ${processNumber}${caseId ? " — processo aberto automaticamente" : ""}`
             : content.slice(0, 140),
-          link_tab: "publications",
+          link_tab: caseId ? "cases" : "publications",
+          link_id: caseId,
         });
       }
     }

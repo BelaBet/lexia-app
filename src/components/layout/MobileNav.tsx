@@ -15,6 +15,7 @@ import { useWhiteLabelSettings, DEFAULT_BRANDING } from "@/hooks/useWhiteLabelSe
 interface MobileNavProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  onOpenAgendaEvent: (eventId: string) => void;
 }
 
 const items = [
@@ -34,7 +35,7 @@ const items = [
   ["settings", "Configurações"],
 ] as const;
 
-export function MobileNav({ activeTab, onTabChange }: MobileNavProps) {
+export function MobileNav({ activeTab, onTabChange, onOpenAgendaEvent }: MobileNavProps) {
   const { hasRole } = useAuth();
   const isAdmin = hasRole("admin");
   const isSupremo = hasRole("supremo");
@@ -60,7 +61,7 @@ export function MobileNav({ activeTab, onTabChange }: MobileNavProps) {
       </div>
 
       <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-        <NotificationBell onTabChange={onTabChange} className="text-foreground hover:bg-accent" />
+        <NotificationBell onTabChange={onTabChange} onOpenAgendaEvent={onOpenAgendaEvent} className="text-foreground hover:bg-accent" />
 
         <DropdownMenu>
           <DropdownMenuTrigger asChild>

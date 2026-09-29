@@ -47,6 +47,7 @@ import {
 interface SidebarProps {
   activeTab: string;
   onTabChange: (tab: string) => void;
+  onOpenAgendaEvent: (eventId: string) => void;
 }
 const navItems = [
   { id: "dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -62,12 +63,12 @@ const navItems = [
   { id: "financial-counter", label: "Contador Financeiro", icon: Wallet },
   { id: "guide", label: "Guia de Uso", icon: BookOpen },
 ];
-const settingsSubItems = [
+const settingsSubItems: Array<{ id: string; label: string; icon: typeof Settings; adminOnly?: boolean; highlight?: boolean; premium?: boolean }> = [
   { id: "settings", label: "Preferências", icon: Settings },
   { id: "billing", label: "Planos e Pagamentos", icon: CreditCard },
   { id: "branding", label: "Marca da Plataforma", icon: Palette, adminOnly: true },
 ];
-export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
+export function Sidebar({ activeTab, onTabChange, onOpenAgendaEvent }: SidebarProps) {
   const { user, profile, signOut, hasRole } = useAuth();
   const isSupremo = hasRole("supremo");
   const isAdmin = hasRole("admin");
@@ -105,7 +106,7 @@ export function Sidebar({ activeTab, onTabChange }: SidebarProps) {
             <p className="truncate text-[11px] text-sidebar-foreground/60 xl:text-xs" title={brandTagline}>{brandTagline}</p>
           </div>
           <div className="shrink-0">
-            <NotificationBell onTabChange={onTabChange} className="text-sidebar-foreground hover:bg-sidebar-accent" />
+            <NotificationBell onTabChange={onTabChange} onOpenAgendaEvent={onOpenAgendaEvent} className="text-sidebar-foreground hover:bg-sidebar-accent" />
           </div>
         </div>
       </div>

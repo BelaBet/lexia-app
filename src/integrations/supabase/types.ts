@@ -1096,6 +1096,7 @@ export type Database = {
           id: string
           is_read: boolean
           link_tab: string | null
+          link_id: string | null
           message: string | null
           title: string
           user_id: string
@@ -1105,6 +1106,7 @@ export type Database = {
           id?: string
           is_read?: boolean
           link_tab?: string | null
+          link_id?: string | null
           message?: string | null
           title: string
           user_id: string
@@ -1114,6 +1116,7 @@ export type Database = {
           id?: string
           is_read?: boolean
           link_tab?: string | null
+          link_id?: string | null
           message?: string | null
           title?: string
           user_id?: string

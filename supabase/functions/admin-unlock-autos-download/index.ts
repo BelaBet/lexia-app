@@ -53,7 +53,7 @@ Deno.serve(async (req) => {
 
   const { data: result, error: resultError } = await adminClient
     .from("process_search_results")
-    .select("id, user_id, process_number, autos_download_locked")
+    .select("id, user_id, process_number, case_id, autos_download_locked")
     .eq("id", resultId)
     .maybeSingle();
 
@@ -87,7 +87,8 @@ Deno.serve(async (req) => {
       user_id: result.user_id,
       title: "Download de autos liberado",
       message: `Um novo download dos autos do processo ${result.process_number ?? resultId} foi liberado.`,
-      link_tab: "process-search",
+      link_tab: result.case_id ? "cases" : "process-search",
+      link_id: result.case_id,
     });
   }
 

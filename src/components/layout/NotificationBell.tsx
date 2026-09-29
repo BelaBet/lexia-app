@@ -16,13 +16,17 @@ import {
 } from "@/hooks/useAppNotifications";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
+import { useNavigate } from "react-router-dom";
+import { notificationTarget } from "@/lib/notificationTarget";
 
 interface NotificationBellProps {
   onTabChange: (tab: string) => void;
+  onOpenAgendaEvent: (eventId: string) => void;
   className?: string;
 }
 
-export function NotificationBell({ onTabChange, className }: NotificationBellProps) {
+export function NotificationBell({ onTabChange, onOpenAgendaEvent, className }: NotificationBellProps) {
+  const navigate = useNavigate();
   const { data: notifications = [] } = useAppNotifications();
   const markRead = useMarkAppNotificationRead();
   const markAllRead = useMarkAllAppNotificationsRead();
@@ -70,7 +74,10 @@ export function NotificationBell({ onTabChange, className }: NotificationBellPro
                 className="flex flex-col items-start gap-0.5 whitespace-normal py-2"
                 onClick={() => {
                   if (!n.is_read) markRead.mutate(n.id);
-                  if (n.link_tab) onTabChange(n.link_tab);
+                  const target = notificationTarget(n);
+                  if (target?.kind === "case") navigate(`/processos/${target.id}`);
+                  else if (target?.kind === "event") onOpenAgendaEvent(target.id);
+                  else if (target?.kind === "tab") onTabChange(target.tab);
                 }}
               >
                 <div className="flex items-center gap-1.5 w-full">

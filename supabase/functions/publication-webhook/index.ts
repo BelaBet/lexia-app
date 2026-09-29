@@ -297,6 +297,8 @@ Deno.serve(async (req) => {
   }
 
   let imported = 0;
+  let singleImportedCaseId: string | null = null;
+  let singleImportedProcessNumber: string | null = null;
 
   // Prazo "priorizado": carrega os bloqueios/feriados desta conta uma
   // única vez por chamada de webhook e usa para corrigir cada prazo cru
@@ -352,6 +354,8 @@ Deno.serve(async (req) => {
     }
     if (inserted) {
       imported += 1;
+      singleImportedCaseId = imported === 1 ? caseId : null;
+      singleImportedProcessNumber = imported === 1 ? row.processNumber : null;
       await syncDeadlineEvents(adminClient, userId, {
         id: inserted.id,
         case_id: caseId,
@@ -376,10 +380,11 @@ Deno.serve(async (req) => {
     const { error: notifError } = await adminClient.from("notifications").insert({
       user_id: userId,
       title: `${imported} nova(s) publicação(ões) importada(s) via ${sourceLabels[source]}`,
-      message: rows[0]?.processNumber
-        ? `Inclui o processo ${rows[0].processNumber}`
+      message: imported === 1 && singleImportedProcessNumber
+        ? `Processo ${singleImportedProcessNumber}`
         : "Confira em Publicações.",
-      link_tab: "publications",
+      link_tab: imported === 1 && singleImportedCaseId ? "cases" : "publications",
+      link_id: imported === 1 ? singleImportedCaseId : null,
     });
     if (notifError) console.error("Error creating notification:", notifError);
   }
