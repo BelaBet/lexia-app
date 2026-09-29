@@ -138,7 +138,18 @@ export async function syncCaseDetails(
     const sourceUrl = typeof item[1] === "string" ? item[1] : null;
     const title = typeof item[7] === "string" && item[7].trim() ? item[7].trim() : `Anexo ${item[0] ?? ""}`.trim();
     if (!sourceUrl) continue;
-    const { data: exists, error: existsError } = await admin.from("process_search_documents").select("id").eq("result_id", result.id).eq("source_url", sourceUrl).maybeSingle();
+    // CORRIGIDO: a URL assinada (item[1]) muda a cada consulta ao provedor
+    // mesmo para o MESMO documento (Google Cloud Storage reassina a URL
+    // com Signature/Expires novos a cada request) — deduplicar por
+    // source_url fazia cada sincronização regravar os mesmos anexos como
+    // "novos", duplicando a lista de autos indefinidamente a cada rodada
+    // diária. O provedor traz um identificador estável na primeira posição
+    // da tupla (item[0]); usamos ele para deduplicar de verdade.
+    const providerId = item[0] !== undefined && item[0] !== null ? String(item[0]) : null;
+    const dedupQuery = admin.from("process_search_documents").select("id").eq("result_id", result.id);
+    const { data: exists, error: existsError } = await (
+      providerId ? dedupQuery.eq("provider_document_id", providerId) : dedupQuery.eq("source_url", sourceUrl)
+    ).maybeSingle();
     if (existsError) throw new Error(`Falha ao verificar anexo já registrado: ${existsError.message}`);
     if (!exists) {
       const { error: insertError } = await admin.from("process_search_documents").insert({
@@ -149,8 +160,17 @@ export async function syncCaseDetails(
         file_size: null,
         file_type: "application/pdf",
         source_url: sourceUrl,
+        provider_document_id: providerId,
       });
       if (insertError) throw new Error(`Falha ao registrar anexo: ${insertError.message}`);
+    } else if (providerId) {
+      // O anexo já existe (mesmo provider_document_id) mas a URL assinada
+      // mudou desde o último registro — atualiza o file_path/source_url
+      // para o link válido mais recente, sem criar uma linha duplicada.
+      const { error: updateDocError } = await admin.from("process_search_documents")
+        .update({ file_path: sourceUrl, source_url: sourceUrl })
+        .eq("id", exists.id);
+      if (updateDocError) throw new Error(`Falha ao atualizar link do anexo: ${updateDocError.message}`);
     }
   }
 
