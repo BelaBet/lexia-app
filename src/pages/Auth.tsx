@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { supabase } from "@/integrations/supabase/client";
 import { Button } from "@/components/ui/button";
@@ -15,6 +15,9 @@ import { useWhiteLabelSettings, DEFAULT_BRANDING } from "@/hooks/useWhiteLabelSe
 import { useMfaChallengeRequired } from "@/hooks/useMfa";
 export default function Auth() {
   const { user, signIn, signUp, signOut, loading } = useAuth();
+  const location = useLocation();
+  const fromLocation = (location.state as { from?: { pathname: string; search: string } } | null)?.from;
+  const redirectTo = fromLocation ? `${fromLocation.pathname}${fromLocation.search}` : "/";
   const { data: branding } = useWhiteLabelSettings();
   const brandName = branding?.brand_name || DEFAULT_BRANDING.brand_name;
   const brandTagline = branding?.tagline || DEFAULT_BRANDING.tagline;
@@ -136,7 +139,7 @@ export default function Auth() {
   }
 
   if (user) {
-    return <Navigate to="/" replace />;
+    return <Navigate to={redirectTo} replace />;
   }
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -337,7 +340,15 @@ export default function Auth() {
           </Tabs>
         </Card>
         <p className="text-center text-sm text-muted-foreground mt-6">
-          Ao continuar, você concorda com nossos Termos de Serviço e Política de Privacidade.
+          Ao continuar, você concorda com nossos{" "}
+          <a href="/termos" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+            Termos de Serviço
+          </a>{" "}
+          e{" "}
+          <a href="/privacidade" target="_blank" rel="noopener noreferrer" className="underline hover:text-foreground">
+            Política de Privacidade
+          </a>
+          .
         </p>
       </div>
     </div>

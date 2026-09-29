@@ -1225,6 +1225,7 @@ export type Database = {
           file_size: number | null
           file_type: string | null
           id: string
+          provider_document_id: string | null
           result_id: string
           source_url: string | null
           user_id: string
@@ -1236,6 +1237,7 @@ export type Database = {
           file_size?: number | null
           file_type?: string | null
           id?: string
+          provider_document_id?: string | null
           result_id: string
           source_url?: string | null
           user_id: string
@@ -1247,6 +1249,7 @@ export type Database = {
           file_size?: number | null
           file_type?: string | null
           id?: string
+          provider_document_id?: string | null
           result_id?: string
           source_url?: string | null
           user_id?: string

@@ -8,6 +8,7 @@ import { Label } from "@/components/ui/label";
 import { supabase } from "@/integrations/supabase/client";
 import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
+import { useWhiteLabelSettings, DEFAULT_BRANDING } from "@/hooks/useWhiteLabelSettings";
 
 // Stripe Price IDs for Supremo plan
 const SUPREMO_PRICES = {
@@ -41,6 +42,8 @@ export default function Pricing() {
   const [isYearly, setIsYearly] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
+  const { data: branding } = useWhiteLabelSettings();
+  const brandName = branding?.brand_name || DEFAULT_BRANDING.brand_name;
 
   const currentPlan = isYearly ? SUPREMO_PRICES.yearly : SUPREMO_PRICES.monthly;
 
@@ -104,7 +107,7 @@ export default function Pricing() {
             </span>
           </h1>
           <p className="text-lg text-muted-foreground">
-            Acesso completo a todas as funcionalidades do LexIA com recursos exclusivos,
+            Acesso completo a todas as funcionalidades do {brandName} com recursos exclusivos,
             integrações avançadas e suporte prioritário.
           </p>
         </div>
