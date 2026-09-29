@@ -203,13 +203,16 @@ function findConflictingLawyerKeys(activeParties: JsonRecord[], passiveParties: 
 // fazendo o mesmo nome aparecer nos dois lados. Quando a parte tem outros
 // advogados que são só dela, o advogado compartilhado é descartado ali — ele
 // pertence ao outro polo. Se ele for o único advogado das partes dos dois
-// lados, não há como saber o lado certo: mantém e sinaliza para conferência.
-function removeOpposingLawyers(parties: JsonRecord[], conflicts: Set<string>): JsonRecord[] {
+// lados, não há como saber o lado certo pelos dados: ele fica só no autor
+// (nos casos resolvíveis o advogado vaza para o réu na grande maioria das
+// vezes) e é sinalizado para conferência.
+function removeOpposingLawyers(parties: JsonRecord[], conflicts: Set<string>, keepSharedOnly = true): JsonRecord[] {
   if (!conflicts.size) return parties;
   return parties.map((party) => {
     const lawyers = Array.isArray(party?.advogados) ? party.advogados as JsonRecord[] : [];
     const own = lawyers.filter((lawyer) => !conflicts.has(lawyerKey(lawyer)));
-    return own.length && own.length < lawyers.length ? { ...party, advogados: own } : party;
+    if (own.length === lawyers.length) return party;
+    return own.length || !keepSharedOnly ? { ...party, advogados: own } : party;
   });
 }
 
@@ -241,7 +244,7 @@ function PartyTable({ title, rows, conflictingLawyerKeys }: { title: string; row
                           <div key={`${lawyerKey(lawyer)}-${lawyerIndex}`} className="flex items-center gap-1.5">
                             {lawyerName(lawyer)}
                             {conflictingLawyerKeys.has(lawyerKey(lawyer)) && (
-                              <span title="Este advogado também consta na parte contrária deste processo, segundo o provedor de dados — confira a fonte antes de considerar definitivo.">
+                              <span title="O provedor de dados também lista este advogado na parte contrária deste processo; ele foi mantido só aqui — confira a fonte antes de considerar definitivo.">
                                 <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
                               </span>
                             )}
@@ -470,9 +473,11 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
   const dedupedPassive = dedupeParties(passiveFromProvider.length ? passiveFromProvider : storedPassive);
   const sharedLawyerKeys = findConflictingLawyerKeys(dedupedActive, dedupedPassive);
   const activeParties = removeOpposingLawyers(dedupedActive, sharedLawyerKeys);
-  const passiveParties = removeOpposingLawyers(dedupedPassive, sharedLawyerKeys);
-  // Só sinaliza o que continuou nos dois lados depois da limpeza acima.
-  const conflictingLawyerKeys = findConflictingLawyerKeys(activeParties, passiveParties);
+  const passiveCleaned = removeOpposingLawyers(dedupedPassive, sharedLawyerKeys);
+  // O que continuou nos dois lados (único advogado dos dois polos) fica só no
+  // autor e é sinalizado lá.
+  const conflictingLawyerKeys = findConflictingLawyerKeys(activeParties, passiveCleaned);
+  const passiveParties = removeOpposingLawyers(passiveCleaned, conflictingLawyerKeys, false);
   const classesFromProvider = rawArray(raw.classes).map((item) => text(item).trim()).filter(Boolean);
   const assuntoExtra = text(raw.assuntoExtra).split(",").map((item) => item.trim()).filter(Boolean);
   // "Motivos / assuntos" vêm de campos estruturados do provedor. Nunca
