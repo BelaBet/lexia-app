@@ -47,17 +47,53 @@ interface PublicationKanbanProps {
 export function PublicationKanban({ publications }: PublicationKanbanProps) {
   const navigate = useNavigate();
   const updateStage = useUpdatePublicationStage();
+  const [draggedId, setDraggedId] = useState<string | null>(null);
+  const [targetStage, setTargetStage] = useState<PipelineStage | null>(null);
+  const [optimisticStages, setOptimisticStages] = useState<Record<string, PipelineStage>>({});
+  const lastDragEnd = useRef(0);
+
+  useEffect(() => {
+    setOptimisticStages((previous) => {
+      const next = { ...previous };
+      for (const pub of publications) {
+        if (next[pub.id] === pub.pipeline_stage) delete next[pub.id];
+      }
+      return Object.keys(next).length === Object.keys(previous).length ? previous : next;
+    });
+  }, [publications]);
 
   const byStage = useMemo(() => {
     const map = new Map<PipelineStage, Publication[]>();
     for (const stage of PIPELINE_STAGES) map.set(stage.value, []);
     for (const pub of publications) {
-      const list = map.get(pub.pipeline_stage);
+      const stage = optimisticStages[pub.id] ?? pub.pipeline_stage;
+      const list = map.get(stage);
       if (list) list.push(pub);
-      else map.set(pub.pipeline_stage, [pub]);
+      else map.set(stage, [pub]);
     }
     return map;
-  }, [publications]);
+  }, [publications, optimisticStages]);
+
+  const movePublication = (id: string, stage: PipelineStage) => {
+    const publication = publications.find((pub) => pub.id === id);
+    if (!publication || updateStage.isPending || (optimisticStages[id] ?? publication.pipeline_stage) === stage) return;
+    setOptimisticStages((previous) => ({ ...previous, [id]: stage }));
+    updateStage.mutate({ id, pipeline_stage: stage }, {
+      onError: () => {
+        setOptimisticStages((previous) => {
+          const next = { ...previous };
+          delete next[id];
+          return next;
+        });
+      },
+    });
+  };
+
+  const finishDrag = () => {
+    lastDragEnd.current = Date.now();
+    setDraggedId(null);
+    setTargetStage(null);
+  };
 
   // Com colunas longas, a barra de rolagem nativa do quadro fica lá embaixo,
   // fora da tela. Esta barra fica presa no rodapé da janela e rola o quadro
@@ -97,18 +133,51 @@ export function PublicationKanban({ publications }: PublicationKanbanProps) {
     boardRef.current?.scrollBy({ left: direction * 336, behavior: "smooth" });
   };
 
+  const scrollWhileDragging = (clientX: number) => {
+    const board = boardRef.current;
+    if (!board || !draggedId) return;
+    const bounds = board.getBoundingClientRect();
+    if (clientX < bounds.left + 48) board.scrollLeft -= 18;
+    else if (clientX > bounds.right - 48) board.scrollLeft += 18;
+  };
+
   return (
     <div>
+    <p className="mb-3 text-xs text-muted-foreground">Arraste uma publicação para outra coluna ou altere a etapa pelo seletor do cartão.</p>
     <div
       ref={boardRef}
       onScroll={() => syncScroll(boardRef.current, barRef.current)}
+      onDragOver={(event) => scrollWhileDragging(event.clientX)}
       className="overflow-x-auto pb-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
     >
     <div className="flex w-max gap-4">
       {PIPELINE_STAGES.map((stage) => {
         const items = byStage.get(stage.value) || [];
         return (
-          <div key={stage.value} className="w-80 shrink-0">
+          <div
+            key={stage.value}
+            className={cn("w-80 shrink-0 rounded-lg transition-colors", draggedId && targetStage === stage.value && "bg-primary/10 ring-2 ring-primary/40")}
+            onDragEnter={(event) => {
+              if (draggedId && !updateStage.isPending) {
+                event.preventDefault();
+                setTargetStage(stage.value);
+              }
+            }}
+            onDragOver={(event) => {
+              if (draggedId && !updateStage.isPending) {
+                event.preventDefault();
+                event.dataTransfer.dropEffect = "move";
+              }
+            }}
+            onDragLeave={(event) => {
+              if (!event.currentTarget.contains(event.relatedTarget as Node)) setTargetStage(null);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              if (draggedId) movePublication(draggedId, stage.value);
+              finishDrag();
+            }}
+          >
             <div className="flex items-center justify-between mb-2 px-1">
               <p className="text-sm font-semibold">{stage.label}</p>
               <Badge variant="outline" className="text-xs">{items.length}</Badge>
@@ -117,8 +186,18 @@ export function PublicationKanban({ publications }: PublicationKanbanProps) {
               {items.map((pub) => (
                 <Card
                   key={pub.id}
-                  className="hover:shadow-md transition-shadow cursor-pointer"
-                  onClick={() => navigate(`/publicacoes/${pub.id}`, { state: { from: "publications" } })}
+                  draggable={!updateStage.isPending}
+                  onDragStart={(event) => {
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", pub.id);
+                    setDraggedId(pub.id);
+                  }}
+                  onDragEnd={finishDrag}
+                  className={cn("hover:shadow-md transition-opacity cursor-grab active:cursor-grabbing", draggedId === pub.id && "opacity-50")}
+                  onClick={() => {
+                    if (Date.now() - lastDragEnd.current < 300) return;
+                    navigate(`/publicacoes/${pub.id}`, { state: { from: "publications" } });
+                  }}
                 >
                   <CardContent className="p-3 space-y-2">
                     <div className="flex items-center gap-1.5 flex-wrap">
@@ -137,8 +216,9 @@ export function PublicationKanban({ publications }: PublicationKanbanProps) {
                     )}
                     <div onClick={(e) => e.stopPropagation()}>
                       <Select
-                        value={pub.pipeline_stage}
-                        onValueChange={(value) => updateStage.mutate({ id: pub.id, pipeline_stage: value as PipelineStage })}
+                        value={optimisticStages[pub.id] ?? pub.pipeline_stage}
+                        onValueChange={(value) => movePublication(pub.id, value as PipelineStage)}
+                        disabled={updateStage.isPending}
                       >
                         <SelectTrigger className="h-7 text-xs">
                           <SelectValue />
