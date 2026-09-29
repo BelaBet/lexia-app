@@ -5,6 +5,7 @@
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2.57.0";
 import { buildCorsHeaders } from "../_shared/cors.ts";
+import { dedupeLawyers, dedupeParties } from "../_shared/dedupeParties.ts";
 import { getJusbrasilApiToken } from "../_shared/jusbrasilToken.ts";
 
 const JUSBRASIL_API_BASE_URL = "https://op.digesto.com.br";
@@ -140,9 +141,9 @@ async function fetchExport(apiToken: string, providerReportId: string): Promise<
 
 function mapFinalSource(source: Record<string, unknown>): NameSearchRow {
   const partes = Array.isArray(source.partes) ? source.partes.filter((p) => p && typeof p === "object") as Record<string, unknown>[] : [];
-  const partesAtivas = partes.filter((p) => truthy(p.is_autora) || truthy(p.is_coautora));
-  const partesPassivas = partes.filter((p) => truthy(p.is_re));
-  const advogados = partes.flatMap((p) => Array.isArray(p.advogados) ? p.advogados : []).filter(Boolean);
+  const partesAtivas = dedupeParties(partes.filter((p) => truthy(p.is_autora) || truthy(p.is_coautora)));
+  const partesPassivas = dedupeParties(partes.filter((p) => truthy(p.is_re)));
+  const advogados = dedupeLawyers(partes.flatMap((p) => Array.isArray(p.advogados) ? p.advogados : []).filter(Boolean));
   const ultima = source.ultimaMovimentacao && typeof source.ultimaMovimentacao === "object" ? source.ultimaMovimentacao as Record<string, unknown> : {};
   const status: string[] = [];
   if (str(source.situacao)) status.push(str(source.situacao)!);
