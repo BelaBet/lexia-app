@@ -49,8 +49,16 @@ export default function PortalRequests() {
     const requestId = activeRequestId;
     if (!file || !caseId || !requestId) return;
     try {
-      await uploadMutation.mutateAsync({ caseId, file, uploadedBy: "client", requestId });
-      toast.success("Documento enviado — solicitação concluída!");
+      const result = await uploadMutation.mutateAsync({ caseId, file, uploadedBy: "client", requestId });
+      // CORRIGIDO (falso sucesso): antes esta mensagem era exibida sempre
+      // que o upload em si desse certo, mesmo que marcar a solicitação
+      // como "fulfilled" tivesse falhado — o documento estava salvo, mas a
+      // solicitação continuava pendente enquanto a tela dizia "concluída".
+      if (result.requestFulfillmentFailed) {
+        toast.warning("Documento enviado, mas não foi possível concluir a solicitação. Atualize a página e tente novamente.");
+      } else {
+        toast.success("Documento enviado — solicitação concluída!");
+      }
     } catch (err) {
       toast.error("Erro ao enviar documento", { description: err instanceof Error ? err.message : undefined });
     } finally {

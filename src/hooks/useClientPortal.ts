@@ -225,12 +225,26 @@ export function useUploadClientDocument() {
         throw insertError;
       }
 
+      // CORRIGIDO (falso sucesso): o {error} deste UPDATE nunca era
+      // verificado — o documento já tinha sido salvo com sucesso (upload +
+      // insert acima), mas se só esta última etapa falhasse, a mutation
+      // ainda resolvia normalmente e a tela dizia "solicitação concluída"
+      // mesmo com a solicitação continuando "pending" no banco. Retorna um
+      // indicador para quem chamou mostrar uma mensagem que reflita o que
+      // realmente aconteceu, em vez de lançar erro (o documento FOI
+      // enviado com sucesso; só o status da solicitação não avançou).
+      let requestFulfillmentFailed = false;
       if (requestId) {
-        await supabase
+        const { error: fulfillError } = await supabase
           .from("client_requests")
           .update({ status: "fulfilled", fulfilled_at: new Date().toISOString() })
           .eq("id", requestId);
+        if (fulfillError) {
+          console.error("Error marking client request as fulfilled:", fulfillError);
+          requestFulfillmentFailed = true;
+        }
       }
+      return { requestFulfillmentFailed };
     },
     onSuccess: (_data, variables) => {
       queryClient.invalidateQueries({ queryKey: ["portal", "documents", variables.caseId] });
