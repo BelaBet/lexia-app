@@ -1,4 +1,4 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
@@ -172,11 +172,23 @@ function ExistingCasesTracking() {
   );
 }
 
-export function PublicationsManager() {
+interface PublicationsManagerProps {
+  // Avisado quando a visão Kanban abre/fecha, para o layout recolher o menu
+  // lateral e dar largura às colunas.
+  onKanbanActiveChange?: (active: boolean) => void;
+}
+
+export function PublicationsManager({ onKanbanActiveChange }: PublicationsManagerProps = {}) {
   const navigate = useNavigate();
   const [statusFilter, setStatusFilter] = useState<PublicationStatus | "all">("all");
   const [editing, setEditing] = useState<Publication | null>(null);
   const [view, setView] = useState<"lista" | "kanban">("lista");
+
+  useEffect(() => {
+    if (view !== "kanban") return;
+    onKanbanActiveChange?.(true);
+    return () => onKanbanActiveChange?.(false);
+  }, [view, onKanbanActiveChange]);
 
   const { data: publications = [], isLoading } = usePublications(
     statusFilter !== "all" ? { status: statusFilter } : undefined

@@ -49,11 +49,17 @@ const Index = () => {
     } catch { /* storage indisponível */ }
     return typeof window !== "undefined" && window.innerWidth < 1280;
   });
-  const toggleSidebar = () => setSidebarCollapsed((prev) => {
-    const next = !prev;
+  // Recolhimento automático de telas que precisam de largura (ex.: Kanban de
+  // Publicações). Não altera a preferência salva: ao sair dessas telas o menu
+  // volta ao estado escolhido pelo usuário.
+  const [autoCollapsed, setAutoCollapsed] = useState(false);
+  const isSidebarCollapsed = sidebarCollapsed || autoCollapsed;
+  const toggleSidebar = () => {
+    const next = !isSidebarCollapsed;
+    setAutoCollapsed(false);
+    setSidebarCollapsed(next);
     try { localStorage.setItem("sidebar-collapsed", next ? "1" : "0"); } catch { /* storage indisponível */ }
-    return next;
-  });
+  };
 
   const handleOpenCase = (caseId: string) => {
     navigate(`/processos/${caseId}`, { state: { from: activeTab } });
@@ -76,7 +82,7 @@ const Index = () => {
       case "checklists": return <ChecklistsManager />;
       case "guide": return <GuidePage />;
       case "calendar": return <CalendarView onOpenCase={handleOpenCase} focusEventId={focusedAgendaEventId} onFocusEventHandled={() => setFocusedAgendaEventId(null)} />;
-      case "publications": return <PublicationsManager />;
+      case "publications": return <PublicationsManager onKanbanActiveChange={setAutoCollapsed} />;
       case "financial-counter": return <ProcessSearchFinancialCounter />;
       case "profile": return <ProfilePage />;
       case "branding": return <BrandingSettings />;
@@ -90,7 +96,7 @@ const Index = () => {
     }
   };
 
-  return <div className="min-h-screen bg-background"><MobileNav activeTab={activeTab} onTabChange={setActiveTab} onOpenAgendaEvent={handleOpenAgendaEvent} /><Sidebar activeTab={activeTab} onTabChange={setActiveTab} onOpenAgendaEvent={handleOpenAgendaEvent} collapsed={sidebarCollapsed} onToggleCollapsed={toggleSidebar} /><main className={cn("min-w-0 p-4 pt-20 transition-[margin] duration-200 md:p-6 md:pt-6 lg:p-7 xl:p-8", sidebarCollapsed ? "md:ml-16" : "md:ml-56 lg:ml-60 xl:ml-64")}><DemoDataBanner />{renderContent()}</main></div>;
+  return <div className="min-h-screen bg-background"><MobileNav activeTab={activeTab} onTabChange={setActiveTab} onOpenAgendaEvent={handleOpenAgendaEvent} /><Sidebar activeTab={activeTab} onTabChange={setActiveTab} onOpenAgendaEvent={handleOpenAgendaEvent} collapsed={isSidebarCollapsed} onToggleCollapsed={toggleSidebar} /><main className={cn("min-w-0 p-4 pt-20 transition-[margin] duration-200 md:p-6 md:pt-6 lg:p-7 xl:p-8", isSidebarCollapsed ? "md:ml-16" : "md:ml-56 lg:ml-60 xl:ml-64")}><DemoDataBanner />{renderContent()}</main></div>;
 };
 
 export default Index;
