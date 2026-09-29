@@ -107,12 +107,26 @@ Deno.serve(async (req) => {
       user_metadata: { full_name: fullName, company_id: companyId },
     });
 
-    if (createError) {
+    if (createError || !createdData?.user?.id) {
       console.error("invite-company-member: createUser error", createError);
       return json({ error: "Erro ao criar o usuário" }, 500);
     }
 
-    return json({ success: true, user_id: createdData?.user?.id ?? null, company: company.name, already_existed: false, password_set: true });
+    // A associação ao tenant é feita exclusivamente pelo backend com
+    // service-role. O trigger de cadastro nunca confia em company_id vindo
+    // de user_metadata, evitando autoassociação a outra empresa.
+    const createdUserId = createdData.user.id;
+    const { error: linkError } = await admin
+      .from("profiles")
+      .update({ company_id: companyId })
+      .eq("user_id", createdUserId);
+    if (linkError) {
+      console.error("invite-company-member: error linking created user", linkError);
+      await admin.auth.admin.deleteUser(createdUserId).catch(() => undefined);
+      return json({ error: "A conta foi criada, mas não foi possível associá-la à empresa" }, 500);
+    }
+
+    return json({ success: true, user_id: createdUserId, company: company.name, already_existed: false, password_set: true });
   }
 
   const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
@@ -120,10 +134,21 @@ Deno.serve(async (req) => {
     data: { full_name: fullName, company_id: companyId },
   });
 
-  if (inviteError) {
+  if (inviteError || !inviteData?.user?.id) {
     console.error("invite-company-member: invite error", inviteError);
     return json({ error: "Erro ao enviar o convite por e-mail" }, 500);
   }
 
-  return json({ success: true, user_id: inviteData?.user?.id ?? null, company: company.name, already_existed: false, password_set: false });
+  const invitedUserId = inviteData.user.id;
+  const { error: linkInviteError } = await admin
+    .from("profiles")
+    .update({ company_id: companyId })
+    .eq("user_id", invitedUserId);
+  if (linkInviteError) {
+    console.error("invite-company-member: error linking invited user", linkInviteError);
+    await admin.auth.admin.deleteUser(invitedUserId).catch(() => undefined);
+    return json({ error: "O convite foi criado, mas não foi possível associar o usuário à empresa" }, 500);
+  }
+
+  return json({ success: true, user_id: invitedUserId, company: company.name, already_existed: false, password_set: false });
 });
