@@ -182,8 +182,6 @@ function dedupeParties(parties: JsonRecord[]): JsonRecord[] {
 
 // Coleta as chaves de advogado que aparecem tanto do lado do autor quanto do
 // réu — um mesmo advogado não pode representar as duas partes de uma ação.
-// Quando isso acontece, o dado veio assim do provedor (JusBrasil); nunca
-// inferimos qual lado está "certo", só sinalizamos para conferência.
 function findConflictingLawyerKeys(activeParties: JsonRecord[], passiveParties: JsonRecord[]): Set<string> {
   const collect = (parties: JsonRecord[]) => {
     const keys = new Set<string>();
@@ -198,6 +196,21 @@ function findConflictingLawyerKeys(activeParties: JsonRecord[], passiveParties: 
   const conflicts = new Set<string>();
   activeKeys.forEach((key) => { if (passiveKeys.has(key)) conflicts.add(key); });
   return conflicts;
+}
+
+// O provedor às vezes anexa o advogado de um polo também a uma parte do polo
+// contrário (ex.: o advogado do autor listado junto dos advogados do réu),
+// fazendo o mesmo nome aparecer nos dois lados. Quando a parte tem outros
+// advogados que são só dela, o advogado compartilhado é descartado ali — ele
+// pertence ao outro polo. Se ele for o único advogado das partes dos dois
+// lados, não há como saber o lado certo: mantém e sinaliza para conferência.
+function removeOpposingLawyers(parties: JsonRecord[], conflicts: Set<string>): JsonRecord[] {
+  if (!conflicts.size) return parties;
+  return parties.map((party) => {
+    const lawyers = Array.isArray(party?.advogados) ? party.advogados as JsonRecord[] : [];
+    const own = lawyers.filter((lawyer) => !conflicts.has(lawyerKey(lawyer)));
+    return own.length && own.length < lawyers.length ? { ...party, advogados: own } : party;
+  });
 }
 
 function PartyTable({ title, rows, conflictingLawyerKeys }: { title: string; rows: JsonRecord[]; conflictingLawyerKeys: Set<string> }) {
@@ -218,24 +231,32 @@ function PartyTable({ title, rows, conflictingLawyerKeys }: { title: string; row
               const lawyers = Array.isArray(party?.advogados)
                 ? (party.advogados as unknown[]).map(normalizeLawyer).filter((item): item is JsonRecord => Boolean(item))
                 : [];
-              const first = lawyers[0];
-              const hasConflict = Boolean(first) && conflictingLawyerKeys.has(lawyerKey(first));
               return (
                 <tr key={`${text(party?.nomeParte)}-${index}`} className="border-t align-top">
                   <td className="px-3 py-3 font-medium">{text(party?.nomeParte) || "—"}</td>
                   <td className="px-3 py-3">
-                    {first ? (
-                      <span className="inline-flex items-center gap-1.5">
-                        {lawyerName(first)}
-                        {hasConflict && (
-                          <span title="Este advogado também consta na parte contrária deste processo, segundo o provedor de dados — confira a fonte antes de considerar definitivo.">
-                            <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
-                          </span>
-                        )}
-                      </span>
+                    {lawyers.length ? (
+                      <div className="space-y-1">
+                        {lawyers.map((lawyer, lawyerIndex) => (
+                          <div key={`${lawyerKey(lawyer)}-${lawyerIndex}`} className="flex items-center gap-1.5">
+                            {lawyerName(lawyer)}
+                            {conflictingLawyerKeys.has(lawyerKey(lawyer)) && (
+                              <span title="Este advogado também consta na parte contrária deste processo, segundo o provedor de dados — confira a fonte antes de considerar definitivo.">
+                                <AlertTriangle className="h-3.5 w-3.5 shrink-0 text-amber-500" />
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
                     ) : "—"}
                   </td>
-                  <td className="px-3 py-3">{first ? lawyerOab(first) : "—"}</td>
+                  <td className="px-3 py-3">
+                    {lawyers.length ? (
+                      <div className="space-y-1">
+                        {lawyers.map((lawyer, lawyerIndex) => <div key={`${lawyerKey(lawyer)}-${lawyerIndex}`}>{lawyerOab(lawyer)}</div>)}
+                      </div>
+                    ) : "—"}
+                  </td>
                 </tr>
               );
             }) : (
@@ -445,8 +466,12 @@ export function JusbrasilCaseDetails({ caseId }: { caseId: string }) {
   const storedPassive = safeArray(data.partes_passivas);
   const activeFromProvider = providerParties.filter((p) => Boolean(p.is_autora) || /AUTOR|ATIVO/i.test(text(p.relacaoNormalizado)));
   const passiveFromProvider = providerParties.filter((p) => Boolean(p.is_re) || /REU|RÉU|PASSIVO/i.test(text(p.relacaoNormalizado)));
-  const activeParties = dedupeParties(activeFromProvider.length ? activeFromProvider : storedActive);
-  const passiveParties = dedupeParties(passiveFromProvider.length ? passiveFromProvider : storedPassive);
+  const dedupedActive = dedupeParties(activeFromProvider.length ? activeFromProvider : storedActive);
+  const dedupedPassive = dedupeParties(passiveFromProvider.length ? passiveFromProvider : storedPassive);
+  const sharedLawyerKeys = findConflictingLawyerKeys(dedupedActive, dedupedPassive);
+  const activeParties = removeOpposingLawyers(dedupedActive, sharedLawyerKeys);
+  const passiveParties = removeOpposingLawyers(dedupedPassive, sharedLawyerKeys);
+  // Só sinaliza o que continuou nos dois lados depois da limpeza acima.
   const conflictingLawyerKeys = findConflictingLawyerKeys(activeParties, passiveParties);
   const classesFromProvider = rawArray(raw.classes).map((item) => text(item).trim()).filter(Boolean);
   const assuntoExtra = text(raw.assuntoExtra).split(",").map((item) => item.trim()).filter(Boolean);
