@@ -9,6 +9,8 @@ import { BrandingProvider } from "@/components/layout/BrandingProvider";
 import Index from "./pages/Index";
 import Auth from "./pages/Auth";
 import Pricing from "./pages/Pricing";
+import Terms from "./pages/Terms";
+import PrivacyPolicy from "./pages/PrivacyPolicy";
 import NotFound from "./pages/NotFound";
 import ResetPassword from "./pages/ResetPassword";
 import CaseDetails from "./pages/CaseDetails";
@@ -33,6 +35,8 @@ const App = () => (
               <Route path="/auth" element={<Auth />} />
               <Route path="/reset-password" element={<ResetPassword />} />
               <Route path="/pricing" element={<Pricing />} />
+              <Route path="/termos" element={<Terms />} />
+              <Route path="/privacidade" element={<PrivacyPolicy />} />
               <Route path="/empresa/definir-senha" element={<EmpresaSetPassword />} />
               {/* Espaço do Cliente — Meu Jurídico (login e telas próprias do cliente do escritório) */}
               <Route path="/portal/entrar" element={<PortalAuth />} />

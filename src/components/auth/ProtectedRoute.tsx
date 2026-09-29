@@ -1,4 +1,4 @@
-import { Navigate } from "react-router-dom";
+import { Navigate, useLocation } from "react-router-dom";
 import { useAuth } from "@/contexts/AuthContext";
 import { useMfaChallengeRequired } from "@/hooks/useMfa";
 import { Loader2 } from "lucide-react";
@@ -14,6 +14,7 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
   // app mesmo com 2FA ativado — bastava abrir "/" direto numa aba nova
   // (ou digitar a URL) sem passar pelo desafio mostrado em /auth.
   const { checking: checkingMfa, required: mfaRequired } = useMfaChallengeRequired(user);
+  const location = useLocation();
 
   if (loading || checkingMfa) {
     return (
@@ -23,12 +24,14 @@ export function ProtectedRoute({ children, requiredRole }: ProtectedRouteProps) 
     );
   }
 
+  // Preserva a página solicitada (ex.: /processos/:id) para que o login
+  // redirecione de volta a ela em vez de sempre cair em "/".
   if (!user) {
-    return <Navigate to="/auth" replace />;
+    return <Navigate to="/auth" replace state={{ from: location }} />;
   }
 
   if (mfaRequired) {
-    return <Navigate to="/auth" replace />;
+    return <Navigate to="/auth" replace state={{ from: location }} />;
   }
 
   if (requiredRole && !hasRole(requiredRole)) {

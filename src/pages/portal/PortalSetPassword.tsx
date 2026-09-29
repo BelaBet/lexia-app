@@ -87,7 +87,7 @@ export default function PortalSetPassword() {
                 : "Este link de convite expirou ou já foi usado. Peça ao seu advogado para enviar um novo convite."}
             </CardDescription>
           </CardHeader>
-          {hasSession && (
+          {hasSession ? (
             <CardContent>
               <form onSubmit={handleSubmit} className="space-y-4">
                 <div className="space-y-2">
@@ -109,6 +109,12 @@ export default function PortalSetPassword() {
                   )}
                 </Button>
               </form>
+            </CardContent>
+          ) : (
+            <CardContent>
+              <Button variant="outline" className="w-full" onClick={() => navigate("/portal/entrar")}>
+                Voltar para o login
+              </Button>
             </CardContent>
           )}
         </Card>
