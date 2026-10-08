@@ -1483,6 +1483,7 @@ export type Database = {
         Row: {
           avatar_url: string | null
           company_id: string | null
+          cpf: string | null
           created_at: string
           full_name: string | null
           id: string
@@ -1495,6 +1496,7 @@ export type Database = {
         Insert: {
           avatar_url?: string | null
           company_id?: string | null
+          cpf?: string | null
           created_at?: string
           full_name?: string | null
           id?: string
@@ -1507,6 +1509,7 @@ export type Database = {
         Update: {
           avatar_url?: string | null
           company_id?: string | null
+          cpf?: string | null
           created_at?: string
           full_name?: string | null
           id?: string
@@ -1522,6 +1525,38 @@ export type Database = {
             columns: ["company_id"]
             isOneToOne: false
             referencedRelation: "whitelabel_companies"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      case_collaborators: {
+        Row: {
+          assigned_by: string
+          case_id: string
+          collaborator_user_id: string
+          created_at: string
+          id: string
+        }
+        Insert: {
+          assigned_by: string
+          case_id: string
+          collaborator_user_id: string
+          created_at?: string
+          id?: string
+        }
+        Update: {
+          assigned_by?: string
+          case_id?: string
+          collaborator_user_id?: string
+          created_at?: string
+          id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "case_collaborators_case_id_fkey"
+            columns: ["case_id"]
+            isOneToOne: false
+            referencedRelation: "cases"
             referencedColumns: ["id"]
           },
         ]
