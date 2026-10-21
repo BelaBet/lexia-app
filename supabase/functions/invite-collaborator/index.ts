@@ -90,6 +90,7 @@ Deno.serve(async (req) => {
   let collaboratorUserId: string;
   let alreadyExisted = false;
   let passwordSet = false;
+  let inviteLink: string | null = null;
 
   if (existingUser?.id) {
     const isExistingCollaborator = existingUser?.user_metadata?.collaborator_role === true;
@@ -114,15 +115,24 @@ Deno.serve(async (req) => {
     collaboratorUserId = createdData.user.id;
     passwordSet = true;
   } else {
-    const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
-      redirectTo: `${siteUrl}/empresa/definir-senha`,
-      data: { full_name: fullName, cpf, collaborator_role: true },
+    // generateLink (em vez de inviteUserByEmail) não envia o e-mail
+    // automaticamente, mas devolve o link em si (action_link) — assim o
+    // escritório pode copiar e enviar por qualquer canal (WhatsApp, etc.),
+    // sem depender só da entrega do e-mail.
+    const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
+      type: "invite",
+      email,
+      options: {
+        redirectTo: `${siteUrl}/empresa/definir-senha`,
+        data: { full_name: fullName, cpf, collaborator_role: true },
+      },
     });
-    if (inviteError || !inviteData?.user?.id) {
-      console.error("invite-collaborator: invite error", inviteError);
-      return json({ error: "Erro ao enviar o convite por e-mail" }, 500);
+    if (linkError || !linkData?.user?.id) {
+      console.error("invite-collaborator: generateLink error", linkError);
+      return json({ error: "Erro ao gerar o link de convite" }, 500);
     }
-    collaboratorUserId = inviteData.user.id;
+    collaboratorUserId = linkData.user.id;
+    inviteLink = linkData.properties?.action_link ?? null;
   }
 
   // Garante o cpf no profile mesmo quando a conta já existia (ex.: convite
@@ -146,6 +156,7 @@ Deno.serve(async (req) => {
     collaborator_user_id: collaboratorUserId,
     already_existed: alreadyExisted,
     password_set: passwordSet,
+    invite_link: inviteLink,
     assigned_count: caseIds.length,
   });
 });
