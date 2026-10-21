@@ -11,10 +11,13 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Loader2, Search } from "lucide-react";
 import { useCases } from "@/hooks/useCases";
 import { useInviteCollaborator } from "@/hooks/useCaseCollaborators";
 import { formatCpf, isValidCpf } from "@/lib/cpf";
+
+const MIN_PASSWORD_LENGTH = 6;
 
 interface InviteCollaboratorDialogProps {
   open: boolean;
@@ -28,6 +31,7 @@ export function InviteCollaboratorDialog({ open, onOpenChange }: InviteCollabora
   const [fullName, setFullName] = useState("");
   const [cpf, setCpf] = useState("");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [search, setSearch] = useState("");
   const [selectedCaseIds, setSelectedCaseIds] = useState<Set<string>>(new Set());
 
@@ -43,6 +47,7 @@ export function InviteCollaboratorDialog({ open, onOpenChange }: InviteCollabora
     setFullName("");
     setCpf("");
     setEmail("");
+    setPassword("");
     setSearch("");
     setSelectedCaseIds(new Set());
   };
@@ -66,12 +71,21 @@ export function InviteCollaboratorDialog({ open, onOpenChange }: InviteCollabora
 
   const cpfDigits = cpf.replace(/\D/g, "");
   const cpfError = cpfDigits.length > 0 && !isValidCpf(cpf);
-  const canSubmit = fullName.trim().length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !cpfError && selectedCaseIds.size > 0;
+  const passwordError = password.length > 0 && password.length < MIN_PASSWORD_LENGTH
+    ? `A senha precisa ter pelo menos ${MIN_PASSWORD_LENGTH} caracteres`
+    : null;
+  const canSubmit = fullName.trim().length > 0 && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) && !cpfError && !passwordError && selectedCaseIds.size > 0;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
     invite.mutate(
-      { full_name: fullName.trim(), cpf: cpfDigits || null, email: email.trim(), case_ids: [...selectedCaseIds] },
+      {
+        full_name: fullName.trim(),
+        cpf: cpfDigits || null,
+        email: email.trim(),
+        case_ids: [...selectedCaseIds],
+        password: password.trim() || undefined,
+      },
       {
         onSuccess: () => {
           reset();
@@ -87,8 +101,8 @@ export function InviteCollaboratorDialog({ open, onOpenChange }: InviteCollabora
         <DialogHeader>
           <DialogTitle>Convidar colaborador</DialogTitle>
           <DialogDescription>
-            Ele recebe um e-mail para criar a própria senha e, ao entrar, só verá os processos selecionados abaixo —
-            não o restante da sua conta.
+            Ao entrar, ele só verá os processos selecionados abaixo — não o restante da sua conta. Defina uma senha
+            inicial para a conta já nascer pronta, ou deixe em branco para enviar um e-mail de criação de senha.
           </DialogDescription>
         </DialogHeader>
 
@@ -113,6 +127,25 @@ export function InviteCollaboratorDialog({ open, onOpenChange }: InviteCollabora
               <Label htmlFor="collab-email">E-mail</Label>
               <Input id="collab-email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="email@exemplo.com" />
             </div>
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="collab-password">Senha inicial (opcional)</Label>
+            <PasswordInput
+              id="collab-password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Deixe em branco para enviar convite por e-mail"
+              aria-invalid={Boolean(passwordError)}
+            />
+            {passwordError ? (
+              <p className="text-xs text-destructive">{passwordError}</p>
+            ) : (
+              <p className="text-xs text-muted-foreground">
+                Informe uma senha para a conta já nascer pronta (a pessoa troca depois em Configurações), ou deixe em
+                branco para enviar um e-mail de criação de senha.
+              </p>
+            )}
           </div>
 
           <div className="space-y-2">
@@ -156,7 +189,7 @@ export function InviteCollaboratorDialog({ open, onOpenChange }: InviteCollabora
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
           <Button onClick={handleSubmit} disabled={!canSubmit || invite.isPending}>
             {invite.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            Convidar
+            {password.trim() ? "Criar usuário" : "Convidar"}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -31,7 +31,7 @@ Deno.serve(async (req) => {
   const { data: { user }, error: userError } = await callerClient.auth.getUser();
   if (userError || !user) return json({ error: "Sessão inválida ou expirada" }, 401);
 
-  let body: { full_name?: string; cpf?: string; email?: string; case_ids?: string[] };
+  let body: { full_name?: string; cpf?: string; email?: string; case_ids?: string[]; password?: string };
   try {
     body = await req.json();
   } catch {
@@ -42,10 +42,15 @@ Deno.serve(async (req) => {
   const cpf = body.cpf?.trim() || null;
   const email = body.email?.trim().toLowerCase();
   const caseIds = Array.isArray(body.case_ids) ? [...new Set(body.case_ids.filter((id) => typeof id === "string" && id))] : [];
+  // Senha inicial é opcional: quando informada, a conta já nasce pronta pra
+  // uso com essa senha (sem depender do e-mail de convite chegar); a pessoa
+  // troca depois em Configurações. Sem senha, mantém o fluxo por e-mail.
+  const password = body.password?.trim() || null;
 
   if (!fullName || !email) return json({ error: "Informe o nome e o e-mail do colaborador" }, 400);
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return json({ error: "E-mail inválido" }, 400);
   if (caseIds.length === 0) return json({ error: "Selecione ao menos um processo para atribuir" }, 400);
+  if (password && password.length < 6) return json({ error: "A senha inicial precisa ter pelo menos 6 caracteres" }, 400);
 
   const admin = createClient(supabaseUrl, serviceRoleKey);
 
@@ -84,6 +89,7 @@ Deno.serve(async (req) => {
 
   let collaboratorUserId: string;
   let alreadyExisted = false;
+  let passwordSet = false;
 
   if (existingUser?.id) {
     const isExistingCollaborator = existingUser?.user_metadata?.collaborator_role === true;
@@ -94,6 +100,19 @@ Deno.serve(async (req) => {
     }
     collaboratorUserId = existingUser.id;
     alreadyExisted = true;
+  } else if (password) {
+    const { data: createdData, error: createError } = await admin.auth.admin.createUser({
+      email,
+      password,
+      email_confirm: true,
+      user_metadata: { full_name: fullName, cpf, collaborator_role: true },
+    });
+    if (createError || !createdData?.user?.id) {
+      console.error("invite-collaborator: createUser error", createError);
+      return json({ error: "Erro ao criar o usuário" }, 500);
+    }
+    collaboratorUserId = createdData.user.id;
+    passwordSet = true;
   } else {
     const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
       redirectTo: `${siteUrl}/empresa/definir-senha`,
@@ -122,5 +141,11 @@ Deno.serve(async (req) => {
     return json({ error: "O convite foi enviado, mas não foi possível atribuir os processos" }, 500);
   }
 
-  return json({ success: true, collaborator_user_id: collaboratorUserId, already_existed: alreadyExisted, assigned_count: caseIds.length });
+  return json({
+    success: true,
+    collaborator_user_id: collaboratorUserId,
+    already_existed: alreadyExisted,
+    password_set: passwordSet,
+    assigned_count: caseIds.length,
+  });
 });

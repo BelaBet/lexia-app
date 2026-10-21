@@ -52,12 +52,15 @@ export interface InviteCollaboratorInput {
   cpf?: string | null;
   email: string;
   case_ids: string[];
+  /** Opcional: quando informada, a conta já nasce pronta pra uso com essa senha (o colaborador troca depois em Configurações), em vez de depender do e-mail de convite. */
+  password?: string;
 }
 
 interface InviteCollaboratorResult {
   success: boolean;
   collaborator_user_id: string;
   already_existed: boolean;
+  password_set: boolean;
   assigned_count: number;
 }
 
@@ -78,7 +81,9 @@ export function useInviteCollaborator() {
       toast.success(
         result.already_existed
           ? `Acesso concedido a ${result.assigned_count} processo(s).`
-          : `Convite enviado! Acesso concedido a ${result.assigned_count} processo(s).`,
+          : result.password_set
+            ? `Conta criada com a senha definida! Acesso concedido a ${result.assigned_count} processo(s).`
+            : `Convite enviado! Acesso concedido a ${result.assigned_count} processo(s).`,
       );
     },
     onError: (error: Error) => toast.error(error.message || "Erro ao convidar colaborador"),
