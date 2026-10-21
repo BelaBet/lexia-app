@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { Bell, Moon, Sun, Globe, Shield, CreditCard, Crown, User, Loader2, Mail } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { AgendaBlockedDatesCard } from "@/components/settings/AgendaBlockedDatesCard";
+import { CollaboratorsCard } from "@/components/settings/CollaboratorsCard";
 import { useUserSettings, useSaveUserSettings, DEFAULT_USER_SETTINGS, UserSettings } from "@/hooks/useUserSettings";
 import { applyTheme } from "@/lib/applyTheme";
 import { ChangePasswordDialog } from "@/components/settings/ChangePasswordDialog";
@@ -211,6 +212,9 @@ export function SettingsPage({ onTabChange }: SettingsPageProps) {
             </div>
           </CardContent>
         </Card>
+
+        {/* Colaboradores */}
+        <CollaboratorsCard />
 
         {/* Bloqueios e Feriados da Agenda */}
         <AgendaBlockedDatesCard />

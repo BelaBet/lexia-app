@@ -147,9 +147,20 @@ export default function PublicationPage() {
             </Button>
           </div>
           <div className="flex items-center gap-2 flex-wrap mt-2">
-            <h1 className="font-serif text-2xl font-bold">
-              {publication.process_number || "Publicação sem número de processo"}
-            </h1>
+            {publication.case_id ? (
+              <button
+                type="button"
+                onClick={() => navigate(`/processos/${publication.case_id}`, { state: { from: fromTab || "publications" } })}
+                className="font-serif text-2xl font-bold hover:underline text-left"
+                title="Ver processo correspondente"
+              >
+                {publication.process_number || "Publicação sem número de processo"}
+              </button>
+            ) : (
+              <h1 className="font-serif text-2xl font-bold">
+                {publication.process_number || "Publicação sem número de processo"}
+              </h1>
+            )}
             <Badge variant="outline">{sourceLabels[publication.source]}</Badge>
           </div>
         </div>
