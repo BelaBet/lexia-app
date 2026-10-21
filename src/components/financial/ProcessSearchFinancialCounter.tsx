@@ -176,7 +176,9 @@ export function ProcessSearchFinancialCounter() {
             <Wallet className="w-8 h-8 text-success" />
           </div>
           <div className="mt-4">
-            <p className="stat-value">{currencyFormatter.format(totals.totalCharged)}</p>
+            <p className="stat-value text-xl sm:text-2xl lg:text-3xl break-words">
+              {currencyFormatter.format(totals.totalCharged)}
+            </p>
             <p className="stat-label">Total cobrado</p>
           </div>
         </div>
