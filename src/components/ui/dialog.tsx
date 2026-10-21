@@ -29,15 +29,23 @@ DialogOverlay.displayName = DialogPrimitive.Overlay.displayName;
 
 // Extensões de gerenciador de senha (1Password, LastPass, Bitwarden,
 // Dashlane etc.) injetam um ícone/elemento próprio dentro ou sobre os
-// campos de formulário assim que eles ganham foco. Esse elemento é sempre
-// um Custom Element (nome de tag com hífen, exigido pela spec) e não faz
+// campos de formulário assim que eles ganham foco. Esse elemento não faz
 // parte da árvore React — o Radix Dialog, que fecha ao detectar
 // interação/foco "fora" do conteúdo, enxerga esse elemento injetado como
 // algo externo e fecha o diálogo assim que o usuário clica em qualquer
-// campo. Ignoramos especificamente interações cujo alvo seja um Custom
-// Element para não fechar o diálogo por causa da extensão.
+// campo. Não dá para confiar só no nome da tag (Custom Element com hífen):
+// LastPass e Bitwarden, por exemplo, usam uma <div> comum com Shadow DOM
+// próprio para isolar estilos, sem registrar um Custom Element. O sinal
+// confiável é: o elemento não é um Custom Element nem tem Shadow DOM, mas
+// também não faz parte da nossa árvore renderizada (#root) — nada do nosso
+// próprio app aparece fora dela, então qualquer coisa fora só pode ter sido
+// injetada por uma extensão (ou, num iframe, nem é um Element de verdade).
 function isLikelyExtensionElement(target: EventTarget | null): boolean {
-  return target instanceof Element && target.tagName.includes("-");
+  if (!(target instanceof Element)) return false;
+  if (target.tagName.includes("-")) return true;
+  if (target.shadowRoot) return true;
+  const appRoot = document.getElementById("root");
+  return Boolean(appRoot && !appRoot.contains(target));
 }
 
 const DialogContent = React.forwardRef<
