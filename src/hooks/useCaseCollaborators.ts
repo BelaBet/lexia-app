@@ -56,11 +56,13 @@ export interface InviteCollaboratorInput {
   password?: string;
 }
 
-interface InviteCollaboratorResult {
+export interface InviteCollaboratorResult {
   success: boolean;
   collaborator_user_id: string;
   already_existed: boolean;
   password_set: boolean;
+  /** Link de convite (válido para uso único) para copiar e enviar por qualquer canal — só vem preenchido quando nem senha foi definida nem a conta já existia. */
+  invite_link: string | null;
   assigned_count: number;
 }
 
@@ -83,7 +85,7 @@ export function useInviteCollaborator() {
           ? `Acesso concedido a ${result.assigned_count} processo(s).`
           : result.password_set
             ? `Conta criada com a senha definida! Acesso concedido a ${result.assigned_count} processo(s).`
-            : `Convite enviado! Acesso concedido a ${result.assigned_count} processo(s).`,
+            : `Link de convite gerado! Acesso concedido a ${result.assigned_count} processo(s).`,
       );
     },
     onError: (error: Error) => toast.error(error.message || "Erro ao convidar colaborador"),

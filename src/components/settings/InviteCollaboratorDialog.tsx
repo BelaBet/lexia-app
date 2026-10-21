@@ -12,10 +12,11 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { PasswordInput } from "@/components/ui/password-input";
-import { Loader2, Search } from "lucide-react";
+import { Loader2, Search, Copy, Check } from "lucide-react";
 import { useCases } from "@/hooks/useCases";
 import { useInviteCollaborator } from "@/hooks/useCaseCollaborators";
 import { formatCpf, isValidCpf } from "@/lib/cpf";
+import { toast } from "sonner";
 
 const MIN_PASSWORD_LENGTH = 6;
 
@@ -34,6 +35,8 @@ export function InviteCollaboratorDialog({ open, onOpenChange }: InviteCollabora
   const [password, setPassword] = useState("");
   const [search, setSearch] = useState("");
   const [selectedCaseIds, setSelectedCaseIds] = useState<Set<string>>(new Set());
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [linkCopied, setLinkCopied] = useState(false);
 
   const filteredCases = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -50,6 +53,19 @@ export function InviteCollaboratorDialog({ open, onOpenChange }: InviteCollabora
     setPassword("");
     setSearch("");
     setSelectedCaseIds(new Set());
+    setInviteLink(null);
+    setLinkCopied(false);
+  };
+
+  const copyLink = async () => {
+    if (!inviteLink) return;
+    try {
+      await navigator.clipboard.writeText(inviteLink);
+      setLinkCopied(true);
+      toast.success("Link copiado!");
+    } catch {
+      toast.error("Não foi possível copiar o link — copie manualmente");
+    }
   };
 
   const toggleCase = (id: string) => {
@@ -87,13 +103,43 @@ export function InviteCollaboratorDialog({ open, onOpenChange }: InviteCollabora
         password: password.trim() || undefined,
       },
       {
-        onSuccess: () => {
-          reset();
-          onOpenChange(false);
+        onSuccess: (result) => {
+          if (result.invite_link) {
+            setInviteLink(result.invite_link);
+          } else {
+            reset();
+            onOpenChange(false);
+          }
         },
       },
     );
   };
+
+  if (inviteLink) {
+    return (
+      <Dialog open={open} onOpenChange={(next) => { if (!next) reset(); onOpenChange(next); }}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Link de convite gerado</DialogTitle>
+            <DialogDescription>
+              Copie o link abaixo e envie para {fullName.trim() || "o colaborador"} por WhatsApp, e-mail ou qualquer
+              outro canal. Ele usa o link para entrar e criar a própria senha — o acesso aos processos selecionados
+              já está liberado.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex items-center gap-2">
+            <Input readOnly value={inviteLink} className="font-mono text-xs" onFocus={(e) => e.target.select()} />
+            <Button type="button" variant="outline" size="icon" onClick={copyLink} title="Copiar link">
+              {linkCopied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button onClick={() => { reset(); onOpenChange(false); }}>Concluir</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    );
+  }
 
   return (
     <Dialog open={open} onOpenChange={(next) => { if (!next) reset(); onOpenChange(next); }}>
@@ -102,7 +148,8 @@ export function InviteCollaboratorDialog({ open, onOpenChange }: InviteCollabora
           <DialogTitle>Convidar colaborador</DialogTitle>
           <DialogDescription>
             Ao entrar, ele só verá os processos selecionados abaixo — não o restante da sua conta. Defina uma senha
-            inicial para a conta já nascer pronta, ou deixe em branco para enviar um e-mail de criação de senha.
+            inicial para a conta já nascer pronta, ou deixe em branco para gerar um link de convite para enviar por
+            qualquer canal.
           </DialogDescription>
         </DialogHeader>
 
@@ -135,7 +182,7 @@ export function InviteCollaboratorDialog({ open, onOpenChange }: InviteCollabora
               id="collab-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              placeholder="Deixe em branco para enviar convite por e-mail"
+              placeholder="Deixe em branco para gerar um link de convite"
               aria-invalid={Boolean(passwordError)}
             />
             {passwordError ? (
@@ -143,7 +190,7 @@ export function InviteCollaboratorDialog({ open, onOpenChange }: InviteCollabora
             ) : (
               <p className="text-xs text-muted-foreground">
                 Informe uma senha para a conta já nascer pronta (a pessoa troca depois em Configurações), ou deixe em
-                branco para enviar um e-mail de criação de senha.
+                branco para gerar um link de convite para copiar e enviar.
               </p>
             )}
           </div>
@@ -189,7 +236,7 @@ export function InviteCollaboratorDialog({ open, onOpenChange }: InviteCollabora
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancelar</Button>
           <Button onClick={handleSubmit} disabled={!canSubmit || invite.isPending}>
             {invite.isPending && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            {password.trim() ? "Criar usuário" : "Convidar"}
+            {password.trim() ? "Criar usuário" : "Gerar link"}
           </Button>
         </DialogFooter>
       </DialogContent>
