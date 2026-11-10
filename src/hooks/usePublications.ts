@@ -65,6 +65,16 @@ export interface Publication {
   /** true quando o ato detectado tem prazo variável/faixa e precisa de conferência manual. */
   classified_needs_review: boolean;
   classified_rule_note: string | null;
+  /** Resumo em linguagem simples gerado por IA (botão "Analisar com IA") — informativo, nunca criado automaticamente. */
+  ai_summary: string | null;
+  /** Orientação jurídica (o que fazer a seguir) gerada por IA. */
+  ai_orientation: string | null;
+  /** Prazo sugerido por IA — só preenchido quando o motor de regras determinístico não achou uma regra confiável; nunca substitui classified_deadline/external_deadline/internal_deadline. */
+  ai_suggested_deadline: string | null;
+  ai_confidence: "alta" | "baixa" | null;
+  ai_model: string | null;
+  ai_analyzed_at: string | null;
+  ai_error: string | null;
   created_at: string;
   updated_at: string;
   followups?: PublicationFollowup[];
@@ -193,6 +203,39 @@ export function useUpdatePublicationStage() {
       console.error("Error updating publication stage:", error);
       toast.error("Erro ao mover a publicação");
     },
+  });
+}
+
+export interface AnalyzePublicationResult {
+  success: boolean;
+  summary: string;
+  orientation: string;
+  suggested_deadline: string | null;
+  confidence: "alta" | "baixa";
+  justification: string;
+}
+
+// Fase 1 da análise por IA: botão "Analisar com IA" na publicação — resumo +
+// orientação jurídica + (só quando não há regra determinística confiável)
+// sugestão de prazo. Nenhuma automação/criação de evento na Agenda ainda.
+export function useAnalyzePublicationWithAI() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (publicationId: string) => {
+      const { data, error } = await supabase.functions.invoke("analyze-publication", { body: { publication_id: publicationId } });
+      if (error) {
+        const message = (data as { error?: string } | null)?.error || error.message;
+        throw new Error(message);
+      }
+      if ((data as { error?: string } | null)?.error) throw new Error((data as { error?: string }).error);
+      return data as AnalyzePublicationResult;
+    },
+    onSuccess: (_result, publicationId) => {
+      queryClient.invalidateQueries({ queryKey: ["publication", publicationId] });
+      queryClient.invalidateQueries({ queryKey: ["publications"] });
+      toast.success("Análise da IA concluída!");
+    },
+    onError: (error: Error) => toast.error(error.message || "Erro ao analisar publicação com IA"),
   });
 }
 

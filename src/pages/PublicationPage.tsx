@@ -1,6 +1,6 @@
 import { useRef, useState } from "react";
 import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { ArrowLeft, Kanban, Loader2, Send, Trash2, Scale, Gavel, Users, Landmark, Upload, FileText, Download, Sparkles, AlertTriangle, History, Pencil } from "lucide-react";
+import { ArrowLeft, Kanban, Loader2, Send, Trash2, Scale, Gavel, Users, Landmark, Upload, FileText, Download, Sparkles, AlertTriangle, History, Pencil, Bot } from "lucide-react";
 import { format, parseISO } from "date-fns";
 import { ptBR } from "date-fns/locale";
 import { Button } from "@/components/ui/button";
@@ -18,6 +18,7 @@ import {
   useDeletePublicationAttachment,
   useUpdatePublicationStage,
   usePublicationStageHistory,
+  useAnalyzePublicationWithAI,
   getPublicationAttachmentUrl,
   PIPELINE_STAGES,
   PipelineStage,
@@ -93,6 +94,7 @@ export default function PublicationPage() {
   const deleteAttachment = useDeletePublicationAttachment();
   const updateStage = useUpdatePublicationStage();
   const { data: stageHistory = [] } = usePublicationStageHistory(id || null);
+  const analyzeWithAI = useAnalyzePublicationWithAI();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const currencyFormatter = new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL" });
 
@@ -142,9 +144,21 @@ export default function PublicationPage() {
             <Button variant="ghost" onClick={goBack} className="-ml-3">
               <ArrowLeft className="mr-2 h-4 w-4" />Voltar para Publicações
             </Button>
-            <Button variant="outline" size="sm" onClick={() => setEditing(true)} className="gap-1.5">
-              <Pencil className="w-3.5 h-3.5" /> Editar
-            </Button>
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                className="gap-1.5"
+                onClick={() => analyzeWithAI.mutate(publication.id)}
+                disabled={analyzeWithAI.isPending}
+              >
+                {analyzeWithAI.isPending ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Bot className="w-3.5 h-3.5" />}
+                {publication.ai_summary ? "Reanalisar com IA" : "Analisar com IA"}
+              </Button>
+              <Button variant="outline" size="sm" onClick={() => setEditing(true)} className="gap-1.5">
+                <Pencil className="w-3.5 h-3.5" /> Editar
+              </Button>
+            </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap mt-2">
             {publication.case_id ? (
@@ -261,6 +275,46 @@ export default function PublicationPage() {
             )}
           </div>
         </div>
+
+        {(publication.ai_summary || publication.ai_error) && (
+          <div className="rounded-lg border border-violet-300 bg-violet-50 dark:bg-violet-950/20 p-3 space-y-2">
+            <div className="flex items-center gap-1.5 text-sm font-semibold">
+              <Bot className="w-4 h-4 text-violet-600" />
+              Análise da IA
+              {publication.ai_confidence && (
+                <Badge variant="outline" className="ml-auto text-[10px]">
+                  {publication.ai_confidence === "alta" ? "Confiança alta" : "Confiança baixa — revise"}
+                </Badge>
+              )}
+            </div>
+            {publication.ai_error && !publication.ai_summary ? (
+              <p className="text-xs text-destructive">Falha na última análise: {publication.ai_error}. Tente novamente.</p>
+            ) : (
+              <>
+                <div>
+                  <p className="text-xs font-medium text-muted-foreground">Resumo</p>
+                  <p className="text-sm whitespace-pre-wrap">{publication.ai_summary}</p>
+                </div>
+                {publication.ai_orientation && (
+                  <div>
+                    <p className="text-xs font-medium text-muted-foreground">Orientação jurídica</p>
+                    <p className="text-sm whitespace-pre-wrap">{publication.ai_orientation}</p>
+                  </div>
+                )}
+                {publication.ai_suggested_deadline && (
+                  <p className="text-sm">
+                    Prazo sugerido pela IA:{" "}
+                    {format(parseISO(publication.ai_suggested_deadline), "dd/MM/yyyy", { locale: ptBR })}
+                  </p>
+                )}
+                <p className="text-[10px] text-muted-foreground pt-1">
+                  Gerado por IA{publication.ai_analyzed_at ? ` em ${format(parseISO(publication.ai_analyzed_at), "dd/MM/yyyy 'às' HH:mm", { locale: ptBR })}` : ""} —
+                  informação de apoio, não substitui os prazos externo/interno acima. Confira sempre.
+                </p>
+              </>
+            )}
+          </div>
+        )}
 
         {publication.classified_act_name && (
           <div className={cn("rounded-lg border p-3 space-y-1", publication.classified_needs_review ? "border-amber-300 bg-amber-50 dark:bg-amber-950/20" : "border-primary/30 bg-primary/5")}>

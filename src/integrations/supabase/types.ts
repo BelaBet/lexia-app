@@ -1710,6 +1710,13 @@ export type Database = {
       }
       publications: {
         Row: {
+          ai_analyzed_at: string | null
+          ai_confidence: string | null
+          ai_error: string | null
+          ai_model: string | null
+          ai_orientation: string | null
+          ai_suggested_deadline: string | null
+          ai_summary: string | null
           case_id: string | null
           classified_act_name: string | null
           classified_area: string | null
@@ -1749,6 +1756,13 @@ export type Database = {
           vara: string | null
         }
         Insert: {
+          ai_analyzed_at?: string | null
+          ai_confidence?: string | null
+          ai_error?: string | null
+          ai_model?: string | null
+          ai_orientation?: string | null
+          ai_suggested_deadline?: string | null
+          ai_summary?: string | null
           case_id?: string | null
           classified_act_name?: string | null
           classified_area?: string | null
@@ -1788,6 +1802,13 @@ export type Database = {
           vara?: string | null
         }
         Update: {
+          ai_analyzed_at?: string | null
+          ai_confidence?: string | null
+          ai_error?: string | null
+          ai_model?: string | null
+          ai_orientation?: string | null
+          ai_suggested_deadline?: string | null
+          ai_summary?: string | null
           case_id?: string | null
           classified_act_name?: string | null
           classified_area?: string | null
