@@ -65,62 +65,90 @@ Deno.serve(async (req) => {
   const maxChain = Math.min(Math.max(body.max_chain ?? 100, 1), 150);
   const chainDepth = body.chain_depth ?? 0;
 
+  // Reporta uma falha de carregamento em automation_health antes de
+  // retornar — sem isso, um erro aqui (ex.: timeout) ficava completamente
+  // invisível: nem "ok" nem "error" eram gravados, e o painel de saúde
+  // continuava mostrando o último sucesso como se nada tivesse quebrado.
+  const reportLoadError = async (stage: string, message: string) => {
+    console.error(`sync-all-case-details: ${stage}`, message);
+    await admin.rpc("record_automation_health", {
+      p_key: "daily_case_details_sync",
+      p_status: "error",
+      p_details: `Erro ao carregar processos (${stage}): ${message}`,
+    });
+  };
+
   let queueIds: string[];
-  const rowsById = new Map<string, ProcessSearchResultRow & { raw_data: unknown }>();
 
   if (body.remaining_ids) {
     // Continuação de uma cadeia já em andamento: a fila (já deduplicada e
     // ordenada) veio pronta do lote anterior.
     queueIds = body.remaining_ids;
-    if (queueIds.length > 0) {
-      const { data: rows, error: rowsError } = await admin
-        .from("process_search_results")
-        .select("id, case_id, user_id, process_number, raw_data, partes_ativas, partes_passivas, advogados, comarca, foro, vara, valor, data_distribuicao, ultima_movimentacao_data, ultima_movimentacao_tipo, ultima_movimentacao_texto, juiz, status_processual")
-        .in("id", queueIds.slice(0, batchSize));
-      if (rowsError) {
-        console.error("sync-all-case-details: error loading batch rows", rowsError);
-        return new Response(JSON.stringify({ error: "Erro ao carregar processos" }), { status: 500 });
-      }
-      for (const row of rows ?? []) rowsById.set(row.id as string, row as ProcessSearchResultRow);
-    }
   } else {
     // Início da cadeia (disparo do pg_cron): monta a fila inteira, do
     // processo com sincronização mais atrasada (ou nunca sincronizado)
     // para o mais recente.
+    //
+    // CORRIGIDO (falha silenciosa por "statement timeout"): a versão
+    // anterior selecionava, para TODO candidato elegível (884 linhas e
+    // crescendo), as colunas pesadas de process_search_results
+    // (raw_data/partes_ativas/partes_passivas/advogados — o payload bruto
+    // do JusBrasil), só para ordenar em memória e descartar quase tudo
+    // depois. Isso ficou lento demais conforme a tabela cresceu e passou a
+    // estourar o statement_timeout do Postgres TODO dia, sem nunca chegar
+    // a sincronizar um processo sequer. Agora essa primeira consulta traz
+    // só os 3 campos necessários pra ordenar a fila (id, case_id e o
+    // timestamp de última sincronização, extraído direto do JSON via
+    // ->>) — as colunas pesadas só são buscadas depois, já filtradas para
+    // o lote efetivamente processado (ver abaixo).
     const { data: candidates, error: candidatesError } = await admin
       .from("process_search_results")
-      .select("id, case_id, user_id, process_number, raw_data, partes_ativas, partes_passivas, advogados, comarca, foro, vara, valor, data_distribuicao, ultima_movimentacao_data, ultima_movimentacao_tipo, ultima_movimentacao_texto, juiz, status_processual, created_at")
+      .select("id, case_id, created_at, details_synced_at:raw_data->>_details_synced_at")
       .not("case_id", "is", null)
       .not("process_number", "is", null)
       .order("created_at", { ascending: false });
 
     if (candidatesError) {
-      console.error("sync-all-case-details: error loading candidates", candidatesError);
+      await reportLoadError("montar fila", candidatesError.message);
       return new Response(JSON.stringify({ error: "Erro ao carregar processos" }), { status: 500 });
     }
 
     // Mantém só o resultado mais recente por processo (case_id) — mesma
     // regra usada pela tela do processo (order by created_at desc limit 1).
-    const latestByCase = new Map<string, ProcessSearchResultRow & { raw_data: unknown }>();
+    const latestByCase = new Map<string, { id: string; details_synced_at: string | null }>();
     for (const row of candidates ?? []) {
       const caseId = row.case_id as string;
-      if (!latestByCase.has(caseId)) latestByCase.set(caseId, row as ProcessSearchResultRow);
+      if (!latestByCase.has(caseId)) {
+        latestByCase.set(caseId, { id: row.id as string, details_synced_at: row.details_synced_at as string | null });
+      }
     }
 
     const sorted = Array.from(latestByCase.values()).sort((a, b) => {
-      const aRaw = a.raw_data && typeof a.raw_data === "object" ? a.raw_data as Record<string, unknown> : {};
-      const bRaw = b.raw_data && typeof b.raw_data === "object" ? b.raw_data as Record<string, unknown> : {};
-      const aSync = typeof aRaw._details_synced_at === "string" ? new Date(aRaw._details_synced_at).getTime() : 0;
-      const bSync = typeof bRaw._details_synced_at === "string" ? new Date(bRaw._details_synced_at).getTime() : 0;
+      const aSync = a.details_synced_at ? new Date(a.details_synced_at).getTime() : 0;
+      const bSync = b.details_synced_at ? new Date(b.details_synced_at).getTime() : 0;
       return aSync - bSync;
     });
 
     queueIds = sorted.map((row) => row.id);
-    for (const row of sorted.slice(0, batchSize)) rowsById.set(row.id, row);
   }
 
   const batchIds = queueIds.slice(0, batchSize);
   const remainingIds = queueIds.slice(batchSize);
+
+  // Colunas pesadas só são buscadas aqui, já restritas ao lote (no máximo
+  // `batchSize` ids) — nunca para a fila inteira.
+  const rowsById = new Map<string, ProcessSearchResultRow & { raw_data: unknown }>();
+  if (batchIds.length > 0) {
+    const { data: rows, error: rowsError } = await admin
+      .from("process_search_results")
+      .select("id, case_id, user_id, process_number, raw_data, partes_ativas, partes_passivas, advogados, comarca, foro, vara, valor, data_distribuicao, ultima_movimentacao_data, ultima_movimentacao_tipo, ultima_movimentacao_texto, juiz, status_processual")
+      .in("id", batchIds);
+    if (rowsError) {
+      await reportLoadError("carregar lote", rowsError.message);
+      return new Response(JSON.stringify({ error: "Erro ao carregar processos" }), { status: 500 });
+    }
+    for (const row of rows ?? []) rowsById.set(row.id as string, row as ProcessSearchResultRow);
+  }
 
   let token: string | null = null;
   let tokenError: string | null = null;
